@@ -577,12 +577,43 @@ def create_agents(user_id, session_id):
     )
 
     # Register tools for PreSalesConsultant
-    PreSalesConsultant.register_for_llm(name="analyze_with_perplexity")(analyze_with_perplexity)
-    PreSalesConsultant.register_for_llm(name="capture_website_screenshot")(capture_website_screenshot)
-    PreSalesConsultant.register_for_llm(name="get_website_favicon")(get_website_favicon)
-    PreSalesConsultant.register_for_llm(name="get_insights")(get_insights)
-    PreSalesConsultant.register_for_llm(name="get_datalayers")(get_datalayers)
-    PreSalesConsultant.register_for_llm(name="get_report")(get_report)
+    # PreSalesConsultant.register_for_llm(name="analyze_with_perplexity")(analyze_with_perplexity)
+    # PreSalesConsultant.register_for_llm(name="capture_website_screenshot")(capture_website_screenshot)
+    # PreSalesConsultant.register_for_llm(name="get_website_favicon")(get_website_favicon)
+    # PreSalesConsultant.register_for_llm(name="get_insights")(get_insights)
+    # PreSalesConsultant.register_for_llm(name="get_datalayers")(get_datalayers)
+    # PreSalesConsultant.register_for_llm(name="get_report")(get_report)
+
+    # Register tools for PreSalesConsultant
+    PreSalesConsultant.register_for_llm(
+        name="analyze_with_perplexity",
+        description="Analyzes a website URL using Perplexity API and returns structured information about the company."
+    )(analyze_with_perplexity)
+
+    PreSalesConsultant.register_for_llm(
+        name="capture_website_screenshot",
+        description="Captures a screenshot of a website and saves it for reference."
+    )(capture_website_screenshot)
+
+    PreSalesConsultant.register_for_llm(
+        name="get_website_favicon",
+        description="Retrieves the favicon (logo) from a website."
+    )(get_website_favicon)
+
+    PreSalesConsultant.register_for_llm(
+        name="get_insights",
+        description="Gets solar insights for a given address."
+    )(get_insights)
+
+    PreSalesConsultant.register_for_llm(
+        name="get_datalayers",
+        description="Gets data layers for solar analysis at a given address."
+    )(get_datalayers)
+
+    PreSalesConsultant.register_for_llm(
+        name="get_report",
+        description="Generates a solar report for a given address."
+    )(get_report)
 
     # Create SocialMediaManager agent
     SocialMediaManager = AssistantAgent(
@@ -603,28 +634,119 @@ def create_agents(user_id, session_id):
     )
 
     # Register tools for LeadGenSpecialist
-    LeadGenSpecialist.register_for_llm(name="create_appointment")(create_appointment)
-    LeadGenSpecialist.register_for_llm(name="get_appointment")(get_appointment)
-    LeadGenSpecialist.register_for_llm(name="update_appointment")(update_appointment)
+    LeadGenSpecialist.register_for_llm(
+        name="create_appointment",
+        description="Creates a new appointment in the system."
+    )(create_appointment)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_appointment",
+        description="Retrieves appointment details by ID."
+    )(get_appointment)
+
+    LeadGenSpecialist.register_for_llm(
+        name="update_appointment",
+        description="Updates an existing appointment."
+    )(update_appointment)
+
+    LeadGenSpecialist.register_for_llm(
+        name="create_calendar",
+        description="Creates a new calendar configuration."
+    )(create_calendar)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_all_calendars",
+        description="Retrieves all calendar configurations."
+    )(get_all_calendars)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_calendar",
+        description="Retrieves a specific calendar configuration by ID."
+    )(get_calendar)
+
+    LeadGenSpecialist.register_for_llm(
+        name="update_calendar",
+        description="Updates an existing calendar configuration."
+    )(update_calendar)
+
+    LeadGenSpecialist.register_for_llm(
+        name="create_contact",
+        description="Creates a new contact in the system."
+    )(create_contact)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_all_contacts",
+        description="Retrieves all contacts for a location."
+    )(get_all_contacts)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_contact",
+        description="Retrieves a specific contact by ID."
+    )(get_contact)
+
+    LeadGenSpecialist.register_for_llm(
+        name="update_contact",
+        description="Updates an existing contact."
+    )(update_contact)
+
+    LeadGenSpecialist.register_for_llm(
+        name="create_sub_acc",
+        description="Creates a new sub-account."
+    )(create_sub_acc)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_sub_acc",
+        description="Retrieves a specific sub-account by ID."
+    )(get_sub_acc)
+
+    LeadGenSpecialist.register_for_llm(
+        name="update_sub_acc",
+        description="Updates an existing sub-account."
+    )(update_sub_acc)
+
+    LeadGenSpecialist.register_for_llm(
+        name="create_user",
+        description="Creates a new user in the system."
+    )(create_user)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_user_by_location_id",
+        description="Retrieves users for a specific location."
+    )(get_user_by_location_id)
+
+    LeadGenSpecialist.register_for_llm(
+        name="get_user",
+        description="Retrieves a specific user by ID."
+    )(get_user)
+
+    LeadGenSpecialist.register_for_llm(
+        name="update_user",
+        description="Updates an existing user."
+    )(update_user)
+
+    # Register tools for LeadGenSpecialist
+    # LeadGenSpecialist.register_for_llm(name="create_appointment")(create_appointment)
+    # LeadGenSpecialist.register_for_llm(name="get_appointment")(get_appointment)
+    # LeadGenSpecialist.register_for_llm(name="update_appointment")(update_appointment)
     
-    LeadGenSpecialist.register_for_llm(name="create_calendar")(create_calendar)
-    LeadGenSpecialist.register_for_llm(name="get_all_calendars")(get_all_calendars)
-    LeadGenSpecialist.register_for_llm(name="get_calendar")(get_calendar)
-    LeadGenSpecialist.register_for_llm(name="update_calendar")(update_calendar)
+    # LeadGenSpecialist.register_for_llm(name="create_calendar")(create_calendar)
+    # LeadGenSpecialist.register_for_llm(name="get_all_calendars")(get_all_calendars)
+    # LeadGenSpecialist.register_for_llm(name="get_calendar")(get_calendar)
+    # LeadGenSpecialist.register_for_llm(name="update_calendar")(update_calendar)
     
-    LeadGenSpecialist.register_for_llm(name="create_contact")(create_contact)
-    LeadGenSpecialist.register_for_llm(name="get_all_contacts")(get_all_contacts)
-    LeadGenSpecialist.register_for_llm(name="get_contact")(get_contact)
-    LeadGenSpecialist.register_for_llm(name="update_contact")(update_contact)
+    # LeadGenSpecialist.register_for_llm(name="create_contact")(create_contact)
+    # LeadGenSpecialist.register_for_llm(name="get_all_contacts")(get_all_contacts)
+    # LeadGenSpecialist.register_for_llm(name="get_contact")(get_contact)
+    # LeadGenSpecialist.register_for_llm(name="update_contact")(update_contact)
     
-    LeadGenSpecialist.register_for_llm(name="create_sub_acc")(create_sub_acc)
-    LeadGenSpecialist.register_for_llm(name="get_sub_acc")(get_sub_acc)
-    LeadGenSpecialist.register_for_llm(name="update_sub_acc")(update_sub_acc)
+    # LeadGenSpecialist.register_for_llm(name="create_sub_acc")(create_sub_acc)
+    # LeadGenSpecialist.register_for_llm(name="get_sub_acc")(get_sub_acc)
+    # LeadGenSpecialist.register_for_llm(name="update_sub_acc")(update_sub_acc)
     
-    LeadGenSpecialist.register_for_llm(name="create_user")(create_user)
-    LeadGenSpecialist.register_for_llm(name="get_user_by_location_id")(get_user_by_location_id)
-    LeadGenSpecialist.register_for_llm(name="get_user")(get_user)
-    LeadGenSpecialist.register_for_llm(name="update_user")(update_user)
+    # LeadGenSpecialist.register_for_llm(name="create_user")(create_user)
+    # LeadGenSpecialist.register_for_llm(name="get_user_by_location_id")(get_user_by_location_id)
+    # LeadGenSpecialist.register_for_llm(name="get_user")(get_user)
+    # LeadGenSpecialist.register_for_llm(name="update_user")(update_user)
 
     # Termination function for user agent
     def should_terminate_user(message):
@@ -641,35 +763,158 @@ def create_agents(user_id, session_id):
     )
     
     # Register all tools for user_agent as well
-    user_agent.register_for_execution(name="analyze_with_perplexity")(analyze_with_perplexity)
-    user_agent.register_for_execution(name="capture_website_screenshot")(capture_website_screenshot)
-    user_agent.register_for_execution(name="get_website_favicon")(get_website_favicon)
-    user_agent.register_for_execution(name="get_insights")(get_insights)
-    user_agent.register_for_execution(name="get_datalayers")(get_datalayers)
-    user_agent.register_for_execution(name="get_report")(get_report)
+
+    # Register all tools for user_agent as well
+    user_agent.register_for_execution(
+        name="analyze_with_perplexity",
+        description="Analyzes a website URL using Perplexity API and returns structured information about the company."
+    )(analyze_with_perplexity)
+
+    user_agent.register_for_execution(
+        name="capture_website_screenshot",
+        description="Captures a screenshot of a website and saves it for reference."
+    )(capture_website_screenshot)
+
+    user_agent.register_for_execution(
+        name="get_website_favicon",
+        description="Retrieves the favicon (logo) from a website."
+    )(get_website_favicon)
+
+    user_agent.register_for_execution(
+        name="get_insights",
+        description="Gets solar insights for a given address."
+    )(get_insights)
+
+    user_agent.register_for_execution(
+        name="get_datalayers",
+        description="Gets data layers for solar analysis at a given address."
+    )(get_datalayers)
+
+    user_agent.register_for_execution(
+        name="get_report",
+        description="Generates a solar report for a given address."
+    )(get_report)
+
+    user_agent.register_for_execution(
+        name="create_appointment",
+        description="Creates a new appointment in the system."
+    )(create_appointment)
+
+    user_agent.register_for_execution(
+        name="get_appointment",
+        description="Retrieves appointment details by ID."
+    )(get_appointment)
+
+    user_agent.register_for_execution(
+        name="update_appointment",
+        description="Updates an existing appointment."
+    )(update_appointment)
+
+    user_agent.register_for_execution(
+        name="create_calendar",
+        description="Creates a new calendar configuration."
+    )(create_calendar)
+
+    user_agent.register_for_execution(
+        name="get_all_calendars",
+        description="Retrieves all calendar configurations."
+    )(get_all_calendars)
+
+    user_agent.register_for_execution(
+        name="get_calendar",
+        description="Retrieves a specific calendar configuration by ID."
+    )(get_calendar)
+
+    user_agent.register_for_execution(
+        name="update_calendar",
+        description="Updates an existing calendar configuration."
+    )(update_calendar)
+
+    user_agent.register_for_execution(
+        name="create_contact",
+        description="Creates a new contact in the system."
+    )(create_contact)
+
+    user_agent.register_for_execution(
+        name="get_all_contacts",
+        description="Retrieves all contacts for a location."
+    )(get_all_contacts)
+
+    user_agent.register_for_execution(
+        name="get_contact",
+        description="Retrieves a specific contact by ID."
+    )(get_contact)
+
+    user_agent.register_for_execution(
+        name="update_contact",
+        description="Updates an existing contact."
+    )(update_contact)
+
+    user_agent.register_for_execution(
+        name="create_sub_acc",
+        description="Creates a new sub-account."
+    )(create_sub_acc)
+
+    user_agent.register_for_execution(
+        name="get_sub_acc",
+        description="Retrieves a specific sub-account by ID."
+    )(get_sub_acc)
+
+    user_agent.register_for_execution(
+        name="update_sub_acc",
+        description="Updates an existing sub-account."
+    )(update_sub_acc)
+
+    user_agent.register_for_execution(
+        name="create_user",
+        description="Creates a new user in the system."
+    )(create_user)
+
+    user_agent.register_for_execution(
+        name="get_user_by_location_id",
+        description="Retrieves users for a specific location."
+    )(get_user_by_location_id)
+
+    user_agent.register_for_execution(
+        name="get_user",
+        description="Retrieves a specific user by ID."
+    )(get_user)
+
+    user_agent.register_for_execution(
+        name="update_user",
+        description="Updates an existing user."
+    )(update_user)
+
+
+    # user_agent.register_for_execution(name="analyze_with_perplexity")(analyze_with_perplexity)
+    # user_agent.register_for_execution(name="capture_website_screenshot")(capture_website_screenshot)
+    # user_agent.register_for_execution(name="get_website_favicon")(get_website_favicon)
+    # user_agent.register_for_execution(name="get_insights")(get_insights)
+    # user_agent.register_for_execution(name="get_datalayers")(get_datalayers)
+    # user_agent.register_for_execution(name="get_report")(get_report)
     
-    user_agent.register_for_execution(name="create_appointment")(create_appointment)
-    user_agent.register_for_execution(name="get_appointment")(get_appointment)
-    user_agent.register_for_execution(name="update_appointment")(update_appointment)
+    # user_agent.register_for_execution(name="create_appointment")(create_appointment)
+    # user_agent.register_for_execution(name="get_appointment")(get_appointment)
+    # user_agent.register_for_execution(name="update_appointment")(update_appointment)
     
-    user_agent.register_for_execution(name="create_calendar")(create_calendar)
-    user_agent.register_for_execution(name="get_all_calendars")(get_all_calendars)
-    user_agent.register_for_execution(name="get_calendar")(get_calendar)
-    user_agent.register_for_execution(name="update_calendar")(update_calendar)
+    # user_agent.register_for_execution(name="create_calendar")(create_calendar)
+    # user_agent.register_for_execution(name="get_all_calendars")(get_all_calendars)
+    # user_agent.register_for_execution(name="get_calendar")(get_calendar)
+    # user_agent.register_for_execution(name="update_calendar")(update_calendar)
     
-    user_agent.register_for_execution(name="create_contact")(create_contact)
-    user_agent.register_for_execution(name="get_all_contacts")(get_all_contacts)
-    user_agent.register_for_execution(name="get_contact")(get_contact)
-    user_agent.register_for_execution(name="update_contact")(update_contact)
+    # user_agent.register_for_execution(name="create_contact")(create_contact)
+    # user_agent.register_for_execution(name="get_all_contacts")(get_all_contacts)
+    # user_agent.register_for_execution(name="get_contact")(get_contact)
+    # user_agent.register_for_execution(name="update_contact")(update_contact)
     
-    user_agent.register_for_execution(name="create_sub_acc")(create_sub_acc)
-    user_agent.register_for_execution(name="get_sub_acc")(get_sub_acc)
-    user_agent.register_for_execution(name="update_sub_acc")(update_sub_acc)
+    # user_agent.register_for_execution(name="create_sub_acc")(create_sub_acc)
+    # user_agent.register_for_execution(name="get_sub_acc")(get_sub_acc)
+    # user_agent.register_for_execution(name="update_sub_acc")(update_sub_acc)
     
-    user_agent.register_for_execution(name="create_user")(create_user)
-    user_agent.register_for_execution(name="get_user_by_location_id")(get_user_by_location_id)
-    user_agent.register_for_execution(name="get_user")(get_user)
-    user_agent.register_for_execution(name="update_user")(update_user)
+    # user_agent.register_for_execution(name="create_user")(create_user)
+    # user_agent.register_for_execution(name="get_user_by_location_id")(get_user_by_location_id)
+    # user_agent.register_for_execution(name="get_user")(get_user)
+    # user_agent.register_for_execution(name="update_user")(update_user)
 
     return ProductManager, PreSalesConsultant, SocialMediaManager, LeadGenSpecialist, user_agent
 
