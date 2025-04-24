@@ -132,15 +132,31 @@ message_history = {
 # Initialize vector store at server start
 vector_store = None
 
+# In main.py during initialization
 def initialize_vector_store():
     """Initialize the vector store with templates from Excel file"""
     global vector_store
     try:
         vector_store = VectorStore()
-        with open('conversation_templates.xlsx', 'rb') as f:
-            excel_content = f.read()
-        if not vector_store.load_excel_templates(excel_content):
-            raise Exception("Failed to load templates from Excel")
+        
+        # Only load Excel data if running locally
+        if os.environ.get('ENVIRONMENT') != 'production':
+            with open('conversation_templates.xlsx', 'rb') as f:
+                excel_content = f.read()
+            if not vector_store.load_excel_templates(excel_content):
+                raise Exception("Failed to load templates from Excel")
+        else:
+            # In production, we need to check if Redis already has our data
+            # If not, we'll load it from the Excel file
+            if not vector_store.has_templates():
+                logger.info("No templates found in Redis, loading from Excel file")
+                with open('conversation_templates.xlsx', 'rb') as f:
+                    excel_content = f.read()
+                if not vector_store.load_excel_templates(excel_content):
+                    raise Exception("Failed to load templates to Redis")
+            else:
+                logger.info("Templates already loaded in Redis")
+            
         logger.info("Vector store initialized successfully")
     except Exception as e:
         logger.error(f"Error initializing vector store: {str(e)}")
