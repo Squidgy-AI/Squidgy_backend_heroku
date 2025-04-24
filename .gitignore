@@ -127,3 +127,19 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+.env
+.idea/
+.vscode/
+*.log
+static/screenshots/*
+static/favicons/*
+!static/screenshots/.gitkeep
+!static/favicons/.gitkeep
