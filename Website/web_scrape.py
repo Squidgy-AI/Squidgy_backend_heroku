@@ -1,4 +1,4 @@
-def capture_website_screenshot(url: str, session_id: str = None) -> str:
+def capture_website_screenshot(url: str, session_id: str = None) -> dict:
     """
     Captures a screenshot of the entire website using headless browser.
     
@@ -7,12 +7,14 @@ def capture_website_screenshot(url: str, session_id: str = None) -> str:
         session_id (str, optional): Session ID for filename
         
     Returns:
-        str: Filename of the saved screenshot (without the full path)
+        dict: Dictionary with status and path information
     """
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
     import time
     import os
+    import traceback
 
     # Create the images directory if it doesn't exist
     os.makedirs("static/screenshots", exist_ok=True)
@@ -26,27 +28,81 @@ def capture_website_screenshot(url: str, session_id: str = None) -> str:
             filename = f"screenshot_{int(time.time())}.jpg"
             full_path = f"static/screenshots/{filename}"
         
-        # Set up Chrome options for headless mode
+        print(f"Attempting to capture screenshot for URL: {url}")
+        print(f"Screenshot will be saved to: {full_path}")
+        
+        # Set up Chrome options for headless mode with more detailed configuration
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless=new")  # Use newer headless mode
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-extensions")
         
         # Initialize driver with options
+        print("Initializing Chrome driver...")
         driver = webdriver.Chrome(options=chrome_options)
+        
+        print(f"Navigating to URL: {url}")
         driver.get(url)
-        time.sleep(3)  # Increased wait time to ensure page loads completely
-        driver.save_screenshot(full_path)
+        print("Waiting for page to load...")
+        time.sleep(5)  # Increased wait time to ensure page loads completely
+        
+        print("Taking screenshot...")
+        screenshot_success = driver.save_screenshot(full_path)
+        
+        if not screenshot_success:
+            print("Driver save_screenshot returned False")
+            driver.quit()
+            return {
+                "status": "error",
+                "message": "Failed to save screenshot",
+                "path": None
+            }
+            
+        print("Screenshot taken successfully")
         driver.quit()
         
-        # Return just the filename (not the full path) for API usage
-        print(f"Screenshot saved at: {full_path}, returning: {filename}")
-        return filename
+        # Verify the file was actually created and has content
+        if not os.path.exists(full_path):
+            print(f"File does not exist at path: {full_path}")
+            return {
+                "status": "error",
+                "message": "Screenshot file was not created",
+                "path": None
+            }
+            
+        file_size = os.path.getsize(full_path)
+        print(f"Screenshot file size: {file_size} bytes")
+        
+        if file_size == 0:
+            print("Screenshot file is empty")
+            return {
+                "status": "error",
+                "message": "Screenshot file is empty",
+                "path": None
+            }
+        
+        # Return a structured response with the path
+        print(f"Screenshot saved successfully at: {full_path}")
+        return {
+            "status": "success",
+            "message": "Screenshot captured successfully",
+            "path": filename
+        }
+        
     except Exception as e:
+        error_traceback = traceback.format_exc()
         print(f"Error capturing screenshot: {e}")
-        return None
+        print(f"Traceback: {error_traceback}")
+        
+        return {
+            "status": "error",
+            "message": str(e),
+            "error_details": error_traceback,
+            "path": None
+        }
 
 def get_website_favicon(url: str, session_id: str = None) -> str:
     """

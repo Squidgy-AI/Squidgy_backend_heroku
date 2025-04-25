@@ -1281,6 +1281,9 @@ def run_agent_chat(user_agent, group_manager, user_input, request_id, websocket)
                     })
                     return False,{"content": f"Error analyzing website Perplex: {str(e)}"}
                     
+            # Find this in your sync_execute_with_tracking function in main.py
+            # Replace the current screenshot handling code with this
+
             elif function_name == "capture_website_screenshot" and "url" in arguments:
                 url = arguments["url"]
                 execution_id = f"screenshot-{int(time.time())}-{uuid.uuid4().hex[:8]}"
@@ -1298,21 +1301,66 @@ def run_agent_chat(user_agent, group_manager, user_input, request_id, websocket)
                 except Exception as e:
                     logger.exception(f"Error sending tool execution start: {str(e)}")
                 
-                # Call the original function
+                # Call the modified screenshot function
                 try:
                     result = capture_website_screenshot(url, session_id=request_id.split('-')[0])
                     
-                    # Send the result
-                    await websocket.send_json({
-                        "type": "tool_result",
-                        "tool": "capture_website_screenshot",
-                        "executionId": execution_id,
-                        "result": {"status": "success", "path": result},
-                        "requestId": request_id,
-                        "timestamp": int(time.time() * 1000)
-                    })
-                    
-                    return False,{"content": str(result)}
+                    # Important: Handle both old and new return formats
+                    if isinstance(result, dict):
+                        # New format - structured response
+                        logger.info(f"Screenshot captured with status: {result['status']}")
+                        
+                        if result['status'] == 'success' and result['path']:
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool": "capture_website_screenshot",
+                                "executionId": execution_id,
+                                "result": {
+                                    "status": "success", 
+                                    "path": result['path']
+                                },
+                                "requestId": request_id,
+                                "timestamp": int(time.time() * 1000)
+                            })
+                            return False, {"content": f"Screenshot captured successfully: {result['path']}"}
+                        else:
+                            # Error case
+                            error_message = result.get('message', 'Unknown error')
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool": "capture_website_screenshot",
+                                "executionId": execution_id,
+                                "result": {
+                                    "status": "error", 
+                                    "message": error_message
+                                },
+                                "requestId": request_id,
+                                "timestamp": int(time.time() * 1000)
+                            })
+                            return False, {"content": f"Error capturing screenshot: {error_message}"}
+                    else:
+                        # Old format - just a filename or None
+                        if result:
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool": "capture_website_screenshot",
+                                "executionId": execution_id,
+                                "result": {"status": "success", "path": result},
+                                "requestId": request_id,
+                                "timestamp": int(time.time() * 1000)
+                            })
+                            return False, {"content": f"Screenshot captured: {result}"}
+                        else:
+                            await websocket.send_json({
+                                "type": "tool_result",
+                                "tool": "capture_website_screenshot",
+                                "executionId": execution_id,
+                                "result": {"status": "error", "message": "Failed to capture screenshot"},
+                                "requestId": request_id,
+                                "timestamp": int(time.time() * 1000)
+                            })
+                            return False, {"content": "Error capturing screenshot"}
+                            
                 except Exception as e:
                     logger.exception(f"Error in screenshot capture: {str(e)}")
                     await websocket.send_json({
@@ -1323,7 +1371,7 @@ def run_agent_chat(user_agent, group_manager, user_input, request_id, websocket)
                         "requestId": request_id,
                         "timestamp": int(time.time() * 1000)
                     })
-                    return False,{"content": f"Error analyzing website Sceenr: {str(e)}"}
+                    return False, {"content": f"Error capturing screenshot: {str(e)}"}
                     
             elif function_name == "get_website_favicon" and "url" in arguments:
                 url = arguments["url"]
