@@ -18,6 +18,14 @@ import uvicorn
 from datetime import datetime
 from contextlib import suppress
 import requests
+import json
+import uuid
+import aiohttp
+import asyncio
+from typing import Dict, List, Any, Optional, Set
+from datetime import datetime, timedelta
+from pydantic import BaseModel, EmailStr
+import secrets
 
 # Import AutoGen components
 from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
@@ -76,6 +84,13 @@ SOLAR_API_KEY = os.getenv('SOLAR_API_KEY')
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
 APIFY_API_KEY = os.getenv('APIFY_API_KEY')
 
+# Define constants for our n8n integration
+N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL', '')
+
+active_connections: Dict[str, WebSocket] = {}
+ongoing_chats: Dict[str, Dict[str, Any]] = {}
+session_users: Dict[str, Set[str]] = {}  # Track users in a session for broadcasting
+
 # Create FastAPI app
 app = FastAPI()
 
@@ -114,6 +129,30 @@ class ChatHistoryResponse(BaseModel):
 class ChatResponse(BaseModel):
     agent: str
     session_id: str
+
+class InvitationRequest(BaseModel):
+    email: EmailStr
+    group_id: Optional[str] = None
+    company_id: Optional[str] = None
+
+class InvitationResponse(BaseModel):
+    id: str
+    token: str
+    expires_at: str
+
+class WebsiteDataRequest(BaseModel):
+    url: str
+    session_id: str
+    analysis: Optional[str] = None
+    screenshot_path: Optional[str] = None
+    favicon_path: Optional[str] = None
+
+class WebsiteDataResponse(BaseModel):
+    id: str
+    url: str
+    screenshot_path: Optional[str] = None
+    favicon_path: Optional[str] = None
+    analysis: Optional[str] = None
 
 # In-memory data stores
 chat_histories: Dict[str, List[Dict[str, Any]]] = {}
@@ -200,19 +239,272 @@ def get_history():
     global message_history
     return message_history
 
-def save_message_to_history(session_id: str, sender: str, message: str):
-    """Save a message to the chat history for a specific session"""
-    if session_id not in chat_histories:
-        chat_histories[session_id] = []
+@app.post("/website-data", response_model=WebsiteDataResponse)
+async def store_website_data(request: WebsiteDataRequest):
+    """Store website data for a session"""
+    try:
+        query = """
+        INSERT INTO website_data (session_id, url, screenshot_path, favicon_path, analysis)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, url, screenshot_path, favicon_path, analysis
+        """
+        
+        result = await database.fetch_one(
+            query,
+            request.session_id,
+            request.url,
+            request.screenshot_path,
+            request.favicon_path,
+            request.analysis
+        )
+        
+        # Broadcast to all users in the session
+        if request.session_id in session_users:
+            message = {
+                "type": "website_data_updated",
+                "data": dict(result),
+                "timestamp": int(time.time() * 1000)
+            }
+            
+            await broadcast_to_session(request.session_id, message)
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error storing website data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error storing website data: {str(e)}")
+
+@app.get("/website-data", response_model=WebsiteDataResponse)
+async def get_website_data(session_id: str):
+    """Get website data for a session"""
+    try:
+        query = """
+        SELECT id, url, screenshot_path, favicon_path, analysis
+        FROM website_data
+        WHERE session_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        """
+        
+        result = await database.fetch_one(query, session_id)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Website data not found")
+            
+        return result
+    except Exception as e:
+        logger.error(f"Error getting website data: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting website data: {str(e)}")
+
+@app.post("/invite", response_model=InvitationResponse)
+async def invite_user(request: InvitationRequest, current_user: User = Depends(get_current_user)):
+    """Invite a user to join the platform or a specific group"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    # Generate a secure token
+    token = secrets.token_urlsafe(32)
     
-    timestamp = datetime.now().isoformat()
+    # Set expiration date (7 days)
+    expires_at = datetime.now() + timedelta(days=7)
     
-    chat_histories[session_id].append({
-        "sender": sender, 
-        "message": message, 
-        "timestamp": timestamp
-    })
-    logger.debug(f"Message saved to history for session {session_id}: {sender}: {message[:50]}...")
+    try:
+        # Check if user already exists
+        query = "SELECT id FROM profiles WHERE email = $1"
+        existing_user = await database.fetch_one(query, request.email)
+        
+        # Create the invitation
+        invitation_query = """
+        INSERT INTO invitations (
+            sender_id, recipient_id, recipient_email, company_id, group_id, 
+            token, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, token, expires_at
+        """
+        
+        recipient_id = existing_user['id'] if existing_user else None
+        
+        result = await database.fetch_one(
+            invitation_query,
+            current_user.id,
+            recipient_id,
+            request.email,
+            request.company_id,
+            request.group_id,
+            token,
+            expires_at
+        )
+        
+        # Send email with invitation link
+        # This would be handled by a separate email service or n8n workflow
+        invitation_url = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/invite/{token}"
+        
+        # You could send this to n8n for processing
+        await send_to_n8n(
+            "system",
+            f"User invitation created for {request.email}",
+            "system",
+            additional_data={
+                "invitationType": "user",
+                "invitationUrl": invitation_url,
+                "email": request.email,
+                "groupId": request.group_id,
+                "companyId": request.company_id
+            }
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error creating invitation: {e}")
+        raise HTTPException(status_code=500, detail=f"Error creating invitation: {str(e)}")
+
+@app.get("/invite/{token}")
+async def validate_invitation(token: str):
+    """Validate an invitation token"""
+    try:
+        # Check if token exists and is not expired
+        query = """
+        SELECT id, sender_id, recipient_id, recipient_email, company_id, group_id, status, expires_at
+        FROM invitations
+        WHERE token = $1 AND expires_at > NOW() AND status = 'pending'
+        """
+        
+        invitation = await database.fetch_one(query, token)
+        
+        if not invitation:
+            raise HTTPException(status_code=404, detail="Invitation not found or expired")
+            
+        # Return invitation details
+        return invitation
+    except Exception as e:
+        logger.error(f"Error validating invitation: {e}")
+        raise HTTPException(status_code=500, detail=f"Error validating invitation: {str(e)}")
+
+@app.post("/invite/{token}/accept")
+async def accept_invitation(token: str, current_user: User = Depends(get_current_user)):
+    """Accept an invitation"""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    try:
+        # Get invitation details
+        query = """
+        SELECT id, sender_id, recipient_id, recipient_email, company_id, group_id
+        FROM invitations
+        WHERE token = $1 AND expires_at > NOW() AND status = 'pending'
+        """
+        
+        invitation = await database.fetch_one(query, token)
+        
+        if not invitation:
+            raise HTTPException(status_code=404, detail="Invitation not found or expired")
+            
+        # Check if the current user matches the recipient
+        if invitation['recipient_id'] and invitation['recipient_id'] != current_user.id:
+            raise HTTPException(status_code=403, detail="This invitation is for another user")
+            
+        # Update invitation status
+        update_query = """
+        UPDATE invitations
+        SET status = 'accepted', recipient_id = $1
+        WHERE id = $2
+        """
+        
+        await database.execute(update_query, current_user.id, invitation['id'])
+        
+        # If it's a group invitation, add user to the group
+        if invitation['group_id']:
+            group_query = """
+            INSERT INTO group_members (group_id, user_id, role)
+            VALUES ($1, $2, 'member')
+            """
+            
+            await database.execute(group_query, invitation['group_id'], current_user.id)
+            
+        # If it's a company invitation, update user's company_id
+        if invitation['company_id']:
+            company_query = """
+            UPDATE profiles
+            SET company_id = $1
+            WHERE id = $2
+            """
+            
+            await database.execute(company_query, invitation['company_id'], current_user.id)
+            
+        return {"status": "accepted"}
+    except Exception as e:
+        logger.error(f"Error accepting invitation: {e}")
+        raise HTTPException(status_code=500, detail=f"Error accepting invitation: {str(e)}")
+
+async def save_message_to_history(session_id: str, sender: str, message: str):
+    """Save a message to the appropriate history table"""
+    try:
+        # Check if this is a group or direct message
+        is_group = await is_group_session(session_id)
+        
+        if is_group:
+            # Save to group_messages table
+            query = """
+            INSERT INTO group_messages (group_id, sender_id, message, is_agent, agent_type)
+            VALUES ($1, $2, $3, $4, $5)
+            """
+            
+            # If sender is not 'AI' or a user ID, it's an agent
+            is_agent = sender != 'User'
+            agent_type = sender if sender != 'User' and sender != 'AI' else None
+            
+            # Use 'system' as the sender_id for AI/agent messages
+            sender_id = 'system' if is_agent else sender
+            
+            await database.execute(query, session_id, sender_id, message, is_agent, agent_type)
+        else:
+            # Save to messages table
+            query = """
+            INSERT INTO messages (sender_id, recipient_id, message)
+            VALUES ($1, $2, $3)
+            """
+            
+            # For direct messages, we need to determine sender and recipient
+            # If sender is 'AI' or an agent, set recipient to session_id (user_id)
+            if sender != 'User':
+                sender_id = 'system'
+                recipient_id = session_id
+            else:
+                sender_id = session_id
+                recipient_id = 'system'  # Or a specific agent ID
+                
+            await database.execute(query, sender_id, recipient_id, message)
+            
+    except Exception as e:
+        logger.error(f"Error saving message to history: {e}")
+
+
+async def is_group_session(session_id: str) -> bool:
+    """Check if the session ID corresponds to a group"""
+    try:
+        query = "SELECT EXISTS(SELECT 1 FROM groups WHERE id = $1) AS is_group"
+        result = await database.fetch_one(query, session_id)
+        return result and result['is_group']
+    except Exception as e:
+        logger.error(f"Error checking if session is a group: {e}")
+        return False
+    
+async def broadcast_to_session(session_id: str, message: dict, exclude_user_id: Optional[str] = None):
+    """Broadcast a message to all users in a session"""
+    if session_id not in session_users:
+        return
+        
+    for user_id in session_users[session_id]:
+        if exclude_user_id and user_id == exclude_user_id:
+            continue
+            
+        connection_id = f"{user_id}_{session_id}"
+        
+        if connection_id in active_connections:
+            try:
+                await active_connections[connection_id].send_json(message)
+            except Exception as e:
+                logger.error(f"Error broadcasting to {connection_id}: {e}")
 
 def analyze_with_perplexity(url: str) -> dict:
     """Analyze a website using Perplexity API"""
@@ -429,6 +721,36 @@ def get_datalayers(address: str) -> Dict[str, Any]:
 #     }
 #     response = requests.post(url, headers=headers, params=params)
 #     return response.json()
+
+async def is_new_session(session_id: str) -> bool:
+    """Check if this is a new session with no history"""
+    try:
+        # Check if there are any messages for this session
+        query = """
+        SELECT EXISTS (
+            SELECT 1 FROM group_messages WHERE group_id = $1
+            UNION ALL
+            SELECT 1 FROM messages WHERE (sender_id = $1 OR recipient_id = $1)
+        ) AS has_messages
+        """
+        result = await database.fetch_one(query, session_id)
+        
+        # If no messages found, it's a new session
+        return not result or not result['has_messages']
+    except Exception as e:
+        logger.error(f"Error checking if session is new: {e}")
+        # Default to false if there's an error
+        return False
+    
+async def update_session_last_active(session_id: str):
+    """Update the last_active timestamp for a session"""
+    query = """
+    INSERT INTO sessions (id, last_active)
+    VALUES ($1, NOW())
+    ON CONFLICT (id) DO UPDATE
+    SET last_active = NOW()
+    """
+    await database.execute(query, session_id)
 
 
 def get_report(address: str) -> Dict[str, Any]:
@@ -919,17 +1241,23 @@ def create_agents(user_id, session_id):
     return ProductManager, PreSalesConsultant, SocialMediaManager, LeadGenSpecialist, user_agent
 
 # Enhanced WebSocket endpoint with proper event streaming
+# Enhanced WebSocket endpoint with proper event streaming
 @app.websocket("/ws/{user_id}/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str):
     """WebSocket endpoint for real-time chat with event streaming"""
     connection_id = f"{user_id}_{session_id}"
-    print("DUSK :", connection_id)
+    logger.info(f"New WebSocket connection: {connection_id}")
     
     # Accept the connection
     await websocket.accept()
     
     # Store connection
     active_connections[connection_id] = websocket
+    
+    # Add user to session tracking
+    if session_id not in session_users:
+        session_users[session_id] = set()
+    session_users[session_id].add(user_id)
     
     try:
         # Send connection confirmation
@@ -940,8 +1268,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
             "timestamp": int(time.time() * 1000)
         })
         
+        # Update session last active time in database
+        try:
+            await update_session_last_active(session_id)
+        except Exception as e:
+            logger.error(f"Error updating session last active: {e}")
+        
         # Send initial greeting ONLY if this is a new session with no history
-        if session_id not in chat_histories or len(chat_histories[session_id]) == 0:
+        if await is_new_session(session_id):
             logger.info(f"New session detected: {session_id}, sending initial greeting")
             
             # The greeting message
@@ -951,7 +1285,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
             greeting_id = f"init-{int(time.time())}"
             
             # Save greeting to history
-            save_message_to_history(session_id, "AI", greeting)
+            await save_message_to_history(session_id, "AI", greeting)
             
             # Send the greeting
             await websocket.send_json({
@@ -998,6 +1332,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         # Clean up on disconnect
         if connection_id in active_connections:
             del active_connections[connection_id]
+        
+        # Remove user from session tracking
+        if session_id in session_users and user_id in session_users[session_id]:
+            session_users[session_id].remove(user_id)
+            if not session_users[session_id]:  # If no users left in session
+                del session_users[session_id]
+                
         logger.info(f"Client disconnected: {connection_id}")
         
     except Exception as e:
@@ -1017,6 +1358,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         # Clean up connection
         if connection_id in active_connections:
             del active_connections[connection_id]
+        
+        # Remove user from session tracking
+        if session_id in session_users and user_id in session_users[session_id]:
+            session_users[session_id].remove(user_id)
+            if not session_users[session_id]:  # If no users left in session
+                del session_users[session_id]
 
 
 async def send_tool_result(websocket, tool_name, execution_id, result, request_id):
@@ -1058,162 +1405,40 @@ async def send_tool_result(websocket, tool_name, execution_id, result, request_i
         logger.exception(f"Error sending tool result: {str(e)}")
 
 
+# Add this to the process_chat function in main.py
+
 async def process_chat(user_id: str, session_id: str, user_input: str, request_id: str, connection_id: str):
-    """Process a chat message with enhanced event streaming"""
-    ongoing_chats[request_id] = {"status": "processing", "connection_id": connection_id}
+    # ...existing code...
     
-    try:
-        websocket = active_connections.get(connection_id)
-        if not websocket:
-            logger.error(f"WebSocket connection not found for {connection_id}")
-            return
-        
-        # Check connection state
-        if websocket.client_state == websocket.client_state.DISCONNECTED:
-            logger.info(f"Client already disconnected: {connection_id}")
-            ongoing_chats[request_id]["status"] = "disconnected"
-            return
-
-        # Handle empty message (this should rarely happen as initial greeting is now handled in websocket_endpoint)
-        if not user_input:
-            logger.info(f"Empty message received for {connection_id}")
-            ongoing_chats[request_id]["status"] = "completed"
-            return
-        
-        # Save user message to chat history
-        save_message_to_history(session_id, "User", user_input)
-        
-        # Notify client that processing has started
-        await websocket.send_json({
-            "type": "processing_start", 
-            "message": "Starting analysis pipeline...", 
-            "requestId": request_id,
-            "timestamp": int(time.time() * 1000)
-        })
-        
-        # Create the agents
-        ProductManager, PreSalesConsultant, SocialMediaManager, LeadGenSpecialist, user_agent = create_agents(
-            user_id, 
-            session_id
-        )
-        
-        # Send thinking events for each agent to provide feedback during processing
-        agents = [
-            {"name": "ProductManager", "message": "Planning approach and coordinating team..."}, 
-            {"name": "PreSalesConsultant", "message": "Analyzing requirements and researching solutions..."},
-            {"name": "SocialMediaManager", "message": "Developing digital strategy recommendations..."},
-            {"name": "LeadGenSpecialist", "message": "Preparing follow-up actions and resources..."}
-        ]
-        
-        # Send thinking events for each agent with small delays
-        for agent in agents:
-            # Check connection before sending each message
-            if websocket.client_state == websocket.client_state.DISCONNECTED:
-                logger.info(f"Client disconnected during processing: {connection_id}")
-                ongoing_chats[request_id]["status"] = "disconnected"
-                return
-                
-            await websocket.send_json({
-                "type": "agent_thinking", 
-                "agent": agent["name"], 
-                "message": agent["message"], 
-                "requestId": request_id,
-                "timestamp": int(time.time() * 1000)
-            })
-            await asyncio.sleep(0.3)  # Small delay between agent updates
-        
-        # Configure group chat
-        group_chat = GroupChat(
-            agents=[user_agent, ProductManager, PreSalesConsultant, SocialMediaManager, LeadGenSpecialist],
-            messages=[{"role": "assistant", "content": "Hi! I'm Squidgy and I'm here to help you win back time and make more money."}],
-            max_round=120
-        )
-
-        group_manager = GroupChatManager(
-            groupchat=group_chat,
-            llm_config=llm_config,
-            human_input_mode="NEVER"
-        )
-        
-        # Get and restore history
-        history = get_history()
-        
-        # Only restore history if there's history to restore
-        if history["ProductManager"]:
-            ProductManager._oai_messages = {group_manager: history["ProductManager"]}
-        if history["PreSalesConsultant"]:
-            PreSalesConsultant._oai_messages = {group_manager: history["PreSalesConsultant"]}
-        if history["SocialMediaManager"]:
-            SocialMediaManager._oai_messages = {group_manager: history["SocialMediaManager"]}
-        if history["LeadGenSpecialist"]:
-            LeadGenSpecialist._oai_messages = {group_manager: history["LeadGenSpecialist"]}
-        if history["user_agent"]:
-            user_agent._oai_messages = {group_manager: history["user_agent"]}
-        
-        # Check connection before running the model
-        if websocket.client_state == websocket.client_state.DISCONNECTED:
-            logger.info(f"Client disconnected before chat processing: {connection_id}")
-            ongoing_chats[request_id]["status"] = "disconnected"
-            return
-        
-        # Run the agent chat in a separate thread to avoid blocking the event loop
-        final_response = await asyncio.to_thread(run_agent_chat, 
-            user_agent, 
-            group_manager, 
-            user_input,
-            request_id,
-            websocket
-        )
-        
-        # Check connection before saving and sending final response
-        if websocket.client_state == websocket.client_state.DISCONNECTED:
-            logger.info(f"Client disconnected after chat processing: {connection_id}")
-            ongoing_chats[request_id]["status"] = "disconnected"
-            return
-        
-        # Save AI response to chat history
-        save_message_to_history(session_id, "AI", final_response)
-        
-        # Save updated conversation history
-        save_history({
-            "ProductManager": ProductManager.chat_messages.get(group_manager, []),
-            "PreSalesConsultant": PreSalesConsultant.chat_messages.get(group_manager, []),
-            "SocialMediaManager": SocialMediaManager.chat_messages.get(group_manager, []),
-            "LeadGenSpecialist": LeadGenSpecialist.chat_messages.get(group_manager, []),
-            "user_agent": user_agent.chat_messages.get(group_manager, [])
-        })
-        
-        # Send final response with connection checking
-        await websocket.send_json({
-            "type": "agent_response", 
-            "agent": "Squidgy", 
-            "message": final_response, 
-            "requestId": request_id, 
-            "final": True,
-            "timestamp": int(time.time() * 1000)
-        })
-        
-        ongoing_chats[request_id]["status"] = "completed"
-        
-    except Exception as e:
-        logger.exception(f"Error processing chat: {str(e)}")
+    # Get the final response 
+    final_response = await asyncio.to_thread(run_agent_chat, 
+        user_agent, 
+        group_manager, 
+        user_input,
+        request_id,
+        websocket
+    )
+    
+    # Send to n8n for processing
+    if N8N_WEBHOOK_URL:
         try:
-            if connection_id in active_connections:
-                websocket = active_connections[connection_id]
-                # Check connection before sending error
-                if websocket.client_state != websocket.client_state.DISCONNECTED:
-                    await websocket.send_json({
-                        "type": "error", 
-                        "message": f"An error occurred: {str(e)}", 
-                        "requestId": request_id, 
-                        "final": True,
-                        "timestamp": int(time.time() * 1000)
-                    })
-        except Exception as send_error:
-            logger.exception(f"Error sending error message: {str(send_error)}")
-        
-        ongoing_chats[request_id]["status"] = "error"
-
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    N8N_WEBHOOK_URL,
+                    json={
+                        "agent": "Squidgy",
+                        "message": final_response,
+                        "sessionId": session_id,
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    headers={"Content-Type": "application/json"}
+                ) as response:
+                    if response.status != 200:
+                        logger.warning(f"Non-200 response from n8n: {response.status}")
+        except Exception as e:
+            logger.error(f"Error sending to n8n: {e}")
+    
+    # ...rest of existing code...
 def run_agent_chat(user_agent, group_manager, user_input, request_id, websocket):
     """Run the agent chat synchronously and return the final response"""
     # Store original execute function
