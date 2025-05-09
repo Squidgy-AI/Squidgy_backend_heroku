@@ -835,6 +835,8 @@ def get_report(address: str) -> Dict[str, Any]:
 #     response = requests.post(url, headers=headers, params=params)
 #     return response.json()
 
+# In main.py, add better error handling for the capture_website_screenshot function:
+
 async def wrapped_capture_screenshot(url, request_id, websocket):
     """Wrapper around capture_website_screenshot to send results via WebSocket"""
     execution_id = f"screenshot-{int(time.time())}-{uuid.uuid4().hex[:8]}"
@@ -856,16 +858,37 @@ async def wrapped_capture_screenshot(url, request_id, websocket):
     try:
         result = await asyncio.to_thread(capture_website_screenshot, url, session_id=request_id.split('-')[0])
         
-        # Send the result
-        await send_tool_result(
-            websocket,
-            "capture_website_screenshot",
-            execution_id,
-            {"status": "success", "path": result},
-            request_id
-        )
-        
-        return result
+        # Handle different result formats
+        if isinstance(result, dict):
+            if result['status'] == 'success':
+                path = result.get('path', '')
+                await send_tool_result(
+                    websocket,
+                    "capture_website_screenshot",
+                    execution_id,
+                    {"status": "success", "path": path},
+                    request_id
+                )
+                return path
+            else:
+                await send_tool_result(
+                    websocket,
+                    "capture_website_screenshot",
+                    execution_id,
+                    result,
+                    request_id
+                )
+                return None
+        else:
+            # Plain string result (old format)
+            await send_tool_result(
+                websocket,
+                "capture_website_screenshot",
+                execution_id,
+                {"status": "success", "path": result},
+                request_id
+            )
+            return result
     except Exception as e:
         logger.exception(f"Error in screenshot capture: {str(e)}")
         await send_tool_result(
