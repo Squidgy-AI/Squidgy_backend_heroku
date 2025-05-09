@@ -2,7 +2,11 @@
 ## ADD REST ALL FILES SAME AS SIMPLE CHAT UI BACKEND
 ################################################################
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+################################################################
+## Updated import section for main.py
+################################################################
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,29 +16,51 @@ import logging
 import uuid
 import time
 import os
-from typing import Dict, List, Any, Optional
-from pydantic import BaseModel
+from typing import Dict, List, Any, Optional, Set
+from pydantic import BaseModel, EmailStr
 import uvicorn
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import suppress
 import requests
 import json
 import uuid
 import aiohttp
 import asyncio
-from typing import Dict, List, Any, Optional, Set
-from datetime import datetime, timedelta
-from pydantic import BaseModel, EmailStr
 import secrets
-
-# Import AutoGen components
-from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
 
 # Import environment variable handling
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Add imports for database operations
+from database import (
+    get_connection, 
+    release_connection, 
+    fetch_one, 
+    fetch_all, 
+    execute, 
+    close_pool
+)
+
+# Simplified database module import
+import database
+
+# Define User model if not already present
+class User(BaseModel):
+    id: str
+    email: str
+    # Add other fields as needed
+
+# Mock function for authentication (replace with actual implementation)
+async def get_current_user(websocket: WebSocket) -> Optional[User]:
+    # This is a placeholder - implement actual user authentication
+    # For now, return None or a mock user
+    return None
+
+# Import AutoGen components
+from autogen import AssistantAgent, UserProxyAgent, GroupChat, GroupChatManager
 
 # Import role descriptions
 from roles_config import role_descriptions
