@@ -1,0 +1,148 @@
+{
+    "name": "Main Router Workflow - Enhanced",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "c2fcbad6-abc0-43af-8aa8-d1661ff4461d",
+          "responseMode": "lastNode",
+          "options": {
+            "immediateResponseCode": 200
+          }
+        },
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [250, 300],
+        "id": "1"
+      },
+      {
+        "parameters": {
+          "functionCode": "// Validate incoming request\nconst requiredFields = ['user_id', 'user_mssg', 'session_id', 'agent_name'];\nconst missingFields = requiredFields.filter(field => !$node[\"Webhook\"].json[field]);\n\nif (missingFields.length > 0) {\n  throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n}\n\n// Extract data from the incoming request\nconst data = $node[\"Webhook\"].json;\n\n// Log for debugging\nconsole.log('Received request:', JSON.stringify(data, null, 2));\n\n// Parse agent names (can be single or multiple separated by ::)\nconst agents = data.agent_name.split('::').map(name => name.trim());\n\n// Create workflow triggers for each agent\nconst workflowTriggers = agents.map(agent => ({\n  agent: agent,\n  payload: {\n    user_id: data.user_id,\n    user_message: data.user_mssg,\n    session_id: data.session_id,\n    agent_name: agent,\n    timestamp: data.timestamp_of_call_made || new Date().toISOString(),\n    original_request_id: new Date().getTime().toString()\n  }\n}));\n\nreturn workflowTriggers;"
+        },
+        "name": "Parse and Validate Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [450, 300],
+        "id": "2"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.agent }}",
+                "operation": "equals",
+                "value2": "re-engage"
+              }
+            ]
+          }
+        },
+        "name": "Check Agent Type",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [650, 300],
+        "id": "3"
+      },
+      {
+        "parameters": {
+          "workflowId": "s1",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "name": "Execute Re-engage Workflow",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1,
+        "position": [850, 250],
+        "id": "4"
+      },
+      {
+        "parameters": {
+          "workflowId": "={{ $json.agent === 'sales' ? 's2' : $json.agent === 'support' ? 's3' : $json.agent === 'social' ? 's4' : 's1' }}",
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "name": "Execute Other Workflows",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1,
+        "position": [850, 350],
+        "id": "5"
+      },
+      {
+        "parameters": {
+          "functionCode": "// Aggregate responses from all workflows\nconst responses = [];\n\n// Process all incoming items\nfor (const item of $input.all()) {\n  if (item.json) {\n    responses.push(item.json);\n  }\n}\n\n// Check if we got valid responses\nif (responses.length === 0) {\n  throw new Error('No responses received from sub-workflows');\n}\n\n// Prepare the final response in the exact format the frontend expects\nconst aggregatedResponse = {\n  user_id: responses[0]?.user_id || $node[\"Webhook\"].json.user_id,\n  agent_names: responses.map(r => r.agent_name).join('::'),\n  agent_responses: responses.map(r => r.agent_response).join('\\n\\n'),\n  responses: responses,\n  timestamp: new Date().toISOString(),\n  status: 'success'\n};\n\n// Log the final response\nconsole.log('Final response:', JSON.stringify(aggregatedResponse, null, 2));\n\nreturn aggregatedResponse;"
+        },
+        "name": "Aggregate and Format Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [1050, 300],
+        "id": "6"
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Parse and Validate Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Parse and Validate Request": {
+        "main": [
+          [
+            {
+              "node": "Check Agent Type",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Agent Type": {
+        "main": [
+          [
+            {
+              "node": "Execute Re-engage Workflow",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Execute Other Workflows",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Execute Re-engage Workflow": {
+        "main": [
+          [
+            {
+              "node": "Aggregate and Format Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Execute Other Workflows": {
+        "main": [
+          [
+            {
+              "node": "Aggregate and Format Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    }
+  }

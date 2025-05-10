@@ -1,0 +1,167 @@
+{
+    "name": "Sales Agent Workflow (s2)",
+    "nodes": [
+      {
+        "parameters": {},
+        "name": "Webhook Triggered",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1,
+        "position": [250, 300],
+        "id": "1"
+      },
+      {
+        "parameters": {
+          "functionCode": "// Extract incoming data\nconst data = $input.first().json;\n\n// Log for debugging\nconsole.log('Sales Agent received:', JSON.stringify(data, null, 2));\n\n// Create the payload for your existing REST endpoint\nconst requestPayload = {\n  user_id: data.user_id,\n  session_id: data.session_id,\n  user_input: data.user_message\n};\n\n// Store original data for later use\nreturn {\n  requestPayload,\n  originalData: data,\n  agentType: 'PreSalesConsultant' // Maps to the role in your backend\n};"
+        },
+        "name": "Prepare Sales Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [450, 300],
+        "id": "2"
+      },
+      {
+        "parameters": {
+          "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/chat",
+          "method": "POST",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.requestPayload) }}",
+          "options": {
+            "timeout": 60000,
+            "headers": {
+              "x-agent-type": "PreSalesConsultant"
+            }
+          }
+        },
+        "name": "Call Backend - Sales",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [650, 300],
+        "id": "3"
+      },
+      {
+        "parameters": {
+          "functionCode": "// Process the response from backend\nconst response = $input.first().json;\nconst originalData = $node[\"Prepare Sales Request\"].json.originalData;\n\n// Extract the agent response\nlet agentResponse = '';\nif (response.agent) {\n  agentResponse = response.agent;\n} else if (response.message) {\n  agentResponse = response.message;\n} else {\n  // Fallback response\n  agentResponse = 'I can help you with our products and pricing. Could you tell me more about your business needs?';\n}\n\n// Check if the response contains website analysis or solar-related content\nconst hasWebsiteAnalysis = agentResponse.toLowerCase().includes('website') || \n                          agentResponse.toLowerCase().includes('analyzed') ||\n                          agentResponse.toLowerCase().includes('screenshot');\n\nconst hasSolarContent = agentResponse.toLowerCase().includes('solar') || \n                        agentResponse.toLowerCase().includes('panel') ||\n                        agentResponse.toLowerCase().includes('energy');\n\n// Return the formatted response\nreturn {\n  user_id: originalData.user_id,\n  agent_name: 'sales',\n  agent_response: agentResponse,\n  session_id: originalData.session_id,\n  status: 'completed',\n  metadata: {\n    response_time: new Date().getTime() - parseInt(originalData.original_request_id),\n    backend_response: response,\n    content_analysis: {\n      hasWebsiteAnalysis,\n      hasSolarContent\n    }\n  }\n};"
+        },
+        "name": "Process Sales Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [850, 300],
+        "id": "4"
+      },
+      {
+        "parameters": {
+          "url": "https://boiler-plate-v1.vercel.app/api/stream",
+          "method": "POST",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({...$json, type: 'intermediate', message: 'Analyzing your business requirements...'}) }}",
+          "options": {
+            "timeout": 5000
+          }
+        },
+        "name": "Stream Status Update",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 3,
+        "position": [650, 450],
+        "id": "5",
+        "continueOnFail": true
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "boolean": [
+              {
+                "value1": "={{ $json.metadata.content_analysis.hasWebsiteAnalysis }}",
+                "value2": true
+              }
+            ]
+          }
+        },
+        "name": "Check for Tools Usage",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 1,
+        "position": [1050, 300],
+        "id": "6"
+      },
+      {
+        "parameters": {
+          "functionCode": "// If tools were used, add a notification\nconst response = $input.first().json;\n\n// Add a tool notification to the response\nresponse.toolsUsed = ['analyze_with_perplexity', 'capture_website_screenshot', 'get_website_favicon'];\n\nreturn response;"
+        },
+        "name": "Add Tool Notification",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [1250, 250],
+        "id": "7"
+      }
+    ],
+    "connections": {
+      "Webhook Triggered": {
+        "main": [
+          [
+            {
+              "node": "Prepare Sales Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Sales Request": {
+        "main": [
+          [
+            {
+              "node": "Call Backend - Sales",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Stream Status Update",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Backend - Sales": {
+        "main": [
+          [
+            {
+              "node": "Process Sales Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Process Sales Response": {
+        "main": [
+          [
+            {
+              "node": "Check for Tools Usage",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check for Tools Usage": {
+        "main": [
+          [
+            {
+              "node": "Add Tool Notification",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Process Sales Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    }
+  }
