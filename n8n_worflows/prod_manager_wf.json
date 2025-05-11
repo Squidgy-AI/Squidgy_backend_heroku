@@ -1,85 +1,160 @@
 {
-    "name": "Re-engage Agent Workflow (s1) - Updated",
-    "nodes": [
-      {
-        "parameters": {},
-        "name": "Webhook Triggered",
-        "type": "n8n-nodes-base.executeWorkflowTrigger",
-        "typeVersion": 1,
-        "position": [250, 300],
-        "id": "1"
+  "name": "Re-engage Agent Workflow (s1) with Streaming",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Webhook Triggered",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "1"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract incoming data\nconst data = $input.first().json;\n\n// Extract streaming metadata\nconst request_id = data.request_id || data.original_request_id;\nconst session_id = data.session_id;\nconst user_id = data.user_id;\n\n// Create the payload for your existing REST endpoint\nconst requestPayload = {\n  user_id: data.user_id,\n  session_id: data.session_id,\n  user_input: data.user_message\n};\n\n// Return data with streaming info\nreturn {\n  requestPayload,\n  originalData: data,\n  streamingConfig: {\n    request_id,\n    session_id,\n    user_id,\n    agent_name: 're-engage'\n  }\n};"
       },
-      {
-        "parameters": {
-          "functionCode": "// Extract incoming data\nconst data = $input.first().json;\n\n// Create the payload for your existing WebSocket endpoint\nconst websocketPayload = {\n  message: data.user_message,\n  requestId: `n8n-${data.original_request_id}`\n};\n\n// Create a proper WebSocket connection URL\nconst apiBase = 'squidgy-backend-d9475a8a4505.herokuapp.com';\nconst wsUrl = `https://${apiBase}/ws/${data.user_id}/${data.session_id}`;\n\n// Return both HTTP and WebSocket options\nreturn {\n  httpOption: {\n    user_id: data.user_id,\n    session_id: data.session_id,\n    user_input: data.user_message,\n    request_id: data.original_request_id\n  },\n  wsOption: {\n    url: wsUrl,\n    payload: websocketPayload\n  },\n  originalData: data\n};"
-        },
-        "name": "Prepare Backend Request",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 1,
-        "position": [450, 300],
-        "id": "2"
+      "name": "Prepare Backend Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "2"
+    },
+    {
+      "parameters": {
+        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $json.streamingConfig.user_id,\n  agent_name: 're-engage',\n  message: 'Understanding your query...',\n  progress: 30,\n  metadata: {\n    request_id: $json.streamingConfig.request_id,\n    session_id: $json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'initial'\n  }\n}) }}",
+        "options": {
+          "timeout": 5000
+        }
       },
-      {
-        "parameters": {
-          "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/chat",
-          "method": "POST",
-          "sendBody": true,
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify($json.httpOption) }}",
-          "options": {
-            "timeout": 60000
+      "name": "Stream Initial Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 450],
+      "id": "3",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/chat",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestPayload) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "Call Backend API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $node[\"Prepare Backend Request\"].json.streamingConfig.user_id,\n  agent_name: 're-engage',\n  message: 'Processing your request...',\n  progress: 60,\n  metadata: {\n    request_id: $node[\"Prepare Backend Request\"].json.streamingConfig.request_id,\n    session_id: $node[\"Prepare Backend Request\"].json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'processing'\n  }\n}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "name": "Stream Processing Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [850, 450],
+      "id": "5",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process the response from backend\nconst response = $input.first().json;\nconst originalData = $node[\"Prepare Backend Request\"].json.originalData;\nconst streamingConfig = $node[\"Prepare Backend Request\"].json.streamingConfig;\n\n// Extract the agent response\nlet agentResponse = '';\nif (response.agent) {\n  agentResponse = response.agent;\n} else if (response.message) {\n  agentResponse = response.message;\n} else {\n  agentResponse = 'I apologize, but I encountered an issue processing your request. Please try again.';\n}\n\n// Return the formatted response\nreturn {\n  user_id: originalData.user_id,\n  agent_name: 're-engage',\n  agent_response: agentResponse,\n  session_id: originalData.session_id,\n  status: 'completed',\n  metadata: {\n    response_time: new Date().getTime() - parseInt(originalData.original_request_id || '0'),\n    backend_response: response,\n    request_id: streamingConfig.request_id,\n    session_id: streamingConfig.session_id\n  }\n};"
+      },
+      "name": "Process Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "id": "6"
+    },
+    {
+      "parameters": {
+        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'complete',\n  user_id: $json.user_id,\n  agent_name: 're-engage',\n  message: 'Response ready',\n  progress: 100,\n  agent_response: $json.agent_response,\n  metadata: {\n    request_id: $json.metadata.request_id,\n    session_id: $json.metadata.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'complete',\n    response_time: $json.metadata.response_time\n  }\n}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "name": "Stream Final Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 450],
+      "id": "7",
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Webhook Triggered": {
+      "main": [
+        [
+          {
+            "node": "Prepare Backend Request",
+            "type": "main",
+            "index": 0
           }
-        },
-        "name": "Call REST Endpoint",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 3,
-        "position": [650, 300],
-        "id": "3"
-      },
-      {
-        "parameters": {
-          "functionCode": "// Process the response from backend\nconst response = $input.first().json;\nconst originalData = $node[\"Prepare Backend Request\"].json.originalData;\n\n// Extract the agent response from the backend response\nlet agentResponse = '';\nif (response.agent) {\n  agentResponse = response.agent;\n} else if (response.message) {\n  agentResponse = response.message;\n} else {\n  // Fallback to a default response\n  agentResponse = 'I apologize, but I encountered an issue processing your request. Please try again.';\n}\n\n// Return the formatted response\nreturn {\n  user_id: originalData.user_id,\n  agent_name: 're-engage',\n  agent_response: agentResponse,\n  session_id: originalData.session_id,\n  status: 'completed',\n  metadata: {\n    response_time: new Date().getTime() - parseInt(originalData.original_request_id),\n    backend_response: response\n  }\n};"
-        },
-        "name": "Process Response",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 1,
-        "position": [850, 300],
-        "id": "4"
-      }
-    ],
-    "connections": {
-      "Webhook Triggered": {
-        "main": [
-          [
-            {
-              "node": "Prepare Backend Request",
-              "type": "main",
-              "index": 0
-            }
-          ]
         ]
-      },
-      "Prepare Backend Request": {
-        "main": [
-          [
-            {
-              "node": "Call REST Endpoint",
-              "type": "main",
-              "index": 0
-            }
-          ]
+      ]
+    },
+    "Prepare Backend Request": {
+      "main": [
+        [
+          {
+            "node": "Stream Initial Status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Call Backend API",
+            "type": "main",
+            "index": 0
+          }
         ]
-      },
-      "Call REST Endpoint": {
-        "main": [
-          [
-            {
-              "node": "Process Response",
-              "type": "main",
-              "index": 0
-            }
-          ]
+      ]
+    },
+    "Call Backend API": {
+      "main": [
+        [
+          {
+            "node": "Stream Processing Status",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Process Response",
+            "type": "main",
+            "index": 0
+          }
         ]
-      }
+      ]
+    },
+    "Process Response": {
+      "main": [
+        [
+          {
+            "node": "Stream Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   }
+}

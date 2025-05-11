@@ -1,5 +1,5 @@
 {
-  "name": "Sales Agent Workflow (s2) with Streaming",
+  "name": "Support Agent Workflow (s3) with Streaming",
   "nodes": [
     {
       "parameters": {},
@@ -11,9 +11,9 @@
     },
     {
       "parameters": {
-        "functionCode": "// Extract incoming data\nconst data = $input.first().json;\n\n// Extract streaming metadata\nconst request_id = data.request_id || data.original_request_id;\nconst session_id = data.session_id;\nconst user_id = data.user_id;\n\n// Create the payload for your existing REST endpoint\nconst requestPayload = {\n  user_id: data.user_id,\n  session_id: data.session_id,\n  user_input: data.user_message\n};\n\n// Return data with streaming info\nreturn {\n  requestPayload,\n  originalData: data,\n  agentType: 'PreSalesConsultant',\n  streamingConfig: {\n    request_id,\n    session_id,\n    user_id,\n    agent_name: 'sales'\n  }\n};"
+        "functionCode": "// Extract incoming data\nconst data = $input.first().json;\n\n// Extract streaming metadata\nconst request_id = data.request_id || data.original_request_id;\nconst session_id = data.session_id;\nconst user_id = data.user_id;\n\n// Create the payload for your existing REST endpoint\nconst requestPayload = {\n  user_id: data.user_id,\n  session_id: data.session_id,\n  user_input: data.user_message\n};\n\n// Return data with streaming info\nreturn {\n  requestPayload,\n  originalData: data,\n  agentType: 'SupportAgent',\n  streamingConfig: {\n    request_id,\n    session_id,\n    user_id,\n    agent_name: 'support'\n  }\n};"
       },
-      "name": "Prepare Sales Request",
+      "name": "Prepare Support Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [450, 300],
@@ -25,7 +25,7 @@
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $json.streamingConfig.user_id,\n  agent_name: 'sales',\n  message: 'Analyzing your business requirements...',\n  progress: 30,\n  metadata: {\n    request_id: $json.streamingConfig.request_id,\n    session_id: $json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'initial'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $json.streamingConfig.user_id,\n  agent_name: 'support',\n  message: 'Looking up your issue...',\n  progress: 30,\n  metadata: {\n    request_id: $json.streamingConfig.request_id,\n    session_id: $json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'initial'\n  }\n}) }}",
         "options": {
           "timeout": 5000
         }
@@ -47,11 +47,11 @@
         "options": {
           "timeout": 60000,
           "headers": {
-            "x-agent-type": "PreSalesConsultant"
+            "x-agent-type": "SupportAgent"
           }
         }
       },
-      "name": "Call Backend - Sales",
+      "name": "Call Backend - Support",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [650, 300],
@@ -63,7 +63,7 @@
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $node[\"Prepare Sales Request\"].json.streamingConfig.user_id,\n  agent_name: 'sales',\n  message: 'Processing pricing and product information...',\n  progress: 60,\n  metadata: {\n    request_id: $node[\"Prepare Sales Request\"].json.streamingConfig.request_id,\n    session_id: $node[\"Prepare Sales Request\"].json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'processing'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $node[\"Prepare Support Request\"].json.streamingConfig.user_id,\n  agent_name: 'support',\n  message: 'Searching knowledge base...',\n  progress: 60,\n  metadata: {\n    request_id: $node[\"Prepare Support Request\"].json.streamingConfig.request_id,\n    session_id: $node[\"Prepare Support Request\"].json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'processing'\n  }\n}) }}",
         "options": {
           "timeout": 5000
         }
@@ -77,9 +77,9 @@
     },
     {
       "parameters": {
-        "functionCode": "// Process the response from backend\nconst response = $input.first().json;\nconst originalData = $node[\"Prepare Sales Request\"].json.originalData;\nconst streamingConfig = $node[\"Prepare Sales Request\"].json.streamingConfig;\n\n// Extract the agent response\nlet agentResponse = '';\nif (response.agent) {\n  agentResponse = response.agent;\n} else if (response.message) {\n  agentResponse = response.message;\n} else {\n  agentResponse = 'I can help you with our products and pricing. Could you tell me more about your business needs?';\n}\n\n// Analyze content for tool usage\nconst toolsUsed = [];\nif (agentResponse.toLowerCase().includes('pricing') || agentResponse.toLowerCase().includes('cost')) {\n  toolsUsed.push('pricing_calculator');\n}\nif (agentResponse.toLowerCase().includes('product') || agentResponse.toLowerCase().includes('feature')) {\n  toolsUsed.push('product_catalog');\n}\n\n// Return the formatted response\nreturn {\n  user_id: originalData.user_id,\n  agent_name: 'sales',\n  agent_response: agentResponse,\n  session_id: originalData.session_id,\n  status: 'completed',\n  metadata: {\n    response_time: new Date().getTime() - parseInt(originalData.original_request_id || '0'),\n    backend_response: response,\n    tools_used: toolsUsed,\n    request_id: streamingConfig.request_id,\n    session_id: streamingConfig.session_id\n  }\n};"
+        "functionCode": "// Process the response from backend\nconst response = $input.first().json;\nconst originalData = $node[\"Prepare Support Request\"].json.originalData;\nconst streamingConfig = $node[\"Prepare Support Request\"].json.streamingConfig;\n\n// Extract the agent response\nlet agentResponse = '';\nif (response.agent) {\n  agentResponse = response.agent;\n} else if (response.message) {\n  agentResponse = response.message;\n} else {\n  agentResponse = 'I\\'m here to help you with any technical issues or questions. Can you describe what problem you\\'re experiencing?';\n}\n\n// Analyze content for tool usage\nconst toolsUsed = [];\nif (agentResponse.toLowerCase().includes('ticket') || agentResponse.toLowerCase().includes('case')) {\n  toolsUsed.push('ticket_system');\n}\nif (agentResponse.toLowerCase().includes('knowledge') || agentResponse.toLowerCase().includes('article')) {\n  toolsUsed.push('knowledge_base');\n}\nif (agentResponse.toLowerCase().includes('troubleshoot') || agentResponse.toLowerCase().includes('debug')) {\n  toolsUsed.push('diagnostic_tools');\n}\n\n// Return the formatted response\nreturn {\n  user_id: originalData.user_id,\n  agent_name: 'support',\n  agent_response: agentResponse,\n  session_id: originalData.session_id,\n  status: 'completed',\n  metadata: {\n    response_time: new Date().getTime() - parseInt(originalData.original_request_id || '0'),\n    backend_response: response,\n    tools_used: toolsUsed,\n    request_id: streamingConfig.request_id,\n    session_id: streamingConfig.session_id\n  }\n};"
       },
-      "name": "Process Sales Response",
+      "name": "Process Support Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [1050, 300],
@@ -109,7 +109,7 @@
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  type: 'tools_usage',\n  user_id: $json.user_id,\n  agent_name: 'sales',\n  message: 'Using specialized tools for accurate information...',\n  progress: 80,\n  metadata: {\n    request_id: $json.metadata.request_id,\n    session_id: $json.metadata.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'tools_usage',\n    tools: $json.metadata.tools_used\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'tools_usage',\n  user_id: $json.user_id,\n  agent_name: 'support',\n  message: 'Using support tools to find the best solution...',\n  progress: 80,\n  metadata: {\n    request_id: $json.metadata.request_id,\n    session_id: $json.metadata.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'tools_usage',\n    tools: $json.metadata.tools_used\n  }\n}) }}",
         "options": {
           "timeout": 5000
         }
@@ -127,7 +127,7 @@
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  type: 'complete',\n  user_id: $json.user_id,\n  agent_name: 'sales',\n  message: 'Response ready',\n  progress: 100,\n  agent_response: $json.agent_response,\n  metadata: {\n    request_id: $json.metadata.request_id,\n    session_id: $json.metadata.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'complete',\n    response_time: $json.metadata.response_time\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'complete',\n  user_id: $json.user_id,\n  agent_name: 'support',\n  message: 'Response ready',\n  progress: 100,\n  agent_response: $json.agent_response,\n  metadata: {\n    request_id: $json.metadata.request_id,\n    session_id: $json.metadata.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'complete',\n    response_time: $json.metadata.response_time\n  }\n}) }}",
         "options": {
           "timeout": 5000
         }
@@ -145,14 +145,14 @@
       "main": [
         [
           {
-            "node": "Prepare Sales Request",
+            "node": "Prepare Support Request",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare Sales Request": {
+    "Prepare Support Request": {
       "main": [
         [
           {
@@ -161,14 +161,14 @@
             "index": 0
           },
           {
-            "node": "Call Backend - Sales",
+            "node": "Call Backend - Support",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Call Backend - Sales": {
+    "Call Backend - Support": {
       "main": [
         [
           {
@@ -177,14 +177,14 @@
             "index": 0
           },
           {
-            "node": "Process Sales Response",
+            "node": "Process Support Response",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Process Sales Response": {
+    "Process Support Response": {
       "main": [
         [
           {
@@ -224,5 +224,8 @@
         ]
       ]
     }
+  },
+  "settings": {
+    "executionOrder": "v1"
   }
 }

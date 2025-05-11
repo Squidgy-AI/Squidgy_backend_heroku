@@ -1,148 +1,362 @@
 {
-    "name": "Main Router Workflow - Enhanced",
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "c2fcbad6-abc0-43af-8aa8-d1661ff4461d",
-          "responseMode": "lastNode",
-          "options": {
-            "immediateResponseCode": 200
+  "name": "Main Router Workflow with Streaming",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "=POST",
+        "path": "c2fcbad6-abc0-43af-8aa8-d1661ff4461d",
+        "responseMode": "lastNode",
+        "options": {
+          "allowanycustomheaders": true
+        }
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "1"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse incoming request and add metadata for streaming\nconst data = $input.item.json.body || $input.item.json;\n\n// Log for debugging\nconsole.log('Received request:', JSON.stringify(data, null, 2));\n\n// Extract request_id or generate one\nconst request_id = data.request_id || `n8n-${Date.now()}`;\nconst session_id = data.session_id;\n\n// Validate required fields\nconst requiredFields = ['user_id', 'user_mssg', 'session_id', 'agent_name'];\nconst missingFields = requiredFields.filter(field => !data[field]);\n\nif (missingFields.length > 0) {\n  throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n}\n\n// Parse agent names (can be single or multiple separated by ::)\nconst agents = data.agent_name.split('::').map(name => name.trim());\n\n// Return data for streaming\nreturn {\n  originalRequest: data,\n  agents: agents,\n  streamingMetadata: {\n    request_id,\n    session_id,\n    user_id: data.user_id,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "Parse Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "2"
+    },
+    {
+      "parameters": {
+        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'acknowledgment',\n  user_id: $json.streamingMetadata.user_id,\n  agent_name: $json.agents.join('::'),\n  message: `Processing request for ${$json.agents.join(' and ')} agent(s)...`,\n  progress: 0,\n  metadata: {\n    request_id: $json.streamingMetadata.request_id,\n    session_id: $json.streamingMetadata.session_id,\n    timestamp: new Date().toISOString(),\n    agents: $json.agents\n  }\n}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "name": "Send Acknowledgment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 450],
+      "id": "3",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Create workflow triggers for each agent\nconst data = $json;\nconst originalRequest = data.originalRequest;\nconst streamingMetadata = data.streamingMetadata;\n\nconst workflowTriggers = data.agents.map(agent => ({\n  agent: agent,\n  payload: {\n    user_id: originalRequest.user_id,\n    user_message: originalRequest.user_mssg,\n    session_id: originalRequest.session_id,\n    agent_name: agent,\n    timestamp: originalRequest.timestamp_of_call_made || new Date().toISOString(),\n    original_request_id: streamingMetadata.request_id,\n    request_id: streamingMetadata.request_id,\n    streaming_metadata: streamingMetadata\n  }\n}));\n\nreturn workflowTriggers;"
+      },
+      "name": "Create Agent Triggers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent }}",
+              "operation": "equals",
+              "value2": "re-engage"
+            }
+          ]
+        }
+      },
+      "name": "Is Re-engage Agent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "5"
+    },
+    {
+      "parameters": {
+        "workflowId": "s1",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Execute Re-engage Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "id": "6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent }}",
+              "operation": "equals",
+              "value2": "sales"
+            }
+          ]
+        }
+      },
+      "name": "Is Sales Agent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 350],
+      "id": "7"
+    },
+    {
+      "parameters": {
+        "workflowId": "s2",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Execute Sales Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "8"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.agent }}",
+              "operation": "equals",
+              "value2": "support"
+            }
+          ]
+        }
+      },
+      "name": "Is Support Agent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "id": "9"
+    },
+    {
+      "parameters": {
+        "workflowId": "s3",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Execute Support Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1450, 350],
+      "id": "10"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Default - execute re-engage workflow\nreturn $json;"
+      },
+      "name": "Default Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1450, 450],
+      "id": "11"
+    },
+    {
+      "parameters": {
+        "workflowId": "s1",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "name": "Execute Default Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1650, 450],
+      "id": "12"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate responses from all workflows\nconst responses = [];\n\n// Process all incoming items\nfor (const item of $input.all()) {\n  if (item.json) {\n    responses.push(item.json);\n  }\n}\n\n// Check if we got valid responses\nif (responses.length === 0) {\n  return {\n    error: 'No responses received from sub-workflows',\n    status: 'error'\n  };\n}\n\n// Get streaming metadata from the first response\nconst metadata = responses[0].metadata || {};\n\n// Prepare the final response\nconst aggregatedResponse = {\n  user_id: responses[0]?.user_id || metadata.user_id,\n  agent_names: responses.map(r => r.agent_name).join('::'),\n  agent_responses: responses.map(r => r.agent_response).join('\\n\\n'),\n  agent_response: responses.map(r => r.agent_response).join('\\n\\n'), // Singular for backward compatibility\n  agent_name: responses.map(r => r.agent_name).join('::'), // Singular for backward compatibility\n  session_id: responses[0]?.session_id || metadata.session_id,\n  responses: responses,\n  timestamp: new Date().toISOString(),\n  status: 'success',\n  metadata: {\n    total_response_time: Math.max(...responses.map(r => r.metadata?.response_time || 0)),\n    all_tools_used: [...new Set(responses.flatMap(r => r.metadata?.tools_used || []))],\n    response_count: responses.length,\n    request_id: metadata.request_id\n  }\n};\n\n// Log the final response\nconsole.log('Final response:', JSON.stringify(aggregatedResponse, null, 2));\n\nreturn aggregatedResponse;"
+      },
+      "name": "Aggregate Responses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1850, 350],
+      "id": "13"
+    },
+    {
+      "parameters": {
+        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  type: 'final',\n  user_id: $json.user_id,\n  agent_names: $json.agent_names,\n  message: 'All responses complete',\n  progress: 100,\n  metadata: {\n    request_id: $json.metadata.request_id,\n    session_id: $json.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'aggregated'\n  }\n}) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "name": "Send Final Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [2050, 450],
+      "id": "14",
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Request",
+            "type": "main",
+            "index": 0
           }
-        },
-        "name": "Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 1,
-        "position": [250, 300],
-        "id": "1"
-      },
-      {
-        "parameters": {
-          "functionCode": "// Validate incoming request\nconst requiredFields = ['user_id', 'user_mssg', 'session_id', 'agent_name'];\nconst missingFields = requiredFields.filter(field => !$node[\"Webhook\"].json[field]);\n\nif (missingFields.length > 0) {\n  throw new Error(`Missing required fields: ${missingFields.join(', ')}`);\n}\n\n// Extract data from the incoming request\nconst data = $node[\"Webhook\"].json;\n\n// Log for debugging\nconsole.log('Received request:', JSON.stringify(data, null, 2));\n\n// Parse agent names (can be single or multiple separated by ::)\nconst agents = data.agent_name.split('::').map(name => name.trim());\n\n// Create workflow triggers for each agent\nconst workflowTriggers = agents.map(agent => ({\n  agent: agent,\n  payload: {\n    user_id: data.user_id,\n    user_message: data.user_mssg,\n    session_id: data.session_id,\n    agent_name: agent,\n    timestamp: data.timestamp_of_call_made || new Date().toISOString(),\n    original_request_id: new Date().getTime().toString()\n  }\n}));\n\nreturn workflowTriggers;"
-        },
-        "name": "Parse and Validate Request",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 1,
-        "position": [450, 300],
-        "id": "2"
-      },
-      {
-        "parameters": {
-          "conditions": {
-            "string": [
-              {
-                "value1": "={{ $json.agent }}",
-                "operation": "equals",
-                "value2": "re-engage"
-              }
-            ]
+        ]
+      ]
+    },
+    "Parse Request": {
+      "main": [
+        [
+          {
+            "node": "Send Acknowledgment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Agent Triggers",
+            "type": "main",
+            "index": 0
           }
-        },
-        "name": "Check Agent Type",
-        "type": "n8n-nodes-base.if",
-        "typeVersion": 1,
-        "position": [650, 300],
-        "id": "3"
-      },
-      {
-        "parameters": {
-          "workflowId": "s1",
-          "options": {
-            "waitForSubWorkflow": true
+        ]
+      ]
+    },
+    "Create Agent Triggers": {
+      "main": [
+        [
+          {
+            "node": "Is Re-engage Agent?",
+            "type": "main",
+            "index": 0
           }
-        },
-        "name": "Execute Re-engage Workflow",
-        "type": "n8n-nodes-base.executeWorkflow",
-        "typeVersion": 1,
-        "position": [850, 250],
-        "id": "4"
-      },
-      {
-        "parameters": {
-          "workflowId": "={{ $json.agent === 'sales' ? 's2' : $json.agent === 'support' ? 's3' : $json.agent === 'social' ? 's4' : 's1' }}",
-          "options": {
-            "waitForSubWorkflow": true
+        ]
+      ]
+    },
+    "Is Re-engage Agent?": {
+      "main": [
+        [
+          {
+            "node": "Execute Re-engage Workflow",
+            "type": "main",
+            "index": 0
           }
-        },
-        "name": "Execute Other Workflows",
-        "type": "n8n-nodes-base.executeWorkflow",
-        "typeVersion": 1,
-        "position": [850, 350],
-        "id": "5"
-      },
-      {
-        "parameters": {
-          "functionCode": "// Aggregate responses from all workflows\nconst responses = [];\n\n// Process all incoming items\nfor (const item of $input.all()) {\n  if (item.json) {\n    responses.push(item.json);\n  }\n}\n\n// Check if we got valid responses\nif (responses.length === 0) {\n  throw new Error('No responses received from sub-workflows');\n}\n\n// Prepare the final response in the exact format the frontend expects\nconst aggregatedResponse = {\n  user_id: responses[0]?.user_id || $node[\"Webhook\"].json.user_id,\n  agent_names: responses.map(r => r.agent_name).join('::'),\n  agent_responses: responses.map(r => r.agent_response).join('\\n\\n'),\n  responses: responses,\n  timestamp: new Date().toISOString(),\n  status: 'success'\n};\n\n// Log the final response\nconsole.log('Final response:', JSON.stringify(aggregatedResponse, null, 2));\n\nreturn aggregatedResponse;"
-        },
-        "name": "Aggregate and Format Response",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 1,
-        "position": [1050, 300],
-        "id": "6"
-      }
-    ],
-    "connections": {
-      "Webhook": {
-        "main": [
-          [
-            {
-              "node": "Parse and Validate Request",
-              "type": "main",
-              "index": 0
-            }
-          ]
+        ],
+        [
+          {
+            "node": "Is Sales Agent?",
+            "type": "main",
+            "index": 0
+          }
         ]
-      },
-      "Parse and Validate Request": {
-        "main": [
-          [
-            {
-              "node": "Check Agent Type",
-              "type": "main",
-              "index": 0
-            }
-          ]
+      ]
+    },
+    "Execute Re-engage Workflow": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Responses",
+            "type": "main",
+            "index": 0
+          }
         ]
-      },
-      "Check Agent Type": {
-        "main": [
-          [
-            {
-              "node": "Execute Re-engage Workflow",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Execute Other Workflows",
-              "type": "main",
-              "index": 0
-            }
-          ]
+      ]
+    },
+    "Is Sales Agent?": {
+      "main": [
+        [
+          {
+            "node": "Execute Sales Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Support Agent?",
+            "type": "main",
+            "index": 0
+          }
         ]
-      },
-      "Execute Re-engage Workflow": {
-        "main": [
-          [
-            {
-              "node": "Aggregate and Format Response",
-              "type": "main",
-              "index": 0
-            }
-          ]
+      ]
+    },
+    "Execute Sales Workflow": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Responses",
+            "type": "main",
+            "index": 0
+          }
         ]
-      },
-      "Execute Other Workflows": {
-        "main": [
-          [
-            {
-              "node": "Aggregate and Format Response",
-              "type": "main",
-              "index": 0
-            }
-          ]
+      ]
+    },
+    "Is Support Agent?": {
+      "main": [
+        [
+          {
+            "node": "Execute Support Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Default Handler",
+            "type": "main",
+            "index": 0
+          }
         ]
-      }
+      ]
+    },
+    "Execute Support Workflow": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Handler": {
+      "main": [
+        [
+          {
+            "node": "Execute Default Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Default Workflow": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Responses": {
+      "main": [
+        [
+          {
+            "node": "Send Final Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   }
+}
