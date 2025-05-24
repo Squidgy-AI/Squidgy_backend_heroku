@@ -1,5 +1,5 @@
 {
-  "name": "Re-engage Agent Workflow (s1) with Streaming",
+  "name": "Product Manager Workflow (s1)",
   "nodes": [
     {
       "parameters": {},
@@ -11,31 +11,13 @@
     },
     {
       "parameters": {
-        "functionCode": "// Extract incoming data\nconst data = $input.first().json;\n\n// Extract streaming metadata\nconst request_id = data.request_id || data.original_request_id;\nconst session_id = data.session_id;\nconst user_id = data.user_id;\n\n// Create the payload for your existing REST endpoint\nconst requestPayload = {\n  user_id: data.user_id,\n  session_id: data.session_id,\n  user_input: data.user_message\n};\n\n// Return data with streaming info\nreturn {\n  requestPayload,\n  originalData: data,\n  streamingConfig: {\n    request_id,\n    session_id,\n    user_id,\n    agent_name: 're-engage'\n  }\n};"
+        "functionCode": "// Extract incoming data\nconst data = $input.first().json;\n\n// Log for debugging\nconsole.log('Product Manager received:', JSON.stringify(data, null, 2));\n\n// Create the payload for backend request\nconst requestPayload = {\n  user_id: data.user_id,\n  session_id: data.session_id,\n  user_input: data.user_message\n};\n\n// Store original data for later use\nreturn {\n  requestPayload,\n  originalData: data,\n  agentType: 'ProductManager' // Maps to the role in your backend\n};"
       },
-      "name": "Prepare Backend Request",
+      "name": "Prepare PM Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [450, 300],
       "id": "2"
-    },
-    {
-      "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
-        "method": "POST",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $json.streamingConfig.user_id,\n  agent_name: 're-engage',\n  message: 'Understanding your query...',\n  progress: 30,\n  metadata: {\n    request_id: $json.streamingConfig.request_id,\n    session_id: $json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'initial'\n  }\n}) }}",
-        "options": {
-          "timeout": 5000
-        }
-      },
-      "name": "Stream Initial Status",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 3,
-      "position": [650, 450],
-      "id": "3",
-      "continueOnFail": true
     },
     {
       "parameters": {
@@ -45,60 +27,72 @@
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.requestPayload) }}",
         "options": {
-          "timeout": 60000
+          "timeout": 60000,
+          "headers": {
+            "x-agent-type": "ProductManager"
+          }
         }
       },
-      "name": "Call Backend API",
+      "name": "Call Backend - PM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
       "position": [650, 300],
-      "id": "4"
+      "id": "3"
     },
     {
       "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "url": "https://boiler-plate-v1.vercel.app/api/stream",
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  type: 'intermediate',\n  user_id: $node[\"Prepare Backend Request\"].json.streamingConfig.user_id,\n  agent_name: 're-engage',\n  message: 'Processing your request...',\n  progress: 60,\n  metadata: {\n    request_id: $node[\"Prepare Backend Request\"].json.streamingConfig.request_id,\n    session_id: $node[\"Prepare Backend Request\"].json.streamingConfig.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'processing'\n  }\n}) }}",
+        "jsonBody": "={{ JSON.stringify({user_id: $node[\"Prepare PM Request\"].json.originalData.user_id, agent_name: 're-engage', agent_response: 'Analyzing your request...', session_id: $node[\"Prepare PM Request\"].json.originalData.session_id, type: 'intermediate'}) }}",
         "options": {
           "timeout": 5000
         }
       },
-      "name": "Stream Processing Status",
+      "name": "Stream Status Update",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 3,
-      "position": [850, 450],
+      "position": [650, 450],
       "id": "5",
       "continueOnFail": true
     },
     {
       "parameters": {
-        "functionCode": "// Process the response from backend\nconst response = $input.first().json;\nconst originalData = $node[\"Prepare Backend Request\"].json.originalData;\nconst streamingConfig = $node[\"Prepare Backend Request\"].json.streamingConfig;\n\n// Extract the agent response\nlet agentResponse = '';\nif (response.agent) {\n  agentResponse = response.agent;\n} else if (response.message) {\n  agentResponse = response.message;\n} else {\n  agentResponse = 'I apologize, but I encountered an issue processing your request. Please try again.';\n}\n\n// Return the formatted response\nreturn {\n  user_id: originalData.user_id,\n  agent_name: 're-engage',\n  agent_response: agentResponse,\n  session_id: originalData.session_id,\n  status: 'completed',\n  metadata: {\n    response_time: new Date().getTime() - parseInt(originalData.original_request_id || '0'),\n    backend_response: response,\n    request_id: streamingConfig.request_id,\n    session_id: streamingConfig.session_id\n  }\n};"
+        "functionCode": "// Process the response from backend\nconst response = $input.first().json;\nconst originalData = $node[\"Prepare PM Request\"].json.originalData;\n\n// Extract the agent response\nlet agentResponse = '';\nif (response.agent) {\n  agentResponse = response.agent;\n} else if (response.message) {\n  agentResponse = response.message;\n} else {\n  // Fallback response\n  agentResponse = \"Hi! I'm Squidgy and I'm here to help you win back time and make more money. Could you share your website URL so I can analyze how we can best assist you?\";\n}\n\n// Check if response contains a URL/website mention\nconst hasWebsiteMention = agentResponse.toLowerCase().includes('website') || \n                          originalData.user_message.toLowerCase().includes('website') || \n                          /https?:\\/\\/[^\\s]+/.test(originalData.user_message);\n\n// Check if we should hand off to Pre-Sales Consultant\nconst shouldHandoffToPreSales = hasWebsiteMention || \n                                /\\.(com|org|net|io|ai)/.test(originalData.user_message);\n\n// Return the formatted response\nreturn {\n  user_id: originalData.user_id,\n  agent_name: 're-engage',\n  agent_response: agentResponse,\n  session_id: originalData.session_id,\n  status: 'completed',\n  metadata: {\n    response_time: new Date().getTime() - parseInt(originalData.original_request_id),\n    backend_response: response,\n    content_analysis: {\n      hasWebsiteMention,\n      shouldHandoffToPreSales\n    }\n  }\n};"
       },
-      "name": "Process Response",
+      "name": "Process PM Response",
       "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "4"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.metadata.content_analysis.shouldHandoffToPreSales }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Check for Handoff",
+      "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [1050, 300],
       "id": "6"
     },
     {
       "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
-        "method": "POST",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\n  type: 'complete',\n  user_id: $json.user_id,\n  agent_name: 're-engage',\n  message: 'Response ready',\n  progress: 100,\n  agent_response: $json.agent_response,\n  metadata: {\n    request_id: $json.metadata.request_id,\n    session_id: $json.metadata.session_id,\n    timestamp: new Date().toISOString(),\n    stage: 'complete',\n    response_time: $json.metadata.response_time\n  }\n}) }}",
-        "options": {
-          "timeout": 5000
-        }
+        "functionCode": "// Add handoff notification\nconst response = $input.first().json;\n\n// Modify the response to include handoff info\nresponse.agent_response += '\\n\\n[Handoff to Pre-Sales Consultant for website analysis]';\nresponse.metadata.handoff = {\n  to: 'PreSalesConsultant',\n  reason: 'Website detected - initiating analysis'\n};\n\nreturn response;"
       },
-      "name": "Stream Final Response",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 3,
-      "position": [1250, 450],
-      "id": "7",
-      "continueOnFail": true
+      "name": "Add Handoff Note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1250, 250],
+      "id": "7"
     }
   ],
   "connections": {
@@ -106,50 +100,63 @@
       "main": [
         [
           {
-            "node": "Prepare Backend Request",
+            "node": "Prepare PM Request",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Prepare Backend Request": {
+    "Prepare PM Request": {
       "main": [
         [
           {
-            "node": "Stream Initial Status",
+            "node": "Call Backend - PM",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Call Backend API",
+            "node": "Stream Status Update",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Call Backend API": {
+    "Call Backend - PM": {
       "main": [
         [
           {
-            "node": "Stream Processing Status",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Process Response",
+            "node": "Process PM Response",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Process Response": {
+    "Process PM Response": {
       "main": [
         [
           {
-            "node": "Stream Final Response",
+            "node": "Check for Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for Handoff": {
+      "main": [
+        [
+          {
+            "node": "Add Handoff Note",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process PM Response",
             "type": "main",
             "index": 0
           }
