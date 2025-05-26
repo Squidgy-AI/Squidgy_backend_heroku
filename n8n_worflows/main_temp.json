@@ -1,0 +1,533 @@
+{
+  "name": "AI Agent with Supabase Vector DB",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-receiver",
+      "name": "User Query Received",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "agent-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.query}}",
+              "operation": "contains",
+              "value2": "agent"
+            }
+          ]
+        }
+      },
+      "id": "check-agent-function",
+      "name": "Does query pertain to agent function?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "messageHistory": "={{[]}}",
+          "userMessage": "={{$json.query}}"
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 1000
+        }
+      },
+      "id": "match-agents-kb",
+      "name": "Match query against agents' specific KBs",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.matchFound}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-matching-agent",
+      "name": "Is there a matching agent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Redirect query to identified agent\nconst agentId = $input.first().json.agentId;\nconst query = $input.first().json.query;\n\nreturn {\n  agentId: agentId,\n  query: query,\n  action: 'redirect'\n};"
+      },
+      "id": "redirect-to-agent",
+      "name": "Redirect query to identified agent",
+      "type": "n8n-nodes-base.functionItem",
+      "typeVersion": 1,
+      "position": [1050, 100]
+    },
+    {
+      "parameters": {
+        "content": "=Agent {{$json.agentId}} is the right person to answer your question",
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "update-ui-agent",
+      "name": "Update UI: Agent X is right person",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 100]
+    },
+    {
+      "parameters": {
+        "content": "=No suitable agent is available",
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "inform-no-agent",
+      "name": "Inform user no suitable agent available",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "messageHistory": "={{[]}}",
+          "userMessage": "={{$json.query}}"
+        },
+        "options": {
+          "temperature": 0.7,
+          "systemMessage": "You are an AI assistant with access to a client knowledge base."
+        }
+      },
+      "id": "init-client-kb",
+      "name": "Initialize Client Knowledge Base (KB)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.dataAvailable}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-client-data",
+      "name": "Is client's website data available in KB?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/match_documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameter": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_ANON_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameter": [
+            {
+              "name": "query_embedding",
+              "value": "={{$json.embedding}}"
+            },
+            {
+              "name": "match_threshold",
+              "value": "0.7"
+            },
+            {
+              "name": "match_count",
+              "value": "5"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "query-supabase-vector",
+      "name": "Determine industry and load Industry-Specific KB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1050, 500]
+    },
+    {
+      "parameters": {
+        "content": "=Please provide your website URL",
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "prompt-website-url",
+      "name": "Prompt user for website URL",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/match_documents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameter": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_ANON_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameter": [
+            {
+              "name": "query_embedding",
+              "value": "={{$json.embedding}}"
+            },
+            {
+              "name": "industry",
+              "value": "={{$json.industry}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "load-industry-kb",
+      "name": "Determine industry and load Industry-Specific KB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 600]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "messageHistory": "={{$json.chatHistory || []}}",
+          "userMessage": "={{$json.query}}"
+        },
+        "options": {
+          "temperature": 0.7,
+          "systemMessage": "You are an AI agent processing queries using client and industry-specific knowledge bases."
+        }
+      },
+      "id": "process-with-kb",
+      "name": "Agent processes query using Client KB and Industry-Specific KB",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [1450, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.hasResponse}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-response",
+      "name": "Does agent have sufficient info to respond?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1650, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Execute agent function and generate response\nconst response = $input.first().json.agentResponse;\nconst functionResult = $input.first().json.functionResult;\n\nreturn {\n  response: response,\n  functionResult: functionResult,\n  status: 'completed'\n};"
+      },
+      "id": "execute-function",
+      "name": "Execute agent function and generate response",
+      "type": "n8n-nodes-base.functionItem",
+      "typeVersion": 1,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "content": "={{$json.response}}",
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "send-response",
+      "name": "Send response to UI Agent responds",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2050, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "messages": {
+          "messageHistory": "={{$json.chatHistory || []}}",
+          "userMessage": "I need more information to answer your question. Can you provide: {{$json.requiredInfo}}"
+        },
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "ask-followup",
+      "name": "Agent asks follow-up questions",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [1850, 500]
+    },
+    {
+      "parameters": {
+        "content": "={{$json.followUpQuestion}}",
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "ask-client-followup",
+      "name": "Ask client follow-ups on the UI",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2050, 500]
+    },
+    {
+      "parameters": {
+        "model": "text-embedding-ada-002",
+        "text": "={{$json.query}}",
+        "options": {}
+      },
+      "id": "create-embedding",
+      "name": "Create Query Embedding",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [450, 500]
+    }
+  ],
+  "connections": {
+    "webhook-receiver": {
+      "main": [
+        [
+          {
+            "node": "check-agent-function",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-agent-function": {
+      "main": [
+        [
+          {
+            "node": "match-agents-kb",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "init-client-kb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "match-agents-kb": {
+      "main": [
+        [
+          {
+            "node": "check-matching-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-matching-agent": {
+      "main": [
+        [
+          {
+            "node": "redirect-to-agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "inform-no-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "redirect-to-agent": {
+      "main": [
+        [
+          {
+            "node": "update-ui-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "init-client-kb": {
+      "main": [
+        [
+          {
+            "node": "check-client-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-client-data": {
+      "main": [
+        [
+          {
+            "node": "create-embedding",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "prompt-website-url",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-embedding": {
+      "main": [
+        [
+          {
+            "node": "query-supabase-vector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "query-supabase-vector": {
+      "main": [
+        [
+          {
+            "node": "process-with-kb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prompt-website-url": {
+      "main": [
+        [
+          {
+            "node": "load-industry-kb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "load-industry-kb": {
+      "main": [
+        [
+          {
+            "node": "process-with-kb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "process-with-kb": {
+      "main": [
+        [
+          {
+            "node": "check-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-response": {
+      "main": [
+        [
+          {
+            "node": "execute-function",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ask-followup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute-function": {
+      "main": [
+        [
+          {
+            "node": "send-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ask-followup": {
+      "main": [
+        [
+          {
+            "node": "ask-client-followup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateId": "ai-agent-supabase-vector"
+  },
+  "pinData": {},
+  "versionId": "1.0.0",
+  "triggerCount": 1,
+  "tags": []
+}

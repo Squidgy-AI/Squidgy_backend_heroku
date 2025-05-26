@@ -1,0 +1,1247 @@
+{
+  "name": "Prod_manager_wf.json",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "63b3116f-b23e-424c-bbd5-69f6c0b7bd06",
+      "name": "Receive User Query",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1700,
+        720
+      ],
+      "webhookId": "7aa6f49f-fb71-4f2d-a78f-ad32d898ca5e",
+      "notes": "Expects: user_id, session_id, user_mssg, agent, timestamp_at_call"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": \"{{$json.user_mssg}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1480,
+        720
+      ],
+      "id": "800abb36-37fe-4d53-8196-03f5ac4a37ee",
+      "name": "Create Query Embedding",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eLTcZnEBbn7JdcMW",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/match_agent_documents_by_name",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query_embedding\": {{JSON.stringify($node[\"Create Query Embedding\"].json.data[0].embedding)}},\n  \"agent_name_filter\": \"{{$node[\"Receive User Query\"].json.agent}}\",\n  \"match_count\": 5,\n  \"match_threshold\": 0.7\n}",
+        "options": {}
+      },
+      "id": "b29fd81b-6e6b-4341-940f-fd02caf75273",
+      "name": "Check Specified Agent KB First",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1280,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.length}}",
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "id": "a8f563e7-e320-407c-a486-a40014721b99",
+      "name": "Does Agent Have Relevant Info?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1080,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/get_website_data_by_session",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"p_session_id\": \"{{$node[\"Receive User Query\"].json.session_id}}\"\n}",
+        "options": {}
+      },
+      "id": "72d53d32-cc5d-4a57-9eb9-2e221f5f3f10",
+      "name": "Get Website Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -880,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json[0].has_website_data}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "76f22111-ce8f-431a-a69d-f7c308ab323a",
+      "name": "Has Website Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"user_id\": \"{{$node[\"Receive User Query\"].json.user_id}}\",\n  \"session_id\": \"{{$node[\"Receive User Query\"].json.session_id}}\",\n  \"agent_response\": \"Please provide your website URL so I can better assist you.\",\n  \"agent\": \"{{$node[\"Receive User Query\"].json.agent}}\",\n  \"timestamp_at_call\": \"{{$node[\"Receive User Query\"].json.timestamp_at_call}}\",\n  \"requires_website\": true\n}",
+        "options": {}
+      },
+      "id": "3d4f0b19-e847-4486-b40d-c871a252a8ad",
+      "name": "Prompt for Website URL",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -420,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine agent context with website data\nconst agentDocs = $node[\"Check Specified Agent KB First\"].json;\nconst websiteData = $node[\"Get Website Data\"].json[0];\nconst originalRequest = $node[\"Receive User Query\"].json;\nconst embedding = $node[\"Create Query Embedding\"].json.data[0].embedding;\n\n// Extract agent context from matched documents\nlet agentContext = \"\";\nif (agentDocs && agentDocs.length > 0) {\n  agentContext = agentDocs.map(doc => doc.content).join(\"\\n\\n\");\n}\n\nreturn [{\n  json: {\n    agent_context: agentContext,\n    website_analysis: websiteData.analysis || \"\",\n    industry: \"general\", // Will be extracted from analysis later\n    user_mssg: originalRequest.user_mssg,\n    user_id: originalRequest.user_id,\n    session_id: originalRequest.session_id,\n    agent: originalRequest.agent,\n    timestamp_at_call: originalRequest.timestamp_at_call,\n    embedding: embedding\n  }\n}];"
+      },
+      "id": "1d8c948c-c77b-4557-af4e-dfca39fe27b5",
+      "name": "Prepare Context for Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"{{$json.agent_context}}\\n\\nYou have access to the following client information: {{$json.website_analysis}}. The client is in the {{$json.industry}} industry.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{$json.user_mssg}}\"\n    }\n  ],\n  \"temperature\": 0.7\n}",
+        "options": {}
+      },
+      "id": "397a691e-efce-474b-9a4e-ead3607a584c",
+      "name": "Generate Agent Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        720
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eLTcZnEBbn7JdcMW",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"user_id\": \"{{$json.user_id}}\",\n  \"session_id\": \"{{$json.session_id}}\",\n  \"agent_response\": \"{{$json.choices[0].message.content}}\",\n  \"agent\": \"{{$json.agent}}\",\n  \"timestamp_at_call\": \"{{$json.timestamp_at_call}}\"\n}",
+        "options": {}
+      },
+      "id": "3c81aa25-b40c-4203-9c03-5699dea50eec",
+      "name": "Send Final Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/match_agent_documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query_embedding\": {{JSON.stringify($node[\"Create Query Embedding\"].json.data[0].embedding)}},\n  \"match_count\": 5,\n  \"match_threshold\": 0.7\n}",
+        "options": {}
+      },
+      "id": "6ff23645-fdc5-4ec0-a22a-eed785195188",
+      "name": "Search All Agent KBs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1080,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the best matching agent from results\nconst results = $node[\"Search All Agent KBs\"].json;\nconst originalData = $node[\"Receive User Query\"].json;\n\n// Find the highest similarity match\nlet bestMatch = null;\nlet highestSimilarity = 0;\n\nif (results && results.length > 0) {\n  results.forEach(doc => {\n    if (doc.similarity > highestSimilarity) {\n      highestSimilarity = doc.similarity;\n      bestMatch = doc.agent_name;\n    }\n  });\n}\n\nreturn [{\n  json: {\n    matched_agent: bestMatch,\n    requested_agent: originalData.agent,\n    match_similarity: highestSimilarity,\n    user_id: originalData.user_id,\n    session_id: originalData.session_id,\n    user_mssg: originalData.user_mssg,\n    timestamp_at_call: originalData.timestamp_at_call\n  }\n}];"
+      },
+      "id": "7d905e85-d52f-4557-95dd-4541584323d6",
+      "name": "Find Best Matching Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"user_id\": \"{{$json.user_id}}\",\n  \"session_id\": \"{{$json.session_id}}\",\n  \"agent_response\": \"Agent '{{$json.matched_agent}}' is the perfect agent to answer your question. Redirecting...\",\n  \"agent\": \"{{$json.matched_agent}}\",\n  \"timestamp_at_call\": \"{{$json.timestamp_at_call}}\",\n  \"redirect_to_agent\": \"{{$json.matched_agent}}\"\n}",
+        "options": {}
+      },
+      "id": "8a674302-9886-452b-8184-916b3cb37881",
+      "name": "Redirect to Better Agent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -680,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "website-provided",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "77732d78-2b8c-467d-9c15-b7a313bfdfa1",
+      "name": "Website URL Received",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1700,
+        1120
+      ],
+      "webhookId": "website-url-webhook",
+      "notes": "Triggered when user provides website URL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"sonar-reasoning-pro\",\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Please analyze the website {{$json.website_url}} and provide a summary in exactly this format:\\n--- *Company name*: [Extract company name]\\n--- *Website*: {{$json.website_url}}\\n--- *Contact Information*: [Any available contact details]\\n--- *Description*: [2-3 sentence summary of what the company does]\\n--- *Tags*: [Main business categories, separated by periods]\\n--- *Takeaways*: [Key business value propositions]\\n--- *Niche*: [Specific market focus or specialty]\"\n  }],\n  \"max_tokens\": 1000\n}",
+        "options": {}
+      },
+      "id": "261ffbd0-473e-4c19-a7db-3e9690e7b1e1",
+      "name": "Analyze Website with Perplexity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1480,
+        1120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9qMoQ3WdB2RwdWZG",
+          "name": "Perpelexity Header Auth account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract industry from analysis\nconst analysis = $json.choices[0].message.content;\nconst websiteData = $node[\"Website URL Received\"].json;\n\n// Simple industry extraction from tags/niche\nlet industry = \"general\";\nconst analysisLower = analysis.toLowerCase();\n\nif (analysisLower.includes(\"solar\") || analysisLower.includes(\"renewable\")) {\n  industry = \"solar\";\n} else if (analysisLower.includes(\"tech\") || analysisLower.includes(\"software\")) {\n  industry = \"technology\";\n} else if (analysisLower.includes(\"retail\") || analysisLower.includes(\"commerce\")) {\n  industry = \"retail\";\n} else if (analysisLower.includes(\"health\") || analysisLower.includes(\"medical\")) {\n  industry = \"healthcare\";\n} else if (analysisLower.includes(\"finance\") || analysisLower.includes(\"banking\")) {\n  industry = \"finance\";\n} else if (analysisLower.includes(\"education\") || analysisLower.includes(\"learning\")) {\n  industry = \"education\";\n}\n\nreturn [{\n  json: {\n    session_id: websiteData.session_id,\n    url: websiteData.website_url,\n    analysis: analysis,\n    industry: industry,\n    user_id: websiteData.user_id,\n    agent: websiteData.agent,\n    user_mssg: websiteData.user_mssg,\n    timestamp_at_call: websiteData.timestamp_at_call\n  }\n}];"
+      },
+      "id": "988d1fea-b01e-477c-983c-f24bcfe3a0a2",
+      "name": "Extract Industry from Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/website_data",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "upsert"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session_id\": \"{{$json.session_id}}\",\n  \"url\": \"{{$json.url}}\",\n  \"analysis\": {{JSON.stringify($json.analysis)}}\n}",
+        "options": {}
+      },
+      "id": "6831e6b4-4a4e-4bb5-945c-c13bd3abdf64",
+      "name": "Save Website Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1080,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": \"{{$json.user_mssg}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -880,
+        1120
+      ],
+      "id": "a4c2550c-7e84-4ae7-ad55-dde4914d9717",
+      "name": "Recreate Query Embedding",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eLTcZnEBbn7JdcMW",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/match_agent_documents_by_name",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query_embedding\": {{JSON.stringify($json.data[0].embedding)}},\n  \"agent_name_filter\": \"{{$node[\"Extract Industry from Analysis\"].json.agent}}\",\n  \"match_count\": 5,\n  \"match_threshold\": 0.7\n}",
+        "options": {}
+      },
+      "id": "8e5d0836-3dfc-4c65-bd71-8857f358c056",
+      "name": "Get Agent Context After Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -680,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare all context for final response\nconst agentDocs = $json;\nconst websiteInfo = $node[\"Extract Industry from Analysis\"].json;\n\n// Extract agent context\nlet agentContext = \"\";\nif (agentDocs && agentDocs.length > 0) {\n  agentContext = agentDocs.map(doc => doc.content).join(\"\\n\\n\");\n}\n\nreturn [{\n  json: {\n    agent_context: agentContext,\n    website_analysis: websiteInfo.analysis,\n    industry: websiteInfo.industry,\n    user_mssg: websiteInfo.user_mssg,\n    user_id: websiteInfo.user_id,\n    session_id: websiteInfo.session_id,\n    agent: websiteInfo.agent,\n    timestamp_at_call: websiteInfo.timestamp_at_call\n  }\n}];"
+      },
+      "id": "42988700-b786-46fc-92c9-f34d1f84533e",
+      "name": "Prepare Final Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"{{$json.agent_context}}\\n\\nYou have access to the following client information: {{$json.website_analysis}}. The client is in the {{$json.industry}} industry. Answer their question based on this context.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{$json.user_mssg}}\"\n    }\n  ],\n  \"temperature\": 0.7\n}",
+        "options": {}
+      },
+      "id": "df986ad3-6678-41bb-8ef9-dcdb00b24b1b",
+      "name": "Generate Response After Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        1120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "eLTcZnEBbn7JdcMW",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"user_id\": \"{{$json.user_id}}\",\n  \"session_id\": \"{{$json.session_id}}\",\n  \"agent_response\": \"{{$json.choices[0].message.content}}\",\n  \"agent\": \"{{$json.agent}}\",\n  \"timestamp_at_call\": \"{{$json.timestamp_at_call}}\"\n}",
+        "options": {}
+      },
+      "id": "d56f2634-a07e-4944-a7a6-70b90ce1a655",
+      "name": "Send Response After Website Analysis",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        1120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "c2fcbad6-abc0-43af-8aa8-d1661ff4461d",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "53c7a38a-c356-4c6c-890b-bd6475e38197",
+      "name": "Webhook from Backend",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1760,
+        120
+      ],
+      "webhookId": "c2fcbad6-abc0-43af-8aa8-d1661ff4461d",
+      "notes": "Receives: user_id, session_id, user_mssg, agent_name, timestamp_of_call_made, request_id, _original_message, _missing_info"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/match_agent_documents_by_name",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query_embedding\": {{JSON.stringify($json.data[0].embedding)}},\n  \"agent_name_filter\": \"{{$node[\"Webhook from Backend\"].json.agent_name}}\",\n  \"match_count\": 5,\n  \"match_threshold\": 0.7\n}",
+        "options": {}
+      },
+      "id": "d065278c-4e42-46f2-8b93-9c389aeade0c",
+      "name": "Get Agent Knowledge Base",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1360,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$node[\"Webhook from Backend\"].json._missing_info !== undefined}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "636b4f6d-7bf8-49a1-976e-043003ab1074",
+      "name": "Is Backend Requesting Info Collection?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"{{$node[\"Get Agent Knowledge Base\"].json[0].content || 'You are a helpful AI assistant.'}}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{$node[\"Webhook from Backend\"].json.user_mssg}}\"\n    }\n  ],\n  \"temperature\": 0.7\n}",
+        "options": {}
+      },
+      "id": "af763347-4cb9-483b-8bc7-abbbd6212bf7",
+      "name": "Generate Info Collection Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -960,
+        20
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9qMoQ3WdB2RwdWZG",
+          "name": "Perpelexity Header Auth account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Combine all context for response generation\nconst webhookData = $node[\"Webhook from Backend\"].json;\nconst agentKB = $node[\"Get Agent Knowledge Base\"].json;\nconst websiteData = $node[\"Get Website Data1\"].json[0] || {};\n\n// Extract agent persona\nlet agentPersona = \"You are a helpful AI assistant.\";\nif (agentKB && agentKB.length > 0) {\n  agentPersona = agentKB[0].content;\n}\n\n// Build context\nlet context = {\n  agentPersona: agentPersona,\n  websiteData: websiteData.analysis || null,\n  hasWebsite: websiteData.has_website_data || false,\n  userMessage: webhookData._original_message || webhookData.user_mssg,\n  sessionId: webhookData.session_id,\n  userId: webhookData.user_id,\n  agentName: webhookData.agent_name,\n  requestId: webhookData.request_id\n};\n\nreturn [{\n  json: context\n}];"
+      },
+      "id": "fd46b0ac-f131-415b-8e6e-2fd0943d43a3",
+      "name": "Prepare Full Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"gpt-4\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"{{$json.agentPersona}}\\n\\nClient Information:\\n- Website Analysis: {{$json.websiteData || 'Not available'}}\\n\\nProvide a comprehensive answer to the user's question.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{$json.userMessage}}\"\n    }\n  ],\n  \"temperature\": 0.7\n}",
+        "options": {}
+      },
+      "id": "d8274d3d-3ff3-4901-bc65-db196ab59be3",
+      "name": "Generate Full Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -480,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9qMoQ3WdB2RwdWZG",
+          "name": "Perpelexity Header Auth account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format response for info collection\nconst webhookData = $node[\"Webhook from Backend\"].json;\nconst aiResponse = $json.choices[0].message.content;\n\nreturn [{\n  json: {\n    user_id: webhookData.user_id,\n    session_id: webhookData.session_id,\n    agent_name: webhookData.agent_name,\n    agent_response: aiResponse,\n    status: \"success\",\n    conversation_state: \"collecting_info\",\n    missing_info: webhookData._missing_info || [],\n    timestamp: new Date().toISOString(),\n    request_id: webhookData.request_id\n  }\n}];"
+      },
+      "id": "12fbeb0d-da90-49c5-88f3-85cb648fe10a",
+      "name": "Format Info Collection Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format complete response\nconst context = $node[\"Prepare Full Context\"].json;\nconst aiResponse = $json.choices[0].message.content;\n\nreturn [{\n  json: {\n    user_id: context.userId,\n    session_id: context.sessionId,\n    agent_name: context.agentName,\n    agent_response: aiResponse,\n    status: \"success\",\n    conversation_state: \"complete\",\n    missing_info: [],\n    timestamp: new Date().toISOString(),\n    request_id: context.requestId\n  }\n}];"
+      },
+      "id": "13c2ca5c-80a4-490b-bf63-0c8c1edda995",
+      "name": "Format Full Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      },
+      "id": "2f7af213-e94d-40f3-a682-2a7ce2d9e73f",
+      "name": "Send Info Collection Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      },
+      "id": "26ffe570-e9d8-4c12-ac2d-4d5801e03d21",
+      "name": "Send Full Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-backend.com/api/stream",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"acknowledgment\",\n  \"user_id\": \"{{$json.user_id}}\",\n  \"agent_name\": \"{{$json.agent_name}}\",\n  \"message\": \"Processing your request...\",\n  \"progress\": 10,\n  \"metadata\": {\n    \"session_id\": \"{{$json.session_id}}\",\n    \"request_id\": \"{{$json.request_id}}\"\n  }\n}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "ac0c2c65-3808-4bcd-b2ca-fb0dc31b8e6a",
+      "name": "Send Acknowledgment to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -1360,
+        320
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://your-backend.com/api/stream",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"complete\",\n  \"user_id\": \"{{$json.user_id}}\",\n  \"agent_name\": \"{{$json.agent_name}}\",\n  \"agent_response\": \"{{$json.agent_response}}\",\n  \"message\": \"Response complete\",\n  \"progress\": 100,\n  \"metadata\": {\n    \"session_id\": \"{{$json.session_id}}\",\n    \"request_id\": \"{{$json.request_id}}\",\n    \"conversation_state\": \"{{$json.conversation_state}}\"\n  }\n}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "57f33aa9-b09e-4758-bacd-c0e7004f4e46",
+      "name": "Send Completion to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -360,
+        20
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": \"{{$json._original_message || $json.user_mssg}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1560,
+        120
+      ],
+      "id": "f915eacc-0bc1-4993-ab19-cdde47d53d89",
+      "name": "Create Query Embedding1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "9qMoQ3WdB2RwdWZG",
+          "name": "Perpelexity Header Auth account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/rpc/get_website_data_by_session",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SUPABASE_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"p_session_id\": \"{{$node[\"Webhook from Backend\"].json.session_id}}\"\n}",
+        "options": {}
+      },
+      "id": "38a0ba61-ae94-41ef-a982-f30efd5017c8",
+      "name": "Get Website Data1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        -960,
+        220
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive User Query": {
+      "main": [
+        [
+          {
+            "node": "Create Query Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Query Embedding": {
+      "main": [
+        [
+          {
+            "node": "Check Specified Agent KB First",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Specified Agent KB First": {
+      "main": [
+        [
+          {
+            "node": "Does Agent Have Relevant Info?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Does Agent Have Relevant Info?": {
+      "main": [
+        [
+          {
+            "node": "Get Website Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search All Agent KBs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Website Data": {
+      "main": [
+        [
+          {
+            "node": "Has Website Data?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Website Data?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Context for Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prompt for Website URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Context for Response": {
+      "main": [
+        [
+          {
+            "node": "Generate Agent Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Agent Response": {
+      "main": [
+        [
+          {
+            "node": "Send Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search All Agent KBs": {
+      "main": [
+        [
+          {
+            "node": "Find Best Matching Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Best Matching Agent": {
+      "main": [
+        [
+          {
+            "node": "Redirect to Better Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Website URL Received": {
+      "main": [
+        [
+          {
+            "node": "Analyze Website with Perplexity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Website with Perplexity": {
+      "main": [
+        [
+          {
+            "node": "Extract Industry from Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Industry from Analysis": {
+      "main": [
+        [
+          {
+            "node": "Save Website Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Website Data": {
+      "main": [
+        [
+          {
+            "node": "Recreate Query Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recreate Query Embedding": {
+      "main": [
+        [
+          {
+            "node": "Get Agent Context After Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Agent Context After Website": {
+      "main": [
+        [
+          {
+            "node": "Prepare Final Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Final Context": {
+      "main": [
+        [
+          {
+            "node": "Generate Response After Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Response After Website": {
+      "main": [
+        [
+          {
+            "node": "Send Response After Website Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook from Backend": {
+      "main": [
+        [
+          {
+            "node": "Create Query Embedding1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Acknowledgment to Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Agent Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Is Backend Requesting Info Collection?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Backend Requesting Info Collection?": {
+      "main": [
+        [
+          {
+            "node": "Generate Info Collection Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Website Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Info Collection Response": {
+      "main": [
+        [
+          {
+            "node": "Format Info Collection Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Full Context": {
+      "main": [
+        [
+          {
+            "node": "Generate Full Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Full Response": {
+      "main": [
+        [
+          {
+            "node": "Format Full Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Info Collection Response": {
+      "main": [
+        [
+          {
+            "node": "Send Info Collection Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Completion to Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Full Response": {
+      "main": [
+        [
+          {
+            "node": "Send Full Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Completion to Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Query Embedding1": {
+      "main": [
+        [
+          {
+            "node": "Get Agent Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Website Data1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Full Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9abbaf77-607c-48d2-a1ae-3bc7d995bf69",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "009acbaf56d9d6ab6c0c4e58e15e5428df45ae91e46a81964523fc4b2264aced"
+  },
+  "id": "JcDfAF0xOOBYUhuz",
+  "tags": []
+}
