@@ -26,7 +26,7 @@ openpyxl==3.1.5  # For reading Excel files
 # pandas==2.2.3
 # openpyxl==3.1.5  # For reading Excel files
 redis>=4.5.1
-supabase>=2.5.0
+supabase==2.10.0
 # OpenAI
 openai==1.63.0
 
