@@ -378,6 +378,10 @@ async def call_n8n_webhook(payload: Dict[str, Any]):
             logger.error(f"N8N request error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to connect to n8n: {str(e)}")
 
+@app.get("/")
+async def health_check():
+    return {"status": "healthy", "message": "Squidgy AI WebSocket Server is running"}
+
 # Streaming endpoint to receive updates from n8n
 @app.post("/api/stream")
 async def receive_stream_update(update: StreamUpdate):
