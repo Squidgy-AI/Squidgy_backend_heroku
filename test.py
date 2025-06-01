@@ -1,61 +1,200 @@
 import requests
+from datetime import datetime
 
-def call_webhook(message, userid=None, sessionid=None, workflow="w1", agent="soma", tool="t1"):
+def test_presaleskb_agent():
     """
-    Makes a POST request to the webhook endpoint.
-    
-    Args:
-        message (str): The message to send to the webhook
-        userid (str, optional): The user ID parameter. Defaults to None.
-        sessionid (str, optional): The session ID parameter. Defaults to None.
-        workflow (str, optional): The workflow parameter. Defaults to "w1".
-        agent (str, optional): The agent parameter. Defaults to "soma".
-        tool (str, optional): The tool parameter. Defaults to "t1".
-        
-    Returns:
-        dict: The JSON response from the webhook, or None if the request failed
+    Test the n8n_main_req endpoint with presaleskb agent
     """
-    base_url = "https://n8n.theaiteam.uk/webhook/agentshub"
+    # Backend URL with agent_name and session_id in path
+    base_url = "https://n8n.theaiteam.uk/webhook-test/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
+    #"https://squidgy-back-919bc0659e35.herokuapp.com"
     
-    # Prepare parameters
-    params = {
-        "workflow": workflow,
-        "agent": agent,
-        "message": message,
-        "tool": tool
+    # Test parameters
+    user_id = "test_user_123"
+    session_id = "test_session_456"
+    agent_name = "presaleskb"
+    
+    # Endpoint URL with agent and session in path
+    endpoint = base_url
+    #f"{base_url}/n8n_main_req/{agent_name}/{session_id}"
+    
+    # Test message for presaleskb agent (pricing/sales related)
+    test_message = "I need a quote for automation services for my business"
+    
+    # Request payload
+    payload = {
+        "user_id": user_id,
+        "user_mssg": test_message,
+        "session_id": session_id,
+        "agent_name": agent_name,
+        "timestamp_of_call_made": datetime.now().isoformat()
     }
     
-    # Add optional parameters if provided
-    if userid is not None:
-        params["userid"] = userid
-    
-    if sessionid is not None:
-        params["sessionid"] = sessionid
+    print(f"Testing endpoint: {endpoint}")
+    print(f"Payload: {payload}")
+    print("-" * 50)
     
     try:
         # Make the POST request
-        response = requests.post(base_url, params=params)
+        response = requests.post(endpoint, json=payload)
         
-        # Check if the request was successful
+        # Check response
         if response.status_code == 200:
-            try:
-                return response.json()
-            except requests.exceptions.JSONDecodeError:
-                # Return text if not JSON
-                return {"text": response.text}
+            result = response.json()
+            print("✅ Success!")
+            print(f"Status: {result.get('status')}")
+            print(f"Agent: {result.get('agent_name')}")
+            print(f"Response: {result.get('agent_response')}")
+            print(f"Session ID: {result.get('session_id')}")
+            print(f"Request ID: {result.get('request_id')}")
+            
+            # Check if website info was requested
+            if result.get('missing_info'):
+                print(f"Missing info: {result.get('missing_info')}")
+            
+            return result
         else:
-            print(f"Request failed with status code: {response.status_code}")
+            print(f"❌ Request failed with status code: {response.status_code}")
             print(f"Response: {response.text}")
             return None
             
     except requests.exceptions.RequestException as e:
-        print(f"Request error: {e}")
+        print(f"❌ Request error: {e}")
         return None
 
-# Example usage
+def test_multiple_scenarios():
+    """
+    Test multiple scenarios with presaleskb agent
+    """
+    test_cases = [
+        {
+            "message": "What are your pricing plans?",
+            "description": "Direct pricing inquiry"
+        },
+        {
+            "message": "I need a quote for a website with 50 pages",
+            "description": "Specific quote request"
+        },
+        {
+            "message": "What's the ROI on your automation services?",
+            "description": "ROI/investment question"
+        },
+        {
+            "message": "My website is https://example.com and I need pricing",
+            "description": "Message with website URL"
+        }
+    ]
+    
+    base_url = "https://n8n.theaiteam.uk/webhook-test/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
+    #"https://squidgy-back-919bc0659e35.herokuapp.com"
+    user_id = "test_user_123"
+    session_id = "test_session_789"
+    agent_name = "presaleskb"
+    
+    for i, test_case in enumerate(test_cases):
+        print(f"\n{'='*60}")
+        print(f"Test Case {i+1}: {test_case['description']}")
+        print(f"{'='*60}")
+        
+        endpoint = base_url
+        #f"{base_url}/n8n_main_req/{agent_name}/{session_id}"
+        
+        payload = {
+            "user_id": user_id,
+            "user_mssg": test_case["message"],
+            "session_id": session_id,
+            "agent_name": agent_name,
+            "timestamp_of_call_made": datetime.now().isoformat()
+        }
+        
+        try:
+            response = requests.post(endpoint, json=payload)
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✅ Success!")
+                print(f"Agent Response: {result.get('agent_response')[:100]}...")
+                
+                if result.get('status') == 'needs_info':
+                    print(f"⚠️  Agent needs: {result.get('missing_info')}")
+            else:
+                print(f"❌ Failed: {response.status_code}")
+                
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
 if __name__ == "__main__":
-    result = call_webhook("hello", userid="user123", sessionid="sess456")
-    print(result)
+    # Run single test
+    print("Running single test for presaleskb agent...")
+    result = test_presaleskb_agent()
+    
+    # Uncomment to run multiple test scenarios
+    # print("\n\nRunning multiple test scenarios...")
+    # test_multiple_scenarios()
+
+
+
+
+
+
+# import requests
+
+# def call_webhook(message, userid=None, sessionid=None, workflow="w1", agent="soma", tool="t1"):
+#     """
+#     Makes a POST request to the webhook endpoint.
+    
+#     Args:
+#         message (str): The message to send to the webhook
+#         userid (str, optional): The user ID parameter. Defaults to None.
+#         sessionid (str, optional): The session ID parameter. Defaults to None.
+#         workflow (str, optional): The workflow parameter. Defaults to "w1".
+#         agent (str, optional): The agent parameter. Defaults to "soma".
+#         tool (str, optional): The tool parameter. Defaults to "t1".
+        
+#     Returns:
+#         dict: The JSON response from the webhook, or None if the request failed
+#     """
+#     base_url = "https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
+#     #"https://n8n.theaiteam.uk/webhook/agentshub"
+
+#     params = {
+#         "workflow": workflow,
+#         "agent": agent,
+#         "message": message,
+#         "tool": tool
+#     }
+    
+#     # Add optional parameters if provided
+#     if userid is not None:
+#         params["userid"] = userid
+    
+#     if sessionid is not None:
+#         params["sessionid"] = sessionid
+    
+#     try:
+#         # Make the POST request
+#         response = requests.post(base_url, params=params)
+        
+#         # Check if the request was successful
+#         if response.status_code == 200:
+#             try:
+#                 return response.json()
+#             except requests.exceptions.JSONDecodeError:
+#                 # Return text if not JSON
+#                 return {"text": response.text}
+#         else:
+#             print(f"Request failed with status code: {response.status_code}")
+#             print(f"Response: {response.text}")
+#             return None
+            
+#     except requests.exceptions.RequestException as e:
+#         print(f"Request error: {e}")
+#         return None
+
+# # Example usage
+# if __name__ == "__main__":
+#     result = call_webhook("hello", userid="user123", sessionid="sess456")
+#     print(result)
 
 
 

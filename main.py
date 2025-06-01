@@ -14,7 +14,8 @@ from datetime import datetime
 from enum import Enum
 from supabase import create_client, Client
 import os
-import openai
+# import openai
+from openai import OpenAI
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -30,6 +31,9 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 # Models
 class N8nMainRequest(BaseModel):
@@ -111,16 +115,18 @@ class AgentMatcher:
     def __init__(self, supabase_client, openai_api_key: str = None):
         self.supabase = supabase_client
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        openai.api_key = self.openai_api_key
+        # Use the new OpenAI client
+        self.openai_client = OpenAI(api_key=self.openai_api_key)
         
     async def get_query_embedding(self, text: str) -> List[float]:
         """Generate embedding for the query text using OpenAI"""
         try:
-            response = openai.Embedding.create(
+            # New v1.0+ syntax
+            response = self.openai_client.embeddings.create(
                 model="text-embedding-3-small",
                 input=text
             )
-            return response['data'][0]['embedding']
+            return response.data[0].embedding
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
             raise
@@ -477,7 +483,8 @@ class ClientKBManager:
     def __init__(self, supabase_client, openai_api_key: str = None):
         self.supabase = supabase_client
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        openai.api_key = self.openai_api_key
+        # Use the new OpenAI client
+        self.openai_client = OpenAI(api_key=self.openai_api_key)
     
     async def get_client_kb(self, user_id: str, kb_type: str = "website_info") -> Optional[Dict[str, Any]]:
         """Retrieve client KB entry"""
@@ -516,11 +523,12 @@ class ClientKBManager:
     async def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for text content"""
         try:
-            response = openai.Embedding.create(
+            # New v1.0+ syntax
+            response = self.openai_client.embeddings.create(
                 model="text-embedding-3-small",
                 input=text
             )
-            return response['data'][0]['embedding']
+            return response.data[0].embedding
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
             return []
@@ -590,7 +598,8 @@ class ClientKBManager:
                 for msg in chat_history[-20:]
             ])
             
-            response = openai.ChatCompletion.create(
+            # New v1.0+ syntax
+            response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {
@@ -620,7 +629,8 @@ class DynamicAgentKBHandler:
     def __init__(self, supabase_client, openai_api_key: str = None):
         self.supabase = supabase_client
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        openai.api_key = self.openai_api_key
+        # Use the new OpenAI client
+        self.openai_client = OpenAI(api_key=self.openai_api_key)
         
     async def get_agent_context_from_kb(self, agent_name: str) -> Dict[str, Any]:
         """Extract agent context from agent_documents table"""
@@ -799,24 +809,25 @@ class DynamicAgentKBHandler:
         """Use AI to generate industry-specific jargon and metrics"""
         try:
             prompt = f"""
-Given this business context:
-- Niche: {niche}
-- Tags: {tags}
-- Description: {description}
+            Given this business context:
+            - Niche: {niche}
+            - Tags: {tags}
+            - Description: {description}
 
-Generate industry-specific terminology and metrics that would be relevant.
-Return as JSON with two arrays:
-1. "jargon": 10-15 industry-specific terms
-2. "metrics": 5-8 key performance indicators for this industry
+            Generate industry-specific terminology and metrics that would be relevant.
+            Return as JSON with two arrays:
+            1. "jargon": 10-15 industry-specific terms
+            2. "metrics": 5-8 key performance indicators for this industry
 
-Example format:
-{{
-    "jargon": ["term1", "term2", ...],
-    "metrics": ["metric1", "metric2", ...]
-}}
-"""
+            Example format:
+            {{
+                "jargon": ["term1", "term2", ...],
+                "metrics": ["metric1", "metric2", ...]
+            }}
+            """
             
-            response = openai.ChatCompletion.create(
+            # New v1.0+ syntax
+            response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are an industry expert. Generate relevant terminology."},
@@ -837,34 +848,35 @@ Example format:
         """Analyze query using both agent and client context"""
         
         analysis_prompt = f"""
-You are acting as: {agent_context.get('role', 'AI Assistant')}
+            You are acting as: {agent_context.get('role', 'AI Assistant')}
 
-Agent Capabilities:
-- Available tools: {', '.join([t['name'] for t in agent_context.get('tools', [])])}
-- Must have information: {', '.join(agent_context.get('must_questions', []))}
-- Expertise areas: {', '.join(agent_context.get('expertise', []))}
+            Agent Capabilities:
+            - Available tools: {', '.join([t['name'] for t in agent_context.get('tools', [])])}
+            - Must have information: {', '.join(agent_context.get('must_questions', []))}
+            - Expertise areas: {', '.join(agent_context.get('expertise', []))}
 
-Client Context:
-- Industry/Niche: {client_context.get('industry', 'Unknown')}
-- Company Type: {client_context.get('company_type', 'Unknown')}
-- Current KB Status: {'Complete' if kb_context.get('website_url') else 'Missing website info'}
+            Client Context:
+            - Industry/Niche: {client_context.get('industry', 'Unknown')}
+            - Company Type: {client_context.get('company_type', 'Unknown')}
+            - Current KB Status: {'Complete' if kb_context.get('website_url') else 'Missing website info'}
 
-User Query: "{user_query}"
+            User Query: "{user_query}"
 
-Analyze and determine:
-1. Can this query be answered with current information? (yes/no)
-2. What specific information is missing from MUST questions?
-3. Which tools would be needed to answer this query?
-4. How confident are you in understanding this query? (0-1)
-5. Does this query match the agent's expertise? (yes/no)
+            Analyze and determine:
+            1. Can this query be answered with current information? (yes/no)
+            2. What specific information is missing from MUST questions?
+            3. Which tools would be needed to answer this query?
+            4. How confident are you in understanding this query? (0-1)
+            5. Does this query match the agent's expertise? (yes/no)
 
-Consider the client's industry context and use appropriate terminology.
+            Consider the client's industry context and use appropriate terminology.
 
-Return as JSON with keys: can_answer, missing_info, required_tools, confidence, in_expertise
-"""
+            Return as JSON with keys: can_answer, missing_info, required_tools, confidence, in_expertise
+        """
         
         try:
-            response = openai.ChatCompletion.create(
+            # New v1.0+ syntax
+            response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are an expert analyst. Return valid JSON only."},
@@ -892,37 +904,38 @@ Return as JSON with keys: can_answer, missing_info, required_tools, confidence, 
         """Generate response using full context"""
         
         response_prompt = f"""
-You are: {agent_context.get('role', 'AI Assistant')}
+            You are: {agent_context.get('role', 'AI Assistant')}
 
-Your full context and instructions:
-{agent_context.get('full_content', '')[:1000]}
+            Your full context and instructions:
+            {agent_context.get('full_content', '')[:1000]}
 
-Client Information:
-- Company: {kb_context.get('company_name', 'Not specified')}
-- Industry: {client_context.get('industry', 'Not specified')}
-- Website: {kb_context.get('website_url', 'Not provided')}
-- Services: {', '.join(kb_context.get('services', []) or ['Not specified'])}
+            Client Information:
+            - Company: {kb_context.get('company_name', 'Not specified')}
+            - Industry: {client_context.get('industry', 'Not specified')}
+            - Website: {kb_context.get('website_url', 'Not provided')}
+            - Services: {', '.join(kb_context.get('services', []) or ['Not specified'])}
 
-Industry-specific terminology to use when relevant:
-{', '.join(client_context.get('jargon', [])[:10])}
+            Industry-specific terminology to use when relevant:
+            {', '.join(client_context.get('jargon', [])[:10])}
 
-User Query: "{user_query}"
+            User Query: "{user_query}"
 
-Tools you will use:
-{chr(10).join([f"- {tool['name']}: {tool['description']}" for tool in tools_to_use])}
+            Tools you will use:
+            {chr(10).join([f"- {tool['name']}: {tool['description']}" for tool in tools_to_use])}
 
-Instructions:
-1. Respond according to your role and expertise
-2. Use industry-appropriate language for their {client_context.get('industry')} business
-3. If using tools, explain what each will do
-4. Be specific to their business context
-5. Follow any specific instructions from your agent KB
+            Instructions:
+            1. Respond according to your role and expertise
+            2. Use industry-appropriate language for their {client_context.get('industry')} business
+            3. If using tools, explain what each will do
+            4. Be specific to their business context
+            5. Follow any specific instructions from your agent KB
 
-Generate your response:
-"""
+            Generate your response:
+            """
         
         try:
-            response = openai.ChatCompletion.create(
+            # New v1.0+ syntax
+            response = self.openai_client.chat.completions.create(
                 model="gpt-4",
                 messages=[
                     {"role": "system", "content": "You are an expert assistant. Be professional and helpful."},
@@ -943,26 +956,27 @@ Generate your response:
         """Generate follow-up questions based on context"""
         
         questions_prompt = f"""
-As {agent_context.get('role', 'AI Assistant')}, you need to collect missing information.
+        As {agent_context.get('role', 'AI Assistant')}, you need to collect missing information.
 
-MUST have information for this agent:
-{chr(10).join([f"- {q}" for q in agent_context.get('must_questions', [])])}
+        MUST have information for this agent:
+        {chr(10).join([f"- {q}" for q in agent_context.get('must_questions', [])])}
 
-Currently missing: {', '.join(missing_info)}
-Client's industry: {client_context.get('industry', 'Unknown')}
-User asked: "{user_query}"
+        Currently missing: {', '.join(missing_info)}
+        Client's industry: {client_context.get('industry', 'Unknown')}
+        User asked: "{user_query}"
 
-Generate 2-3 natural follow-up questions that:
-1. Collect the missing MUST information
-2. Are relevant to their {client_context.get('industry')} industry
-3. Explain why you need this information
-4. Use appropriate industry terminology
+        Generate 2-3 natural follow-up questions that:
+        1. Collect the missing MUST information
+        2. Are relevant to their {client_context.get('industry')} industry
+        3. Explain why you need this information
+        4. Use appropriate industry terminology
 
-Return as a JSON array of question strings.
-"""
+        Return as a JSON array of question strings.
+        """
         
         try:
-            response = openai.ChatCompletion.create(
+            # New v1.0+ syntax
+            response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "Generate professional follow-up questions. Return only JSON array."},
@@ -999,7 +1013,8 @@ async def save_message_to_history(session_id: str, sender: str, message: str):
 
 async def call_n8n_webhook(payload: Dict[str, Any]):
     """Call the n8n webhook and return the response"""
-    n8n_url = "https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
+    n8n_url = "https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
+    #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
     
     async with httpx.AsyncClient(timeout=60.0) as client:
         try:

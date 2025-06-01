@@ -143,3 +143,4 @@ static/screenshots/*
 static/favicons/*
 !static/screenshots/.gitkeep
 !static/favicons/.gitkeep
+virtual_back/*
