@@ -1745,10 +1745,14 @@ async def refresh_agent_kb(agent_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Main n8n endpoints
-@app.post("/n8n_main_req")
-async def n8n_main_request(request: N8nMainRequest):
+@app.post("/n8n_main_req/{agent_name}/{session_id}")
+async def n8n_main_request(request: N8nMainRequest, agent_name: str, session_id: str):
     """Handle main request to n8n workflow with conversational logic"""
     try:
+
+        request.agent_name = agent_name
+        request.session_id = session_id
+
         request_id = str(uuid.uuid4())
         
         if not request.timestamp_of_call_made:
