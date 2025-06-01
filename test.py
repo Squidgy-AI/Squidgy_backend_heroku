@@ -19,7 +19,8 @@ def test_presaleskb_agent():
     #f"{base_url}/n8n_main_req/{agent_name}/{session_id}"
     
     # Test message for presaleskb agent (pricing/sales related)
-    test_message = "I need a quote for automation services for my business"
+    test_message = "I need you to analyse my website"
+    #"I need a quote for automation services for my business"
     
     # Request payload
     payload = {

@@ -1160,6 +1160,8 @@ async def n8n_check_agent_match(request: N8nCheckAgentMatchRequest):
             "confidence": round(confidence, 3),
             "threshold_used": request.threshold,
             "recommendation": recommendation,
+            "result": result.data,
+            "query_embedding": query_embedding,
             "status": "success"
         }
         
