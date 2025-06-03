@@ -400,6 +400,8 @@ Respond naturally while collecting this information."""
         except Exception as e:
             logger.error(f"Error processing follow-up info: {str(e)}")
     
+    # In the ConversationalHandler class, update the analyze_website_with_perplexity method:
+
     async def analyze_website_with_perplexity(self, url: str) -> Optional[Dict[str, Any]]:
         """Analyze website using Perplexity API"""
         try:
@@ -409,15 +411,16 @@ Respond naturally while collecting this information."""
             }
             
             prompt = f"""Please analyze the website {url} and provide a summary in exactly this format:
---- *Company name*: [Extract company name]
---- *Website*: {url}
---- *Contact Information*: [Any available contact details]
---- *Description*: [2-3 sentence summary of what the company does]
---- *Tags*: [Main business categories, separated by periods]
---- *Takeaways*: [Key business value propositions]
---- *Niche*: [Specific market focus or specialty]"""
+            --- *Company name*: [Extract company name]
+            --- *Website*: {url}
+            --- *Contact Information*: [Any available contact details]
+            --- *Description*: [2-3 sentence summary of what the company does]
+            --- *Tags*: [Main business categories, separated by periods]
+            --- *Takeaways*: [Key business value propositions]
+            --- *Niche*: [Specific market focus or specialty]"""
             
-            async with httpx.AsyncClient() as client:
+            # No timeout - let Perplexity take as long as needed
+            async with httpx.AsyncClient(timeout=None) as client:
                 response = await client.post(
                     "https://api.perplexity.ai/chat/completions",
                     headers=headers,
@@ -1966,7 +1969,7 @@ async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
         --- *Niche*: [Specific market focus or specialty]
         """
         
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=None) as client:
             response = await client.post(
                 "https://api.perplexity.ai/chat/completions",
                 headers=headers,
@@ -1974,8 +1977,7 @@ async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
                     "model": "sonar-reasoning-pro",
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1000
-                },
-                timeout=30.0
+                }
             )
             
             if response.status_code == 200:
@@ -2143,21 +2145,37 @@ async def full_website_analysis(request: WebsiteAnalysisRequest):
             "timestamp": datetime.now().isoformat()
         }
         
-        # Run all three tools asynchronously
-        analysis_task = analyze_website_endpoint(request)
-        screenshot_task = capture_website_screenshot_endpoint(
-            WebsiteScreenshotRequest(
-                url=request.url,
-                session_id=request.session_id,
-                user_id=request.user_id
-            )
+        # Create tasks with shorter timeouts
+        async def run_with_timeout(coro, timeout_seconds=10):
+            try:
+                return await asyncio.wait_for(coro, timeout=timeout_seconds)
+            except asyncio.TimeoutError:
+                return {"status": "error", "message": f"Operation timed out after {timeout_seconds}s"}
+        
+        # Run tools with individual timeouts
+        analysis_task = run_with_timeout(
+            analyze_website_endpoint(request), 
+            timeout_seconds=25  # Increased for Heroku
         )
-        favicon_task = get_website_favicon_endpoint(
-            WebsiteFaviconRequest(
-                url=request.url,
-                session_id=request.session_id,
-                user_id=request.user_id
-            )
+        screenshot_task = run_with_timeout(
+            capture_website_screenshot_endpoint(
+                WebsiteScreenshotRequest(
+                    url=request.url,
+                    session_id=request.session_id,
+                    user_id=request.user_id
+                )
+            ),
+            timeout_seconds=20  # Increased timeout
+        )
+        favicon_task = run_with_timeout(
+            get_website_favicon_endpoint(
+                WebsiteFaviconRequest(
+                    url=request.url,
+                    session_id=request.session_id,
+                    user_id=request.user_id
+                )
+            ),
+            timeout_seconds=10  # Keep this shorter
         )
         
         # Wait for all tasks to complete

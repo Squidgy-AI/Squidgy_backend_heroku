@@ -19,7 +19,7 @@ def test_presaleskb_agent():
     #f"{base_url}/n8n_main_req/{agent_name}/{session_id}"
     
     # Test message for presaleskb agent (pricing/sales related)
-    test_message = "I need you to analyse my website"
+    test_message = "This is my website https://www.green-property.com/ , How can you help me??"
     #"I need a quote for automation services for my business"
 
     # payload = {
@@ -51,15 +51,17 @@ def test_presaleskb_agent():
         if response.status_code == 200:
             result = response.json()
             print("✅ Success!")
-            print(f"Status: {result.get('status')}")
-            print(f"Agent: {result.get('agent_name')}")
-            print(f"Response: {result.get('agent_response')}")
-            print(f"Session ID: {result.get('session_id')}")
-            print(f"Request ID: {result.get('request_id')}")
+            print("\n\n")
+            print(result)
+            # print(f"Status: {result.get('status')}")
+            # print(f"Agent: {result.get('agent_name')}")
+            # print(f"Response: {result.get('agent_response')}")
+            # print(f"Session ID: {result.get('session_id')}")
+            # print(f"Request ID: {result.get('request_id')}")
             
-            # Check if website info was requested
-            if result.get('missing_info'):
-                print(f"Missing info: {result.get('missing_info')}")
+            # # Check if website info was requested
+            # if result.get('missing_info'):
+            #     print(f"Missing info: {result.get('missing_info')}")
             
             return result
         else:

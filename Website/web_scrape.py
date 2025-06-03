@@ -7,7 +7,7 @@ load_dotenv()
 
 # Initialize Supabase client
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")  # Can use anon key since bucket is public
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def capture_website_screenshot(url: str, session_id: str = None) -> dict:
@@ -44,6 +44,7 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
         driver = webdriver.Chrome(options=chrome_options)
         
         print(f"Navigating to URL: {url}")
+        # No timeout - let it take as long as needed
         driver.get(url)
         print("Waiting for page to load...")
         time.sleep(5)
@@ -71,16 +72,28 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                 
             # Upload to 'static/screenshots' folder in your bucket
             storage_path = f"screenshots/{filename}"
+            
+            # Check if file already exists and remove it
+            try:
+                existing = supabase.storage.from_('static').list(path='screenshots/')
+                if any(f['name'] == filename for f in existing):
+                    supabase.storage.from_('static').remove([storage_path])
+            except:
+                pass
+            
             response = supabase.storage.from_('static').upload(
                 storage_path,
                 file_content,
-                {"content-type": "image/jpeg"}
+                {
+                    "content-type": "image/jpeg",
+                    "upsert": "true"  # Allow overwriting
+                }
             )
             
             # Clean up temp file
             os.unlink(tmp_path)
             
-            if response.status_code == 200:
+            if response.status_code == 200 or (response.status_code == 400 and "already exists" in str(response.json())):
                 # Get public URL
                 public_url = supabase.storage.from_('static').get_public_url(storage_path)
                 
@@ -193,16 +206,28 @@ def get_website_favicon(url: str, session_id: str = None) -> dict:
                         file_content = f.read()
                     
                     storage_path = f"favicons/{filename}"
+                    
+                    # Check if file already exists and remove it
+                    try:
+                        existing = supabase.storage.from_('static').list(path='favicons/')
+                        if any(f['name'] == filename for f in existing):
+                            supabase.storage.from_('static').remove([storage_path])
+                    except:
+                        pass
+                    
                     response = supabase.storage.from_('static').upload(
                         storage_path,
                         file_content,
-                        {"content-type": "image/jpeg"}
+                        {
+                            "content-type": "image/jpeg",
+                            "upsert": "true"  # Allow overwriting
+                        }
                     )
                     
                     # Clean up temp file
                     os.unlink(tmp_path)
                     
-                    if response.status_code == 200:
+                    if response.status_code == 200 or (response.status_code == 400 and "already exists" in str(response.json())):
                         public_url = supabase.storage.from_('static').get_public_url(storage_path)
                         
                         print(f"Favicon uploaded successfully: {public_url}")
