@@ -18,6 +18,8 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from fastapi import BackgroundTasks
+
 from Website.web_scrape import capture_website_screenshot, get_website_favicon
 import requests
 
@@ -36,6 +38,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 print(f"Using Supabase URL: {SUPABASE_URL}")
+
+background_results = {}
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -2048,7 +2052,13 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
     """
     try:
         # Call the screenshot function
-        result = capture_website_screenshot(
+        # result = capture_website_screenshot(
+        #     url=request.url,
+        #     session_id=request.session_id
+        # )
+
+        result = await asyncio.to_thread(
+            capture_website_screenshot,
             url=request.url,
             session_id=request.session_id
         )
@@ -2145,37 +2155,54 @@ async def full_website_analysis(request: WebsiteAnalysisRequest):
             "timestamp": datetime.now().isoformat()
         }
         
-        # Create tasks with shorter timeouts
-        async def run_with_timeout(coro, timeout_seconds=10):
-            try:
-                return await asyncio.wait_for(coro, timeout=timeout_seconds)
-            except asyncio.TimeoutError:
-                return {"status": "error", "message": f"Operation timed out after {timeout_seconds}s"}
+        # # Create tasks with shorter timeouts
+        # async def run_with_timeout(coro, timeout_seconds=10):
+        #     try:
+        #         return await asyncio.wait_for(coro, timeout=timeout_seconds)
+        #     except asyncio.TimeoutError:
+        #         return {"status": "error", "message": f"Operation timed out after {timeout_seconds}s"}
         
-        # Run tools with individual timeouts
-        analysis_task = run_with_timeout(
-            analyze_website_endpoint(request), 
-            timeout_seconds=25  # Increased for Heroku
+        # # Run tools with individual timeouts
+        # analysis_task = run_with_timeout(
+        #     analyze_website_endpoint(request), 
+        #     timeout_seconds=25  # Increased for Heroku
+        # )
+        # screenshot_task = run_with_timeout(
+        #     capture_website_screenshot_endpoint(
+        #         WebsiteScreenshotRequest(
+        #             url=request.url,
+        #             session_id=request.session_id,
+        #             user_id=request.user_id
+        #         )
+        #     ),
+        #     timeout_seconds=20  # Increased timeout
+        # )
+        # favicon_task = run_with_timeout(
+        #     get_website_favicon_endpoint(
+        #         WebsiteFaviconRequest(
+        #             url=request.url,
+        #             session_id=request.session_id,
+        #             user_id=request.user_id
+        #         )
+        #     ),
+        #     timeout_seconds=10  # Keep this shorter
+        # )
+
+        # Create tasks WITHOUT any timeouts
+        analysis_task = analyze_website_endpoint(request)
+        screenshot_task = capture_website_screenshot_endpoint(
+            WebsiteScreenshotRequest(
+                url=request.url,
+                session_id=request.session_id,
+                user_id=request.user_id
+            )
         )
-        screenshot_task = run_with_timeout(
-            capture_website_screenshot_endpoint(
-                WebsiteScreenshotRequest(
-                    url=request.url,
-                    session_id=request.session_id,
-                    user_id=request.user_id
-                )
-            ),
-            timeout_seconds=20  # Increased timeout
-        )
-        favicon_task = run_with_timeout(
-            get_website_favicon_endpoint(
-                WebsiteFaviconRequest(
-                    url=request.url,
-                    session_id=request.session_id,
-                    user_id=request.user_id
-                )
-            ),
-            timeout_seconds=10  # Keep this shorter
+        favicon_task = get_website_favicon_endpoint(
+            WebsiteFaviconRequest(
+                url=request.url,
+                session_id=request.session_id,
+                user_id=request.user_id
+            )
         )
         
         # Wait for all tasks to complete
@@ -2277,6 +2304,54 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         logger.exception(f"WebSocket error: {str(e)}")
         if connection_id in active_connections:
             del active_connections[connection_id]
+
+
+@app.post("/api/website/analyze-background")
+async def analyze_website_background(request: WebsiteAnalysisRequest, background_tasks: BackgroundTasks):
+    """
+    Start website analysis in background and return task ID immediately
+    This avoids any timeout issues
+    """
+    task_id = str(uuid.uuid4())
+    
+    async def run_analysis():
+        try:
+            result = await analyze_website_endpoint(request)
+            background_results[task_id] = {
+                "status": "completed",
+                "result": result,
+                "completed_at": datetime.now().isoformat()
+            }
+        except Exception as e:
+            background_results[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    # Start the background task
+    background_tasks.add_task(run_analysis)
+    
+    background_results[task_id] = {
+        "status": "processing",
+        "started_at": datetime.now().isoformat(),
+        "url": request.url
+    }
+    
+    return {
+        "task_id": task_id,
+        "status": "processing",
+        "message": "Analysis started in background",
+        "check_url": f"/api/website/task/{task_id}"
+    }
+
+@app.get("/api/website/task/{task_id}")
+async def get_background_task_result(task_id: str):
+    """Check the status of a background task"""
+    if task_id not in background_results:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return background_results[task_id]
 
 # CORS middleware
 app.add_middleware(

@@ -39,6 +39,13 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-extensions")
         
+        # Create unique user data directory for each instance
+        import tempfile
+        user_data_dir = tempfile.mkdtemp()
+        chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+        chrome_options.add_argument("--disable-web-security")
+        chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+        
         # Initialize driver with options
         print("Initializing Chrome driver...")
         driver = webdriver.Chrome(options=chrome_options)
@@ -65,6 +72,13 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                 }
             
             driver.quit()
+            
+            # Clean up temp user data directory
+            try:
+                import shutil
+                shutil.rmtree(user_data_dir)
+            except:
+                pass
             
             # Upload to Supabase Storage
             with open(tmp_path, 'rb') as f:
