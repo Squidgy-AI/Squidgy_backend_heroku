@@ -18,6 +18,9 @@ import os
 from openai import OpenAI
 from dotenv import load_dotenv
 
+from Website.web_scrape import capture_website_screenshot, get_website_favicon
+import requests
+
 load_dotenv()
 # Initialize FastAPI app
 app = FastAPI()
@@ -115,6 +118,21 @@ class AgentKBQueryResponse(BaseModel):
     kb_context_used: bool
     status: str
 
+class WebsiteAnalysisRequest(BaseModel):
+    url: str
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+class WebsiteScreenshotRequest(BaseModel):
+    url: str
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+
+class WebsiteFaviconRequest(BaseModel):
+    url: str
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
+
 # Agent Matcher Class using Vector Search
 class AgentMatcher:
     def __init__(self, supabase_client, openai_api_key: str = None):
@@ -168,7 +186,8 @@ class AgentMatcher:
             print(f"Agent match result: {result.data}")
             
             # Return both boolean and data for debugging
-            return (len(result.data) > 0 and result.data[0]['similarity'] >= threshold), result.data
+            return (len(result.data) > 0 and result.data[0]['similarity'] >= threshold)
+            #, result.data
         
         except Exception as e:
             logger.error(f"Error checking agent match: {str(e)}")
@@ -1923,6 +1942,266 @@ async def receive_stream_update(update: StreamUpdate):
     except Exception as e:
         logger.error(f"Error in receive_stream_update: {str(e)}")
         return {"status": "error", "error": str(e)}
+    
+@app.post("/api/website/analyze")
+async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
+    """
+    Endpoint 1: Analyze website using Perplexity AI
+    Returns company information, description, and business insights
+    """
+    try:
+        headers = {
+            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        prompt = f"""
+        Please analyze the website {request.url} and provide a summary in exactly this format:
+        --- *Company name*: [Extract company name]
+        --- *Website*: {request.url}
+        --- *Contact Information*: [Any available contact details]
+        --- *Description*: [2-3 sentence summary of what the company does]
+        --- *Tags*: [Main business categories, separated by periods]
+        --- *Takeaways*: [Key business value propositions]
+        --- *Niche*: [Specific market focus or specialty]
+        """
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.perplexity.ai/chat/completions",
+                headers=headers,
+                json={
+                    "model": "sonar-reasoning-pro",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1000
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                analysis_text = result["choices"][0]["message"]["content"]
+                
+                # Parse the analysis
+                parsed_analysis = {}
+                lines = analysis_text.split('\n')
+                for line in lines:
+                    if '*Company name*:' in line:
+                        parsed_analysis['company_name'] = line.split(':', 1)[1].strip()
+                    elif '*Description*:' in line:
+                        parsed_analysis['description'] = line.split(':', 1)[1].strip()
+                    elif '*Niche*:' in line:
+                        parsed_analysis['niche'] = line.split(':', 1)[1].strip()
+                    elif '*Tags*:' in line:
+                        parsed_analysis['tags'] = line.split(':', 1)[1].strip()
+                    elif '*Takeaways*:' in line:
+                        parsed_analysis['takeaways'] = line.split(':', 1)[1].strip()
+                    elif '*Contact Information*:' in line:
+                        parsed_analysis['contact_info'] = line.split(':', 1)[1].strip()
+                
+                # Save to database if user_id provided
+                if request.user_id and request.session_id:
+                    try:
+                        supabase.table('website_data').upsert({
+                            'user_id': request.user_id,
+                            'session_id': request.session_id,
+                            'url': request.url,
+                            'analysis': json.dumps(parsed_analysis),
+                            'created_at': datetime.now().isoformat()
+                        }).execute()
+                    except Exception as db_error:
+                        logger.error(f"Error saving to database: {db_error}")
+                
+                return {
+                    "status": "success",
+                    "url": request.url,
+                    "analysis": parsed_analysis,
+                    "raw_analysis": analysis_text,
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Perplexity API error: {response.status_code}",
+                    "details": response.text
+                }
+                
+    except httpx.TimeoutException:
+        return {
+            "status": "error",
+            "message": "Request timed out while analyzing website"
+        }
+    except Exception as e:
+        logger.error(f"Error in analyze_website_endpoint: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.post("/api/website/screenshot")
+async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest):
+    """
+    Endpoint 2: Capture full website screenshot
+    Returns screenshot URL from Supabase Storage
+    """
+    try:
+        # Call the screenshot function
+        result = capture_website_screenshot(
+            url=request.url,
+            session_id=request.session_id
+        )
+        
+        # If successful and user_id provided, save metadata to database
+        if result['status'] == 'success' and request.user_id:
+            try:
+                supabase.table('website_screenshots').upsert({
+                    'user_id': request.user_id,
+                    'session_id': request.session_id or str(uuid.uuid4()),
+                    'url': request.url,
+                    'screenshot_path': result['path'],
+                    'public_url': result.get('public_url'),
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+            except Exception as db_error:
+                logger.error(f"Error saving screenshot metadata: {db_error}")
+        
+        return {
+            "status": result['status'],
+            "message": result['message'],
+            "screenshot_url": result.get('public_url'),
+            "storage_path": result.get('path'),
+            "filename": result.get('filename'),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in capture_website_screenshot_endpoint: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "screenshot_url": None
+        }
+
+@app.post("/api/website/favicon")
+async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
+    """
+    Endpoint 3: Extract and save website favicon/logo
+    Returns favicon URL from Supabase Storage
+    """
+    try:
+        # Call the favicon function
+        result = get_website_favicon(
+            url=request.url,
+            session_id=request.session_id
+        )
+        
+        # If successful and user_id provided, save metadata to database
+        if result['status'] == 'success' and request.user_id:
+            try:
+                supabase.table('website_favicons').upsert({
+                    'user_id': request.user_id,
+                    'session_id': request.session_id or str(uuid.uuid4()),
+                    'url': request.url,
+                    'favicon_path': result['path'],
+                    'public_url': result.get('public_url'),
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+            except Exception as db_error:
+                logger.error(f"Error saving favicon metadata: {db_error}")
+        
+        return {
+            "status": result['status'],
+            "message": result.get('message', 'Favicon processed'),
+            "favicon_url": result.get('public_url'),
+            "storage_path": result.get('path'),
+            "filename": result.get('filename'),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in get_website_favicon_endpoint: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "favicon_url": None
+        }
+
+# Combined endpoint that runs all three tools
+@app.post("/api/website/full-analysis")
+async def full_website_analysis(request: WebsiteAnalysisRequest):
+    """
+    Combined endpoint that runs all three website tools:
+    1. Analyzes website content
+    2. Captures screenshot
+    3. Extracts favicon
+    Returns all results in one response
+    """
+    try:
+        results = {
+            "url": request.url,
+            "session_id": request.session_id or str(uuid.uuid4()),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Run all three tools asynchronously
+        analysis_task = analyze_website_endpoint(request)
+        screenshot_task = capture_website_screenshot_endpoint(
+            WebsiteScreenshotRequest(
+                url=request.url,
+                session_id=request.session_id,
+                user_id=request.user_id
+            )
+        )
+        favicon_task = get_website_favicon_endpoint(
+            WebsiteFaviconRequest(
+                url=request.url,
+                session_id=request.session_id,
+                user_id=request.user_id
+            )
+        )
+        
+        # Wait for all tasks to complete
+        analysis_result, screenshot_result, favicon_result = await asyncio.gather(
+            analysis_task,
+            screenshot_task,
+            favicon_task,
+            return_exceptions=True
+        )
+        
+        # Handle results
+        if isinstance(analysis_result, Exception):
+            results["analysis"] = {"status": "error", "message": str(analysis_result)}
+        else:
+            results["analysis"] = analysis_result
+            
+        if isinstance(screenshot_result, Exception):
+            results["screenshot"] = {"status": "error", "message": str(screenshot_result)}
+        else:
+            results["screenshot"] = screenshot_result
+            
+        if isinstance(favicon_result, Exception):
+            results["favicon"] = {"status": "error", "message": str(favicon_result)}
+        else:
+            results["favicon"] = favicon_result
+        
+        # Overall status
+        all_success = (
+            results["analysis"].get("status") == "success" and
+            results["screenshot"].get("status") == "success" and
+            results["favicon"].get("status") == "success"
+        )
+        
+        results["overall_status"] = "success" if all_success else "partial_success"
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in full_website_analysis: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "url": request.url
+        }
 
 # WebSocket endpoint
 @app.websocket("/ws/{user_id}/{session_id}")

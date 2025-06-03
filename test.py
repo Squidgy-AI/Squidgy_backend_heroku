@@ -21,6 +21,14 @@ def test_presaleskb_agent():
     # Test message for presaleskb agent (pricing/sales related)
     test_message = "I need you to analyse my website"
     #"I need a quote for automation services for my business"
+
+    # payload = {
+    #     "user_id": "test_user_123",
+    #     "user_mssg": "I need you to analyse my website",
+    #     "session_id": "test_session_456",
+    #     "agent_name": "presaleskb",
+    #     "timestamp_of_call_made": datetime.now().isoformat()
+    # }
     
     # Request payload
     payload = {
