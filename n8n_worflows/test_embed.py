@@ -9,16 +9,24 @@ async def test_embedding_search():
         "Show me automation options",
         "I want to analyze my website"
     ]
+
+
+    print("--------------------------------------------------------------------------------------------")
+    print("\n\nTesting find_best_agents Best Agent Matching Function:")
     
-    # for query in test_queries:
-    #     print(f"\nTesting: {query}")
+    for idx,query in enumerate(test_queries):
+        print(f"\n\nTest Case {idx}:")
+        print(f"\nTesting: {query}")
         
-    #     # Get best agents
-    #     best_agents = await agent_matcher.find_best_agents(query, top_n=3)
+        # Get best agents
+        best_agents = await agent_matcher.find_best_agents(query, top_n=3)
         
-    #     for agent, score in best_agents:
-    #         print(f"  {agent}: {score:.2f}%")
+        for agent, score in best_agents:
+            print(f"  {agent}: {score:.2f}%")
+        print("--------------------------------------------------------------------------------------------")
     
+    print("--------------------------------------------------------------------------------------------")
+    print("\n\nTesting check_agent_match Function:")
     # Test specific agent match
     print("\n\nTesting specific agent match:")
     is_match = await agent_matcher.check_agent_match("presaleskb", "I need you to analyse my website info")
@@ -227,120 +235,120 @@ if __name__ == "__main__":
 #     verify_embeddings()
 
 
-import os
-from supabase import create_client
-from dotenv import load_dotenv
-from openai import OpenAI
+# import os
+# from supabase import create_client
+# from dotenv import load_dotenv
+# from openai import OpenAI
 
-load_dotenv()
+# load_dotenv()
 
-supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+# openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-async def test_rpc():
-    # Generate a test embedding
-    response = openai_client.embeddings.create(
-        model="text-embedding-3-small",
-        input="I need help with pricing for my website"
-    )
-    test_embedding = response.data[0].embedding
+# async def test_rpc():
+#     # Generate a test embedding
+#     response = openai_client.embeddings.create(
+#         model="text-embedding-3-small",
+#         input="I need help with pricing for my website"
+#     )
+#     test_embedding = response.data[0].embedding
     
-    print(f"Test embedding dimensions: {len(test_embedding)}")
+#     print(f"Test embedding dimensions: {len(test_embedding)}")
     
-    # Test match_agent_documents
-    try:
-        result = supabase.rpc(
-            'match_agent_documents',
-            {
-                'query_embedding': test_embedding,
-                'match_threshold': 0.5,
-                'match_count': 5,
-                'filter_agent': 'presaleskb'
-            }
-        ).execute()
+#     # Test match_agent_documents
+#     try:
+#         result = supabase.rpc(
+#             'match_agent_documents',
+#             {
+#                 'query_embedding': test_embedding,
+#                 'match_threshold': 0.5,
+#                 'match_count': 5,
+#                 'filter_agent': 'presaleskb'
+#             }
+#         ).execute()
         
-        print(f"\nmatch_agent_documents result:")
-        print(f"Found {len(result.data)} matches")
-        for item in result.data:
-            print(f"  - {item['agent_name']}: {item['similarity']:.3f}")
-    except Exception as e:
-        print(f"Error testing match_agent_documents: {e}")
+#         print(f"\nmatch_agent_documents result:")
+#         print(f"Found {len(result.data)} matches")
+#         for item in result.data:
+#             print(f"  - {item['agent_name']}: {item['similarity']:.3f}")
+#     except Exception as e:
+#         print(f"Error testing match_agent_documents: {e}")
     
-    # Test match_agents_by_similarity
-    try:
-        result = supabase.rpc(
-            'match_agents_by_similarity',
-            {
-                'query_embedding': test_embedding,
-                'match_threshold': 0.3,
-                'match_count': 10
-            }
-        ).execute()
+#     # Test match_agents_by_similarity
+#     try:
+#         result = supabase.rpc(
+#             'match_agents_by_similarity',
+#             {
+#                 'query_embedding': test_embedding,
+#                 'match_threshold': 0.3,
+#                 'match_count': 10
+#             }
+#         ).execute()
         
-        print(f"\nmatch_agents_by_similarity result:")
-        print(f"Found {len(result.data)} matches")
+#         print(f"\nmatch_agents_by_similarity result:")
+#         print(f"Found {len(result.data)} matches")
         
-        # Group by agent
-        agents = {}
-        for item in result.data:
-            agent = item['agent_name']
-            if agent not in agents or item['similarity'] > agents[agent]:
-                agents[agent] = item['similarity']
+#         # Group by agent
+#         agents = {}
+#         for item in result.data:
+#             agent = item['agent_name']
+#             if agent not in agents or item['similarity'] > agents[agent]:
+#                 agents[agent] = item['similarity']
         
-        for agent, score in sorted(agents.items(), key=lambda x: x[1], reverse=True):
-            print(f"  - {agent}: {score:.3f}")
+#         for agent, score in sorted(agents.items(), key=lambda x: x[1], reverse=True):
+#             print(f"  - {agent}: {score:.3f}")
             
-    except Exception as e:
-        print(f"Error testing match_agents_by_similarity: {e}")
+#     except Exception as e:
+#         print(f"Error testing match_agents_by_similarity: {e}")
 
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(test_rpc())
-
-
+# if __name__ == "__main__":
+#     import asyncio
+#     asyncio.run(test_rpc())
 
 
 
 
-# test_new_embeddings.py
-import asyncio
-from main_test import agent_matcher  # Adjust import path as needed
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
 
-async def test_embedding_search():
-    # Test queries
-    test_queries = [
-        "I need help with pricing",
-        "Show me automation options",
-        "I want to analyze my website",
-        "I need a quote for my business"
-    ]
+# # test_new_embeddings.py
+# import asyncio
+# from main_test import agent_matcher  # Adjust import path as needed
+# import os
+# from dotenv import load_dotenv
+
+# load_dotenv()
+
+# async def test_embedding_search():
+#     # Test queries
+#     test_queries = [
+#         "I need help with pricing",
+#         "Show me automation options",
+#         "I want to analyze my website",
+#         "I need a quote for my business"
+#     ]
     
-    print("=== Testing Best Agent Matching ===")
-    for query in test_queries:
-        print(f"\nQuery: '{query}'")
+#     print("=== Testing Best Agent Matching ===")
+#     for query in test_queries:
+#         print(f"\nQuery: '{query}'")
         
-        # Get best agents
-        best_agents = await agent_matcher.find_best_agents(query, top_n=3)
+#         # Get best agents
+#         best_agents = await agent_matcher.find_best_agents(query, top_n=3)
         
-        for agent, score in best_agents:
-            print(f"  {agent}: {score:.2f}%")
+#         for agent, score in best_agents:
+#             print(f"  {agent}: {score:.2f}%")
     
-    # Test specific agent match
-    print("\n\n=== Testing Specific Agent Match ===")
-    test_cases = [
-        ("presaleskb", "I need analysis for my website"),
-        ("presaleskb", "Tell me about your services"),
-        ("leadgenkb", "I want to schedule a demo"),
-        ("socialmediakb", "Help with Facebook ads")
-    ]
+#     # Test specific agent match
+#     print("\n\n=== Testing Specific Agent Match ===")
+#     test_cases = [
+#         ("presaleskb", "I need analysis for my website"),
+#         ("presaleskb", "Tell me about your services"),
+#         ("leadgenkb", "I want to schedule a demo"),
+#         ("socialmediakb", "Help with Facebook ads")
+#     ]
     
-    for agent, query in test_cases:
-        is_match = await agent_matcher.check_agent_match(agent, query)
-        print(f"{agent} matches '{query}': {is_match}")
+#     for agent, query in test_cases:
+#         is_match = await agent_matcher.check_agent_match(agent, query)
+#         print(f"{agent} matches '{query}': {is_match}")
 
-if __name__ == "__main__":
-    asyncio.run(test_embedding_search())
+# if __name__ == "__main__":
+#     asyncio.run(test_embedding_search())

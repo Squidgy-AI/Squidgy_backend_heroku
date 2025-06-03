@@ -16,7 +16,9 @@ from supabase import create_client, Client
 import os
 # import openai
 from openai import OpenAI
+from dotenv import load_dotenv
 
+load_dotenv()
 # Initialize FastAPI app
 app = FastAPI()
 logger = logging.getLogger(__name__)
@@ -28,6 +30,9 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
+print(f"Using Supabase URL: {SUPABASE_URL}")
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -70,12 +75,12 @@ class ConversationState(Enum):
 class N8nCheckAgentMatchRequest(BaseModel):
     agent_name: str
     user_query: str
-    threshold: Optional[float] = 0.7
+    threshold: Optional[float] = 0.3
 
 class N8nFindBestAgentsRequest(BaseModel):
     user_query: str
     top_n: Optional[int] = 3
-    min_threshold: Optional[float] = 0.5
+    min_threshold: Optional[float] = 0.3
 
 class ClientKBCheckRequest(BaseModel):
     user_id: str
@@ -131,48 +136,75 @@ class AgentMatcher:
             logger.error(f"Error generating embedding: {str(e)}")
             raise
     
-    async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.7) -> bool:
+    async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.3) -> tuple:
         """Check if a specific agent matches the user query using vector similarity"""
         try:
             query_embedding = await self.get_query_embedding(user_query)
             
+            # Debug: Check embedding dimensions
+            # print(f"Query embedding dimensions: {len(query_embedding)}")
+            # print(f"First 5 values of query embedding: {query_embedding[:5]}")
+            
+            # result = self.supabase.rpc(
+            #     'match_agent_documents',
+            #     {
+            #         'query_embedding': query_embedding,
+            #         'match_threshold': threshold,
+            #         'match_count': 1,
+            #         'filter_agent': agent_name
+            #     }
+            # ).execute()
+
             result = self.supabase.rpc(
                 'match_agent_documents',
                 {
-                    'query_embedding': query_embedding,
+                    'query_embedding': query_embedding,  # Pass as list, not string
                     'match_threshold': threshold,
                     'match_count': 1,
                     'filter_agent': agent_name
                 }
             ).execute()
+
+            print(f"Agent match result: {result.data}")
             
-            return len(result.data) > 0 and result.data[0]['similarity'] >= threshold
-            
+            # Return both boolean and data for debugging
+            return (len(result.data) > 0 and result.data[0]['similarity'] >= threshold), result.data
+        
         except Exception as e:
             logger.error(f"Error checking agent match: {str(e)}")
+            # Fallback check
             agent_check = self.supabase.table('agent_documents')\
                 .select('id')\
                 .eq('agent_name', agent_name)\
                 .limit(1)\
                 .execute()
-            return len(agent_check.data) > 0
+            return len(agent_check.data) > 0, []
     
     async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[Tuple[str, float]]:
         """Find the best matching agents for a user query using vector similarity"""
         try:
             query_embedding = await self.get_query_embedding(user_query)
             
+            # result = self.supabase.rpc(
+            #     'match_agents_by_similarity',
+            #     {
+            #         'query_embedding': query_embedding,
+            #         'match_threshold': 0.5,
+            #         'match_count': top_n * 5
+            #     }
+            # ).execute()
+
             result = self.supabase.rpc(
                 'match_agents_by_similarity',
                 {
-                    'query_embedding': query_embedding,
-                    'match_threshold': 0.5,
+                    'query_embedding': query_embedding,  # Pass as list, not string
+                    'match_threshold': 0.3,
                     'match_count': top_n * 5
                 }
             ).execute()
             
             if not result.data:
-                return [('re-engage', 50.0)]
+                return [('No Result', 100.0)]
             
             agent_scores = {}
             for item in result.data:
@@ -1089,39 +1121,39 @@ async def health_check_detailed():
     }
 
 # Agent matching endpoints
-@app.post("/api/agents/check-match")
-async def check_agent_match_endpoint(agent_name: str, user_query: str):
-    """API endpoint to check if an agent matches a query using vector similarity"""
-    try:
-        is_match = await agent_matcher.check_agent_match(agent_name, user_query)
-        return {
-            "agent_name": agent_name,
-            "user_query": user_query,
-            "is_match": is_match
-        }
-    except Exception as e:
-        logger.error(f"Error checking agent match: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/api/agents/check-match")
+# async def check_agent_match_endpoint(agent_name: str, user_query: str):
+#     """API endpoint to check if an agent matches a query using vector similarity"""
+#     try:
+#         is_match = await agent_matcher.check_agent_match(agent_name, user_query)
+#         return {
+#             "agent_name": agent_name,
+#             "user_query": user_query,
+#             "is_match": is_match
+#         }
+#     except Exception as e:
+#         logger.error(f"Error checking agent match: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/agents/find-best")
-async def find_best_agents_endpoint(user_query: str, top_n: int = 3):
-    """API endpoint to find best matching agents using vector similarity"""
-    try:
-        best_agents = await agent_matcher.find_best_agents(user_query, top_n)
-        return {
-            "user_query": user_query,
-            "recommendations": [
-                {
-                    "agent_name": agent_name,
-                    "match_percentage": round(score, 2),
-                    "rank": idx + 1
-                }
-                for idx, (agent_name, score) in enumerate(best_agents)
-            ]
-        }
-    except Exception as e:
-        logger.error(f"Error finding best agents: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/api/agents/find-best")
+# async def find_best_agents_endpoint(user_query: str, top_n: int = 3):
+#     """API endpoint to find best matching agents using vector similarity"""
+#     try:
+#         best_agents = await agent_matcher.find_best_agents(user_query, top_n)
+#         return {
+#             "user_query": user_query,
+#             "recommendations": [
+#                 {
+#                     "agent_name": agent_name,
+#                     "match_percentage": round(score, 2),
+#                     "rank": idx + 1
+#                 }
+#                 for idx, (agent_name, score) in enumerate(best_agents)
+#             ]
+#         }
+#     except Exception as e:
+#         logger.error(f"Error finding best agents: {str(e)}")
+#         raise HTTPException(status_code=500, detail=str(e))
 
 # N8N agent matching endpoints
 @app.post("/n8n/check_agent_match")
@@ -1226,8 +1258,8 @@ async def n8n_find_best_agents(request: N8nFindBestAgentsRequest):
             response["best_agent"] = recommendations[0]["agent_name"]
             response["best_agent_confidence"] = recommendations[0]["match_percentage"]
         else:
-            response["best_agent"] = "re-engage"
-            response["best_agent_confidence"] = 50.0
+            response["best_agent"] = "Squidgy_default"
+            response["best_agent_confidence"] = 100.0
             response["message"] = "No agents found above threshold, using default agent"
         
         return response
@@ -1236,8 +1268,8 @@ async def n8n_find_best_agents(request: N8nFindBestAgentsRequest):
         logger.error(f"Error in n8n_find_best_agents: {str(e)}")
         return {
             "user_query": request.user_query,
-            "best_agent": "re-engage",
-            "best_agent_confidence": 50.0,
+            "best_agent": "",
+            "best_agent_confidence": 100.0,
             "recommendations": [],
             "error": str(e),
             "status": "error",
