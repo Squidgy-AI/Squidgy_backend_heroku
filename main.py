@@ -168,7 +168,8 @@ class AgentMatcher:
             print(f"Agent match result: {result.data}")
             
             # Return both boolean and data for debugging
-            return (len(result.data) > 0 and result.data[0]['similarity'] >= threshold), result.data
+            return (len(result.data) > 0 and result.data[0]['similarity'] >= threshold)
+            #, result.data
         
         except Exception as e:
             logger.error(f"Error checking agent match: {str(e)}")
