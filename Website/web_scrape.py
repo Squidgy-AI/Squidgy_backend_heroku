@@ -129,52 +129,52 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                 
                 # TODO: Uncomment when ready to use Supabase
                 # # Remove existing file if present
-                # try:
-                #     supabase.storage.from_('static').remove([storage_path])
-                # except:
-                #     pass
+                try:
+                    supabase.storage.from_('static').remove([storage_path])
+                except:
+                    pass
                 
-                # response = supabase.storage.from_('static').upload(
-                #     storage_path,
-                #     file_content,
-                #     {
-                #         "content-type": "image/jpeg",
-                #         "upsert": "true"
-                #     }
-                # )
+                response = supabase.storage.from_('static').upload(
+                    storage_path,
+                    file_content,
+                    {
+                        "content-type": "image/jpeg",
+                        "upsert": "true"
+                    }
+                )
                 
-                # # Handle the response
-                # if hasattr(response, 'error') and response.error:
-                #     if "already exists" in str(response.error):
-                #         public_url = supabase.storage.from_('static').get_public_url(storage_path)
-                #         return {
-                #             "status": "success",
-                #             "message": "Screenshot captured successfully",
-                #             "path": storage_path,
-                #             "public_url": public_url,
-                #             "filename": filename
-                #         }
-                #     else:
-                #         raise Exception(f"Failed to upload: {response.error}")
-                # else:
-                #     public_url = supabase.storage.from_('static').get_public_url(storage_path)
-                #     return {
-                #         "status": "success",
-                #         "message": "Screenshot captured successfully",
-                #         "path": storage_path,
-                #         "public_url": public_url,
-                #         "filename": filename
-                #     }
+                # Handle the response
+                if hasattr(response, 'error') and response.error:
+                    if "already exists" in str(response.error):
+                        public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                        return {
+                            "status": "success",
+                            "message": "Screenshot captured successfully",
+                            "path": storage_path,
+                            "public_url": public_url,
+                            "filename": filename
+                        }
+                    else:
+                        raise Exception(f"Failed to upload: {response.error}")
+                else:
+                    public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                    return {
+                        "status": "success",
+                        "message": "Screenshot captured successfully",
+                        "path": storage_path,
+                        "public_url": public_url,
+                        "filename": filename
+                    }
                 
                 # Temporary return for testing without Supabase
-                return {
-                    "status": "success",
-                    "message": "Screenshot captured successfully",
-                    "path": storage_path,
-                    "public_url": f"/temp/{filename}",  # Mock URL for testing
-                    "filename": filename,
-                    "file_size": len(file_content)
-                }
+                # return {
+                #     "status": "success",
+                #     "message": "Screenshot captured successfully",
+                #     "path": storage_path,
+                #     "public_url": f"/temp/{filename}",  # Mock URL for testing
+                #     "filename": filename,
+                #     "file_size": len(file_content)
+                # }
                     
         finally:
             # Cleanup
