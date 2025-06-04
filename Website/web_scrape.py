@@ -6,6 +6,7 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 import time
 import traceback
 import tempfile
@@ -32,165 +33,174 @@ chrome_lock = threading.Lock()
 def capture_website_screenshot(url: str, session_id: str = None) -> dict:
     """
     Captures a screenshot of the entire website using headless browser.
-    Uploads to Supabase Storage instead of local filesystem.
+    Optimized for Heroku environment.
     """
-    # Acquire lock to prevent concurrent Chrome instances
-    with chrome_lock:
-        unique_temp_dir = None
+    driver = None
+    tmp_path = None
+    
+    try:
+        # Use session_id in filename if provided
+        if session_id:
+            filename = f"{session_id}_screenshot.jpg"
+        else:
+            filename = f"screenshot_{int(time.time())}.jpg"
+        
+        print(f"Attempting to capture screenshot for URL: {url}")
+        
+        # Set up Chrome options for headless mode
+        chrome_options = Options()
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # Set page load strategy to eager
+        chrome_options.page_load_strategy = 'eager'
+        
+        # IMPORTANT: Remove user-data-dir related arguments for Heroku
+        # Don't use these in Heroku:
+        # chrome_options.add_argument(f"--user-data-dir={unique_temp_dir}")
+        # chrome_options.add_argument(f"--data-path={unique_temp_dir}")
+        # chrome_options.add_argument(f"--disk-cache-dir={unique_temp_dir}/cache")
+        
+        # Additional options for Heroku environment
+        chrome_options.add_argument("--disable-setuid-sandbox")
+        chrome_options.add_argument("--remote-debugging-port=9222")
+        chrome_options.add_argument("--disable-dev-tools")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        
+        # Memory optimization for container environments
+        chrome_options.add_argument("--memory-pressure-off")
+        chrome_options.add_argument("--disable-background-timer-throttling")
+        chrome_options.add_argument("--disable-renderer-backgrounding")
+        chrome_options.add_argument("--disable-features=TranslateUI")
+        chrome_options.add_argument("--disable-ipc-flooding-protection")
+        
+        # Heroku specific: Set Chrome binary location if available
+        chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
+        if chrome_bin:
+            chrome_options.binary_location = chrome_bin
+        
+        # Heroku specific: Set ChromeDriver path if available
+        chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
+        
         try:
-            # Use session_id in filename if provided
-            if session_id:
-                filename = f"{session_id}_screenshot.jpg"
+            # Initialize driver
+            print("Initializing Chrome driver...")
+            if chromedriver_path:
+                service = Service(executable_path=chromedriver_path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
             else:
-                filename = f"screenshot_{int(time.time())}.jpg"
-            
-            print(f"Attempting to capture screenshot for URL: {url}")
-            
-            # Set up Chrome options for headless mode
-            chrome_options = Options()
-            chrome_options.add_argument("--headless=new")
-            chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--disable-extensions")
-            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
-            
-            # Set page load strategy to eager (don't wait for all resources)
-            chrome_options.page_load_strategy = 'eager'
-            
-            # CRITICAL: Don't use user data directory at all
-            chrome_options.add_argument("--disable-web-security")
-            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-            chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
-            
-            # Additional options for Heroku environment
-            chrome_options.add_argument("--disable-setuid-sandbox")
-            chrome_options.add_argument("--remote-debugging-port=9222")
-            chrome_options.add_argument("--disable-dev-tools")
-            chrome_options.add_argument("--disable-software-rasterizer")
-            
-            # Single-process mode for container environments
-            chrome_options.add_argument("--single-process")
-            chrome_options.add_argument("--disable-background-timer-throttling")
-            chrome_options.add_argument("--disable-renderer-backgrounding")
-            
-            # IMPORTANT: Create unique temp directory for THIS instance only
-            unique_temp_dir = tempfile.mkdtemp(prefix=f"chrome_tmp_{uuid.uuid4().hex[:8]}_")
-            chrome_options.add_argument(f"--user-data-dir={unique_temp_dir}")
-            chrome_options.add_argument(f"--data-path={unique_temp_dir}")
-            chrome_options.add_argument(f"--disk-cache-dir={unique_temp_dir}/cache")
-            
-            driver = None
-            tmp_path = None
-            
-            try:
-                # Initialize driver
-                print("Initializing Chrome driver...")
                 driver = webdriver.Chrome(options=chrome_options)
-                
-                # Set timeouts
-                driver.set_page_load_timeout(20)
-                driver.implicitly_wait(5)
-                
-                print(f"Navigating to URL: {url}")
-                try:
-                    driver.get(url)
-                except Exception as e:
-                    print(f"Page load timeout/error, continuing anyway: {e}")
-                
-                # Short wait for page to stabilize
-                time.sleep(3)
-                
-                # Take screenshot
-                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-                    tmp_path = tmp_file.name
-                    print("Taking screenshot...")
-                    
-                    screenshot_success = driver.save_screenshot(tmp_path)
-                    
-                    if not screenshot_success:
-                        raise Exception("Failed to save screenshot")
-                    
-                    # Upload to Supabase
-                    with open(tmp_path, 'rb') as f:
-                        file_content = f.read()
-                    
-                    storage_path = f"screenshots/{filename}"
-                    
-                    # Remove existing file if present
-                    try:
-                        supabase.storage.from_('static').remove([storage_path])
-                    except:
-                        pass
-                    
-                    response = supabase.storage.from_('static').upload(
-                        storage_path,
-                        file_content,
-                        {
-                            "content-type": "image/jpeg",
-                            "upsert": "true"
-                        }
-                    )
-                    
-                    # Handle the response properly - it's not a requests Response object
-                    if hasattr(response, 'error') and response.error:
-                        # Check if it's just a duplicate file error
-                        if "already exists" in str(response.error):
-                            public_url = supabase.storage.from_('static').get_public_url(storage_path)
-                            return {
-                                "status": "success",
-                                "message": "Screenshot captured successfully",
-                                "path": storage_path,
-                                "public_url": public_url,
-                                "filename": filename
-                            }
-                        else:
-                            raise Exception(f"Failed to upload: {response.error}")
-                    else:
-                        # Success case
-                        public_url = supabase.storage.from_('static').get_public_url(storage_path)
-                        return {
-                            "status": "success",
-                            "message": "Screenshot captured successfully",
-                            "path": storage_path,
-                            "public_url": public_url,
-                            "filename": filename
-                        }
-                        
-            finally:
-                # Cleanup
-                if driver:
-                    try:
-                        driver.quit()
-                    except:
-                        pass
-                if tmp_path and os.path.exists(tmp_path):
-                    try:
-                        os.unlink(tmp_path)
-                    except:
-                        pass
-                # Clean up the unique temp directory
-                if unique_temp_dir and os.path.exists(unique_temp_dir):
-                    try:
-                        import shutil
-                        shutil.rmtree(unique_temp_dir)
-                    except:
-                        pass
-                    
-        except Exception as e:
-            error_traceback = traceback.format_exc()
-            print(f"Error capturing screenshot: {e}")
-            print(f"Traceback: {error_traceback}")
             
-            return {
-                "status": "error",
-                "message": str(e),
-                "error_details": error_traceback,
-                "path": None
-            }
+            # Set timeouts
+            driver.set_page_load_timeout(30)
+            driver.implicitly_wait(10)
+            
+            print(f"Navigating to URL: {url}")
+            try:
+                driver.get(url)
+            except Exception as e:
+                print(f"Page load timeout/error, continuing anyway: {e}")
+            
+            # Wait for page to stabilize
+            time.sleep(3)
+            
+            # Take screenshot
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+                print("Taking screenshot...")
+                
+                screenshot_success = driver.save_screenshot(tmp_path)
+                
+                if not screenshot_success:
+                    raise Exception("Failed to save screenshot")
+                
+                # Read the screenshot file
+                with open(tmp_path, 'rb') as f:
+                    file_content = f.read()
+                
+                storage_path = f"screenshots/{filename}"
+                
+                # TODO: Uncomment when ready to use Supabase
+                # # Remove existing file if present
+                # try:
+                #     supabase.storage.from_('static').remove([storage_path])
+                # except:
+                #     pass
+                
+                # response = supabase.storage.from_('static').upload(
+                #     storage_path,
+                #     file_content,
+                #     {
+                #         "content-type": "image/jpeg",
+                #         "upsert": "true"
+                #     }
+                # )
+                
+                # # Handle the response
+                # if hasattr(response, 'error') and response.error:
+                #     if "already exists" in str(response.error):
+                #         public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                #         return {
+                #             "status": "success",
+                #             "message": "Screenshot captured successfully",
+                #             "path": storage_path,
+                #             "public_url": public_url,
+                #             "filename": filename
+                #         }
+                #     else:
+                #         raise Exception(f"Failed to upload: {response.error}")
+                # else:
+                #     public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                #     return {
+                #         "status": "success",
+                #         "message": "Screenshot captured successfully",
+                #         "path": storage_path,
+                #         "public_url": public_url,
+                #         "filename": filename
+                #     }
+                
+                # Temporary return for testing without Supabase
+                return {
+                    "status": "success",
+                    "message": "Screenshot captured successfully",
+                    "path": storage_path,
+                    "public_url": f"/temp/{filename}",  # Mock URL for testing
+                    "filename": filename,
+                    "file_size": len(file_content)
+                }
+                    
+        finally:
+            # Cleanup
+            if driver:
+                try:
+                    driver.quit()
+                except Exception as e:
+                    print(f"Error closing driver: {e}")
+            
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception as e:
+                    print(f"Error removing temp file: {e}")
+                    
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        print(f"Error capturing screenshot: {e}")
+        print(f"Traceback: {error_traceback}")
+        
+        return {
+            "status": "error",
+            "message": str(e),
+            "error_details": error_traceback,
+            "path": None
+        }
 
 async def capture_website_screenshot_async(url: str, session_id: str = None) -> dict:
     """Async wrapper for capturing website screenshot"""
