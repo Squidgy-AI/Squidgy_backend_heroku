@@ -431,7 +431,7 @@ Respond naturally while collecting this information."""
             --- *Niche*: [Specific market focus or specialty]"""
             
             # No timeout - let Perplexity take as long as needed
-            async with httpx.AsyncClient(timeout=None) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
                 response = await client.post(
                     "https://api.perplexity.ai/chat/completions",
                     headers=headers,
@@ -2218,10 +2218,93 @@ async def full_website_analysis_async(request: WebsiteAnalysisRequest):
 @app.post("/api/website/full-analysis")
 async def full_website_analysis(request: WebsiteAnalysisRequest):
     """
-    Use the async version to avoid timeouts
+    Optimized for Heroku's 30-second limit
+    Total execution time: max 25 seconds to leave buffer
     """
-    # Just redirect to the async version
-    return await full_website_analysis_async(request)
+    try:
+        results = {
+            "url": request.url,
+            "session_id": request.session_id or str(uuid.uuid4()),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Start all tasks
+        analysis_task = asyncio.create_task(analyze_website_endpoint(request))
+        screenshot_task = asyncio.create_task(capture_website_screenshot_endpoint(
+            WebsiteScreenshotRequest(
+                url=request.url,
+                session_id=request.session_id,
+                user_id=request.user_id
+            )
+        ))
+        favicon_task = asyncio.create_task(get_website_favicon_endpoint(
+            WebsiteFaviconRequest(
+                url=request.url,
+                session_id=request.session_id,
+                user_id=request.user_id
+            )
+        ))
+        
+        # Wait for all tasks with a total timeout of 25 seconds
+        # This leaves 5 seconds buffer for response processing
+        try:
+            # Use gather with timeout for all tasks
+            all_results = await asyncio.wait_for(
+                asyncio.gather(
+                    analysis_task,
+                    screenshot_task,
+                    favicon_task,
+                    return_exceptions=True
+                ),
+                timeout=25.0  # Total timeout
+            )
+            
+            # Process results
+            results["analysis"] = all_results[0] if not isinstance(all_results[0], Exception) else {
+                "status": "error",
+                "message": str(all_results[0])
+            }
+            results["screenshot"] = all_results[1] if not isinstance(all_results[1], Exception) else {
+                "status": "error", 
+                "message": str(all_results[1])
+            }
+            results["favicon"] = all_results[2] if not isinstance(all_results[2], Exception) else {
+                "status": "error",
+                "message": str(all_results[2])
+            }
+            
+        except asyncio.TimeoutError:
+            # Timeout hit - get whatever is ready
+            results["analysis"] = await analysis_task if analysis_task.done() else {
+                "status": "timeout",
+                "message": "Analysis timed out"
+            }
+            results["screenshot"] = await screenshot_task if screenshot_task.done() else {
+                "status": "timeout",
+                "message": "Screenshot timed out"
+            }
+            results["favicon"] = await favicon_task if favicon_task.done() else {
+                "status": "timeout",
+                "message": "Favicon timed out"
+            }
+        
+        # Determine overall status
+        all_success = all(
+            results.get(key, {}).get("status") == "success" 
+            for key in ["analysis", "screenshot", "favicon"]
+        )
+        
+        results["overall_status"] = "success" if all_success else "partial_success"
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"Error in full_website_analysis: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "url": request.url
+        }
 
 # WebSocket endpoint
 @app.websocket("/ws/{user_id}/{session_id}")
