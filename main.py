@@ -20,7 +20,12 @@ from dotenv import load_dotenv
 
 from fastapi import BackgroundTasks
 
-from Website.web_scrape import capture_website_screenshot, get_website_favicon
+import aiohttp
+from concurrent.futures import ThreadPoolExecutor
+
+# Add this near the top with other imports
+from Website.web_scrape import capture_website_screenshot_async, get_website_favicon_async
+
 import requests
 
 load_dotenv()
@@ -40,6 +45,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 print(f"Using Supabase URL: {SUPABASE_URL}")
 
 background_results = {}
+running_tasks: Dict[str, Dict[str, Any]] = {}
+
 
 # Initialize Supabase client
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -1953,8 +1960,7 @@ async def receive_stream_update(update: StreamUpdate):
 @app.post("/api/website/analyze")
 async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
     """
-    Endpoint 1: Analyze website using Perplexity AI
-    Returns company information, description, and business insights
+    Endpoint 1: Analyze website using Perplexity AI - NO TIMEOUTS
     """
     try:
         headers = {
@@ -1973,6 +1979,7 @@ async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
         --- *Niche*: [Specific market focus or specialty]
         """
         
+        # NO TIMEOUT - let it take as long as needed
         async with httpx.AsyncClient(timeout=None) as client:
             response = await client.post(
                 "https://api.perplexity.ai/chat/completions",
@@ -2032,11 +2039,6 @@ async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
                     "details": response.text
                 }
                 
-    except httpx.TimeoutException:
-        return {
-            "status": "error",
-            "message": "Request timed out while analyzing website"
-        }
     except Exception as e:
         logger.error(f"Error in analyze_website_endpoint: {str(e)}")
         return {
@@ -2051,14 +2053,8 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
     Returns screenshot URL from Supabase Storage
     """
     try:
-        # Call the screenshot function
-        # result = capture_website_screenshot(
-        #     url=request.url,
-        #     session_id=request.session_id
-        # )
-
-        result = await asyncio.to_thread(
-            capture_website_screenshot,
+        # Use the async version
+        result = await capture_website_screenshot_async(
             url=request.url,
             session_id=request.session_id
         )
@@ -2101,8 +2097,8 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
     Returns favicon URL from Supabase Storage
     """
     try:
-        # Call the favicon function
-        result = get_website_favicon(
+        # Use the async version
+        result = await get_website_favicon_async(
             url=request.url,
             session_id=request.session_id
         )
@@ -2137,116 +2133,95 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
             "message": str(e),
             "favicon_url": None
         }
+    
+@app.post("/api/website/full-analysis-async")
+async def full_website_analysis_async(request: WebsiteAnalysisRequest):
+    """
+    Fire-and-forget endpoint that starts all operations and returns immediately
+    """
+    task_id = str(uuid.uuid4())
+    
+    # Initialize result structure
+    background_results[task_id] = {
+        "status": "started",
+        "url": request.url,
+        "session_id": request.session_id or str(uuid.uuid4()),
+        "started_at": datetime.now().isoformat(),
+        "analysis": {"status": "pending"},
+        "screenshot": {"status": "pending"},
+        "favicon": {"status": "pending"}
+    }
+    
+    # Define async function to run all operations
+    async def run_all_operations():
+        try:
+            # Run all three operations in parallel
+            analysis_task = asyncio.create_task(analyze_website_endpoint(request))
+            screenshot_task = asyncio.create_task(capture_website_screenshot_endpoint(
+                WebsiteScreenshotRequest(
+                    url=request.url,
+                    session_id=request.session_id,
+                    user_id=request.user_id
+                )
+            ))
+            favicon_task = asyncio.create_task(get_website_favicon_endpoint(
+                WebsiteFaviconRequest(
+                    url=request.url,
+                    session_id=request.session_id,
+                    user_id=request.user_id
+                )
+            ))
+            
+            # Wait for each to complete and update results
+            try:
+                background_results[task_id]["analysis"] = await analysis_task
+            except Exception as e:
+                background_results[task_id]["analysis"] = {"status": "error", "message": str(e)}
+            
+            try:
+                background_results[task_id]["screenshot"] = await screenshot_task
+            except Exception as e:
+                background_results[task_id]["screenshot"] = {"status": "error", "message": str(e)}
+            
+            try:
+                background_results[task_id]["favicon"] = await favicon_task
+            except Exception as e:
+                background_results[task_id]["favicon"] = {"status": "error", "message": str(e)}
+            
+            # Update overall status
+            all_success = all(
+                background_results[task_id].get(key, {}).get("status") == "success" 
+                for key in ["analysis", "screenshot", "favicon"]
+            )
+            background_results[task_id]["status"] = "complete"
+            background_results[task_id]["overall_status"] = "success" if all_success else "partial_success"
+            background_results[task_id]["completed_at"] = datetime.now().isoformat()
+            
+        except Exception as e:
+            background_results[task_id]["status"] = "error"
+            background_results[task_id]["error"] = str(e)
+    
+    # Start the operations without waiting
+    asyncio.create_task(run_all_operations())
+    
+    # Return immediately
+    return {
+        "task_id": task_id,
+        "status": "accepted",
+        "message": "Analysis started in background",
+        "check_url": f"/api/website/task/{task_id}",
+        "url": request.url,
+        "started_at": datetime.now().isoformat()
+    }
 
 # Combined endpoint that runs all three tools
 @app.post("/api/website/full-analysis")
 async def full_website_analysis(request: WebsiteAnalysisRequest):
     """
-    Combined endpoint that runs all three website tools:
-    1. Analyzes website content
-    2. Captures screenshot
-    3. Extracts favicon
-    Returns all results in one response
+    Use the async version to avoid timeouts
     """
-    try:
-        results = {
-            "url": request.url,
-            "session_id": request.session_id or str(uuid.uuid4()),
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # # Create tasks with shorter timeouts
-        # async def run_with_timeout(coro, timeout_seconds=10):
-        #     try:
-        #         return await asyncio.wait_for(coro, timeout=timeout_seconds)
-        #     except asyncio.TimeoutError:
-        #         return {"status": "error", "message": f"Operation timed out after {timeout_seconds}s"}
-        
-        # # Run tools with individual timeouts
-        # analysis_task = run_with_timeout(
-        #     analyze_website_endpoint(request), 
-        #     timeout_seconds=25  # Increased for Heroku
-        # )
-        # screenshot_task = run_with_timeout(
-        #     capture_website_screenshot_endpoint(
-        #         WebsiteScreenshotRequest(
-        #             url=request.url,
-        #             session_id=request.session_id,
-        #             user_id=request.user_id
-        #         )
-        #     ),
-        #     timeout_seconds=20  # Increased timeout
-        # )
-        # favicon_task = run_with_timeout(
-        #     get_website_favicon_endpoint(
-        #         WebsiteFaviconRequest(
-        #             url=request.url,
-        #             session_id=request.session_id,
-        #             user_id=request.user_id
-        #         )
-        #     ),
-        #     timeout_seconds=10  # Keep this shorter
-        # )
-
-        # Create tasks WITHOUT any timeouts
-        analysis_task = analyze_website_endpoint(request)
-        screenshot_task = capture_website_screenshot_endpoint(
-            WebsiteScreenshotRequest(
-                url=request.url,
-                session_id=request.session_id,
-                user_id=request.user_id
-            )
-        )
-        favicon_task = get_website_favicon_endpoint(
-            WebsiteFaviconRequest(
-                url=request.url,
-                session_id=request.session_id,
-                user_id=request.user_id
-            )
-        )
-        
-        # Wait for all tasks to complete
-        analysis_result, screenshot_result, favicon_result = await asyncio.gather(
-            analysis_task,
-            screenshot_task,
-            favicon_task,
-            return_exceptions=True
-        )
-        
-        # Handle results
-        if isinstance(analysis_result, Exception):
-            results["analysis"] = {"status": "error", "message": str(analysis_result)}
-        else:
-            results["analysis"] = analysis_result
-            
-        if isinstance(screenshot_result, Exception):
-            results["screenshot"] = {"status": "error", "message": str(screenshot_result)}
-        else:
-            results["screenshot"] = screenshot_result
-            
-        if isinstance(favicon_result, Exception):
-            results["favicon"] = {"status": "error", "message": str(favicon_result)}
-        else:
-            results["favicon"] = favicon_result
-        
-        # Overall status
-        all_success = (
-            results["analysis"].get("status") == "success" and
-            results["screenshot"].get("status") == "success" and
-            results["favicon"].get("status") == "success"
-        )
-        
-        results["overall_status"] = "success" if all_success else "partial_success"
-        
-        return results
-        
-    except Exception as e:
-        logger.error(f"Error in full_website_analysis: {str(e)}")
-        return {
-            "status": "error",
-            "message": str(e),
-            "url": request.url
-        }
+    # Just redirect to the async version
+    return await full_website_analysis_async(request)
 
 # WebSocket endpoint
 @app.websocket("/ws/{user_id}/{session_id}")
