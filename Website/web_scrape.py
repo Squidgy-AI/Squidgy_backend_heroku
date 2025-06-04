@@ -47,35 +47,42 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
             
             # Set up Chrome options for headless mode
             chrome_options = Options()
-            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--headless=new")  # Use newer headless mode
             chrome_options.add_argument("--window-size=1920,1080")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-extensions")
-            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
+            # chrome_options = Options()
+            # chrome_options.add_argument("--headless=new")
+            # chrome_options.add_argument("--window-size=1920,1080")
+            # chrome_options.add_argument("--disable-gpu")
+            # chrome_options.add_argument("--no-sandbox")
+            # chrome_options.add_argument("--disable-dev-shm-usage")
+            # chrome_options.add_argument("--disable-extensions")
+            # chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            # chrome_options.add_experimental_option('useAutomationExtension', False)
             
             # Set page load strategy to eager (don't wait for all resources)
-            chrome_options.page_load_strategy = 'eager'
+            # chrome_options.page_load_strategy = 'eager'
             
-            # Don't use user data directory at all to avoid conflicts
-            chrome_options.add_argument("--disable-web-security")
-            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-            chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+            # # Don't use user data directory at all to avoid conflicts
+            # chrome_options.add_argument("--disable-web-security")
+            # chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+            # chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
             
-            # Additional options for Heroku environment
-            chrome_options.add_argument("--disable-setuid-sandbox")
-            chrome_options.add_argument("--remote-debugging-port=9222")
-            chrome_options.add_argument("--disable-dev-tools")
-            chrome_options.add_argument("--disable-software-rasterizer")
+            # # Additional options for Heroku environment
+            # chrome_options.add_argument("--disable-setuid-sandbox")
+            # chrome_options.add_argument("--remote-debugging-port=9222")
+            # chrome_options.add_argument("--disable-dev-tools")
+            # chrome_options.add_argument("--disable-software-rasterizer")
             
-            # Single-process mode for Heroku
-            chrome_options.add_argument("--single-process")
-            chrome_options.add_argument("--disable-background-timer-throttling")
-            chrome_options.add_argument("--disable-renderer-backgrounding")
-            chrome_options.add_argument("--disable-features=site-per-process")
+            # # Single-process mode for Heroku
+            # chrome_options.add_argument("--single-process")
+            # chrome_options.add_argument("--disable-background-timer-throttling")
+            # chrome_options.add_argument("--disable-renderer-backgrounding")
+            # chrome_options.add_argument("--disable-features=site-per-process")
             
             driver = None
             tmp_path = None
