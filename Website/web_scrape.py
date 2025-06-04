@@ -53,8 +53,10 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
         # Set page load strategy to eager (don't wait for all resources)
         chrome_options.page_load_strategy = 'eager'
         
-        # Create unique user data directory
-        user_data_dir = tempfile.mkdtemp()
+        # Create unique user data directory with timestamp to avoid conflicts
+        import uuid
+        unique_id = f"{int(time.time())}_{uuid.uuid4().hex[:8]}"
+        user_data_dir = tempfile.mkdtemp(prefix=f"chrome_profile_{unique_id}_")
         chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
         
         driver = None
@@ -109,9 +111,23 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                     }
                 )
                 
-                if response.status_code == 200 or (response.status_code == 400 and "already exists" in str(response.json())):
+                # Handle the response properly - it's not a requests Response object
+                if hasattr(response, 'error') and response.error:
+                    # Check if it's just a duplicate file error
+                    if "already exists" in str(response.error):
+                        public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                        return {
+                            "status": "success",
+                            "message": "Screenshot captured successfully",
+                            "path": storage_path,
+                            "public_url": public_url,
+                            "filename": filename
+                        }
+                    else:
+                        raise Exception(f"Failed to upload: {response.error}")
+                else:
+                    # Success case
                     public_url = supabase.storage.from_('static').get_public_url(storage_path)
-                    
                     return {
                         "status": "success",
                         "message": "Screenshot captured successfully",
@@ -119,8 +135,6 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                         "public_url": public_url,
                         "filename": filename
                     }
-                else:
-                    raise Exception(f"Failed to upload: {response.json()}")
                     
         finally:
             # Cleanup
@@ -272,9 +286,27 @@ async def get_website_favicon_async(url: str, session_id: str = None) -> dict:
                             # Clean up
                             os.unlink(tmp_path)
                             
-                            if response.status_code == 200 or (response.status_code == 400 and "already exists" in str(response.json())):
+                            # Handle the response properly
+                            if hasattr(response, 'error') and response.error:
+                                # Check if it's just a duplicate file error
+                                if "already exists" in str(response.error):
+                                    public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                                    return {
+                                        "status": "success",
+                                        "message": "Favicon captured successfully",
+                                        "path": storage_path,
+                                        "public_url": public_url,
+                                        "filename": filename
+                                    }
+                                else:
+                                    return {
+                                        "status": "error",
+                                        "message": f"Upload error: {response.error}",
+                                        "path": None
+                                    }
+                            else:
+                                # Success case
                                 public_url = supabase.storage.from_('static').get_public_url(storage_path)
-                                
                                 return {
                                     "status": "success",
                                     "message": "Favicon captured successfully",
