@@ -36,6 +36,7 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
     """
     # Acquire lock to prevent concurrent Chrome instances
     with chrome_lock:
+        unique_temp_dir = None
         try:
             # Use session_id in filename if provided
             if session_id:
@@ -47,42 +48,40 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
             
             # Set up Chrome options for headless mode
             chrome_options = Options()
-            chrome_options.add_argument("--headless=new")  # Use newer headless mode
+            chrome_options.add_argument("--headless=new")
             chrome_options.add_argument("--window-size=1920,1080")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-extensions")
-            # chrome_options = Options()
-            # chrome_options.add_argument("--headless=new")
-            # chrome_options.add_argument("--window-size=1920,1080")
-            # chrome_options.add_argument("--disable-gpu")
-            # chrome_options.add_argument("--no-sandbox")
-            # chrome_options.add_argument("--disable-dev-shm-usage")
-            # chrome_options.add_argument("--disable-extensions")
-            # chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            # chrome_options.add_experimental_option('useAutomationExtension', False)
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
             
             # Set page load strategy to eager (don't wait for all resources)
-            # chrome_options.page_load_strategy = 'eager'
+            chrome_options.page_load_strategy = 'eager'
             
-            # # Don't use user data directory at all to avoid conflicts
-            # chrome_options.add_argument("--disable-web-security")
-            # chrome_options.add_argument("--disable-features=VizDisplayCompositor")
-            # chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
+            # CRITICAL: Don't use user data directory at all
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+            chrome_options.add_argument("--disable-features=IsolateOrigins,site-per-process")
             
-            # # Additional options for Heroku environment
-            # chrome_options.add_argument("--disable-setuid-sandbox")
-            # chrome_options.add_argument("--remote-debugging-port=9222")
-            # chrome_options.add_argument("--disable-dev-tools")
-            # chrome_options.add_argument("--disable-software-rasterizer")
+            # Additional options for Heroku environment
+            chrome_options.add_argument("--disable-setuid-sandbox")
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            chrome_options.add_argument("--disable-dev-tools")
+            chrome_options.add_argument("--disable-software-rasterizer")
             
-            # # Single-process mode for Heroku
-            # chrome_options.add_argument("--single-process")
-            # chrome_options.add_argument("--disable-background-timer-throttling")
-            # chrome_options.add_argument("--disable-renderer-backgrounding")
-            # chrome_options.add_argument("--disable-features=site-per-process")
+            # Single-process mode for container environments
+            chrome_options.add_argument("--single-process")
+            chrome_options.add_argument("--disable-background-timer-throttling")
+            chrome_options.add_argument("--disable-renderer-backgrounding")
+            
+            # IMPORTANT: Create unique temp directory for THIS instance only
+            unique_temp_dir = tempfile.mkdtemp(prefix=f"chrome_tmp_{uuid.uuid4().hex[:8]}_")
+            chrome_options.add_argument(f"--user-data-dir={unique_temp_dir}")
+            chrome_options.add_argument(f"--data-path={unique_temp_dir}")
+            chrome_options.add_argument(f"--disk-cache-dir={unique_temp_dir}/cache")
             
             driver = None
             tmp_path = None
@@ -171,6 +170,13 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                 if tmp_path and os.path.exists(tmp_path):
                     try:
                         os.unlink(tmp_path)
+                    except:
+                        pass
+                # Clean up the unique temp directory
+                if unique_temp_dir and os.path.exists(unique_temp_dir):
+                    try:
+                        import shutil
+                        shutil.rmtree(unique_temp_dir)
                     except:
                         pass
                     

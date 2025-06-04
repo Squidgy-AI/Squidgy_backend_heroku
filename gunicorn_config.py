@@ -18,12 +18,11 @@ accesslog = '-'
 errorlog = '-'
 loglevel = 'info'
 
-# Request handling - reduce to save memory
-worker_connections = 500  # Reduced from 1000
-max_requests = 500  # Reduced from 1000
+# Memory optimization
+preload_app = True
+worker_connections = 500
+max_requests = 200  # Restart workers more frequently
 max_requests_jitter = 50
 
-# Memory optimization
-preload_app = True  # Share memory between workers
-max_requests = 500  # Restart workers periodically to prevent memory leaks
-max_requests_jitter = 50
+# Limit threads per worker
+threads = 1
