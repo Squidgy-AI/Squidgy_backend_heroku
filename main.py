@@ -57,6 +57,11 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+AGENT_DESCRIPTIONS = {
+    agent_name: agent_config.description 
+    for agent_name, agent_config in AGENTS.items()
+}
+
 
 # Models
 class N8nMainRequest(BaseModel):
@@ -253,7 +258,7 @@ class AgentMatcher:
             
         except Exception as e:
             logger.error(f"Error finding best agents: {str(e)}")
-            return [('re-engage', 50.0)]
+            return [('presaleskb', 50.0)]
     
     async def get_recommended_agent(self, user_query: str) -> str:
         """Get the single best recommended agent for a query"""
@@ -262,7 +267,7 @@ class AgentMatcher:
         if best_agents and best_agents[0][1] >= 60:
             return best_agents[0][0]
         
-        return 're-engage'
+        return 'presaleskb'
 
 # Conversational Handler Class
 class ConversationalHandler:
@@ -301,10 +306,10 @@ class ConversationalHandler:
                 'website': lambda ctx: ctx.get('website_data') is not None,
                 'niche': lambda ctx: ctx.get('client_niche') is not None
             },
-            'manager': {
+            'socialmediakb': {
                 'website': lambda ctx: ctx.get('website_data') is not None
             },
-            're-engage': {
+            'leadgenkb': {
                 'website': lambda ctx: ctx.get('website_data') is not None
             }
         }
@@ -1269,15 +1274,16 @@ async def n8n_find_best_agents(request: N8nFindBestAgentsRequest):
             else:
                 quality = "Possible match"
             
-            agent_descriptions = {
-                "presaleskb": "specializes in sales and pricing queries",
-                "manager": "handles project management and workflows",
-                "re-engage": "general purpose assistant for various queries",
-                "real-estate": "expert in property-related questions",
-                "branding": "focuses on brand strategy and marketing"
-            }
+            # agent_descriptions = {
+            #     "presaleskb": "specializes in sales and pricing queries",
+            #     "socialmediakb": "handles social media and digital marketing",
+            #     "leadgenkb": "general purpose assistant for various queries"
+            # }
+
+            description = f"{quality} - {AGENT_DESCRIPTIONS.get(agent_name, 'handles specialized queries')}"
+
             
-            description = f"{quality} - {agent_descriptions.get(agent_name, 'handles specialized queries')}"
+            # description = f"{quality} - {agent_descriptions.get(agent_name, 'handles specialized queries')}"
             
             recommendations.append({
                 "agent_name": agent_name,
@@ -1297,7 +1303,7 @@ async def n8n_find_best_agents(request: N8nFindBestAgentsRequest):
             response["best_agent"] = recommendations[0]["agent_name"]
             response["best_agent_confidence"] = recommendations[0]["match_percentage"]
         else:
-            response["best_agent"] = "Squidgy_default"
+            response["best_agent"] = "presaleskb"
             response["best_agent_confidence"] = 100.0
             response["message"] = "No agents found above threshold, using default agent"
         
@@ -1362,7 +1368,7 @@ async def n8n_analyze_agent_query(request: Dict[str, Any]):
                     response["routing_message"] = f"Switch to '{best_agent}' (confidence: {best_score}%)"
                 else:
                     response["routing_decision"] = "use_default"
-                    response["suggested_agent"] = "re-engage"
+                    response["suggested_agent"] = "presaleskb"
                     response["routing_message"] = "No strong match found, use general agent"
         
         return response
@@ -1374,7 +1380,7 @@ async def n8n_analyze_agent_query(request: Dict[str, Any]):
             "error": str(e),
             "status": "error",
             "routing_decision": "use_default",
-            "suggested_agent": "re-engage"
+            "suggested_agent": "presaleskb"
         }
 
 @app.get("/n8n/agent_matcher/health")
@@ -2379,7 +2385,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
                 "user_id": user_id,
                 "user_mssg": user_input,
                 "session_id": session_id,
-                "agent_name": message_data.get("agent", "re-engage"),
+                "agent_name": message_data.get("agent", "presaleskb"),
                 "timestamp_of_call_made": datetime.now().isoformat(),
                 "request_id": request_id
             }
