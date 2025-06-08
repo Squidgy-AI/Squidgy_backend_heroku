@@ -22,6 +22,8 @@ from fastapi import BackgroundTasks
 
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor
+from agent_config import get_agent_config, AGENTS
+
 
 # Add this near the top with other imports
 from Website.web_scrape import capture_website_screenshot_async, get_website_favicon_async
@@ -1870,7 +1872,8 @@ async def n8n_main_request(request: N8nMainRequest, agent_name: str, session_id:
             "status": n8n_response.get("status", "success"),
             "request_id": request_id,
             "conversation_state": n8n_response.get("conversation_state", "complete"),
-            "missing_info": n8n_response.get("missing_info", [])
+            "missing_info": n8n_response.get("missing_info", []),
+            "images": extract_image_urls(n8n_response.get("agent_response", ""))  # Add this
         }
         
         await conversational_handler.save_to_history(
@@ -2218,6 +2221,34 @@ async def full_website_analysis_async(request: WebsiteAnalysisRequest):
         "started_at": datetime.now().isoformat()
     }
 
+
+# Add this endpoint to main.py if it doesn't exist
+@app.get("/chat-history")
+async def get_chat_history(session_id: str):
+    """Get chat history for a session"""
+    try:
+        result = supabase.table('chat_history')\
+            .select('*')\
+            .eq('session_id', session_id)\
+            .order('timestamp', desc=False)\
+            .execute()
+        
+        if result.data:
+            history = []
+            for msg in result.data:
+                history.append({
+                    'sender': 'AI' if msg['sender'] == 'agent' else 'User',
+                    'message': msg['message'],
+                    'timestamp': msg['timestamp']
+                })
+            return {'history': history, 'status': 'success'}
+        else:
+            return {'history': [], 'status': 'success'}
+            
+    except Exception as e:
+        logger.error(f"Error fetching chat history: {str(e)}")
+        return {'history': [], 'status': 'error', 'error': str(e)}
+
 # Combined endpoint that runs all three tools
 @app.post("/api/website/full-analysis")
 async def full_website_analysis(request: WebsiteAnalysisRequest):
@@ -2366,6 +2397,29 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         logger.exception(f"WebSocket error: {str(e)}")
         if connection_id in active_connections:
             del active_connections[connection_id]
+
+
+@app.get("/api/agents/config")
+async def get_agents_config():
+    """Get all agent configurations"""
+    return {
+        "agents": [agent.dict() for agent in AGENTS.values()]
+    }
+
+@app.get("/api/agents/config/{agent_name}")
+async def get_agent_config_endpoint(agent_name: str):
+    """Get specific agent configuration"""
+    agent = get_agent_config(agent_name)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
+    return agent.dict()
+
+def extract_image_urls(text: str) -> List[str]:
+    """Extract Supabase storage URLs from text"""
+    import re
+    # Match Supabase storage URLs
+    pattern = r'https://[^\s]+\.supabase\.co/storage/v1/[^\s]+\.(png|jpg|jpeg|gif|webp)'
+    return re.findall(pattern, text, re.IGNORECASE)
 
 
 @app.post("/api/website/analyze-background")
