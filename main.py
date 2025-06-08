@@ -1063,7 +1063,7 @@ class DynamicAgentKBHandler:
 agent_matcher = AgentMatcher(supabase_client=supabase)
 conversational_handler = ConversationalHandler(
     supabase_client=supabase,
-    n8n_webhook_url=N8N_MAIN_TEST
+    n8n_webhook_url=N8N_MAIN
 )
 client_kb_manager = ClientKBManager(supabase_client=supabase)
 dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
@@ -1080,7 +1080,7 @@ async def save_message_to_history(session_id: str, sender: str, message: str):
 
 async def call_n8n_webhook(payload: Dict[str, Any]):
     """Call the n8n webhook and return the response"""
-    n8n_url = N8N_MAIN_TEST
+    n8n_url = N8N_MAIN
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
     #"https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
