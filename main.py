@@ -1078,10 +1078,11 @@ async def save_message_to_history(session_id: str, sender: str, message: str):
 
 async def call_n8n_webhook(payload: Dict[str, Any]):
     """Call the n8n webhook and return the response"""
-    n8n_url = "https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
+    n8n_url = "https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
+    #"https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
     
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=None) as client:
         try:
             response = await client.post(n8n_url, json=payload)
             response.raise_for_status()
