@@ -40,6 +40,8 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+N8N_MAIN = os.getenv("N8N_MAIN")
+N8N_MAIN_TEST = os.getenv("N8N_MAIN_TEST")
 
 
 print(f"Using Supabase URL: {SUPABASE_URL}")
@@ -1061,7 +1063,7 @@ class DynamicAgentKBHandler:
 agent_matcher = AgentMatcher(supabase_client=supabase)
 conversational_handler = ConversationalHandler(
     supabase_client=supabase,
-    n8n_webhook_url="https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
+    n8n_webhook_url=N8N_MAIN_TEST
 )
 client_kb_manager = ClientKBManager(supabase_client=supabase)
 dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
@@ -1078,7 +1080,8 @@ async def save_message_to_history(session_id: str, sender: str, message: str):
 
 async def call_n8n_webhook(payload: Dict[str, Any]):
     """Call the n8n webhook and return the response"""
-    n8n_url = "https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
+    n8n_url = N8N_MAIN_TEST
+    #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
     #"https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
     
