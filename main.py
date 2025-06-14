@@ -487,6 +487,7 @@ class N8nMainRequest(BaseModel):
     session_id: str
     agent_name: str
     timestamp_of_call_made: Optional[str] = None
+    request_id: Optional[str] = None
 
 class N8nResponse(BaseModel):
     user_id: str
@@ -894,9 +895,6 @@ class ConversationalHandler:
             'response': response,
             'timestamp': time.time()
         }
-        self.supabase = supabase_client
-        self.n8n_url = n8n_webhook_url
-        self.conversation_states: Dict[str, Dict[str, Any]] = {}
         
     async def get_conversation_context(self, session_id: str, user_id: str) -> Dict[str, Any]:
         """Get conversation context from Supabase"""
@@ -1719,6 +1717,15 @@ async def call_n8n_webhook(payload: Dict[str, Any]):
             print("="*60)
             print(json.dumps(result, indent=2))
             print("="*60 + "\n")
+            
+            # Parse the output field if it exists (n8n returns JSON string in output field)
+            if 'output' in result and isinstance(result['output'], str):
+                try:
+                    parsed_output = json.loads(result['output'])
+                    return parsed_output
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse n8n output JSON: {result['output']}")
+                    return result
             
             return result
         except httpx.HTTPStatusError as e:
