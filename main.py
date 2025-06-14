@@ -52,23 +52,6 @@ class AgentMatcher:
     async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.3) -> tuple:
         """Check if a specific agent matches the user query using vector similarity"""
         try:
-            # Check if this is a basic greeting or general question that any agent can handle
-            basic_patterns = [
-                'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
-                'who are you', 'what are you', 'introduce yourself', 'tell me about yourself',
-                'what do you do', 'what can you help with', 'how can you help', 'what services',
-                'greetings', 'salutations', 'yo', 'howdy', 'how are you', 'how do you do',
-                'nice to meet you', 'pleased to meet you', 'what is this', 'explain this',
-                'help', 'assistance', 'support', 'info', 'information', 'thanks', 'thank you'
-            ]
-            
-            query_lower = user_query.lower().strip()
-            is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
-            
-            if is_basic:
-                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
-                return True
-                
             # Skip check if agent doesn't exist
             agent_check = self.supabase.table('agent_documents')\
                 .select('id')\
@@ -86,6 +69,7 @@ class AgentMatcher:
             if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
                 return cached['result']
 
+            # Always perform vector search first to get similarity score
             query_embedding = await self.get_query_embedding(user_query)
             
             result = self.supabase.rpc(
@@ -106,7 +90,26 @@ class AgentMatcher:
             else:
                 print(f"  Vector search result: No matches found for agent '{agent_name}'")
 
-            match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
+            # Check if this is a basic greeting or general question that any agent can handle
+            basic_patterns = [
+                'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+                'who are you', 'what are you', 'introduce yourself', 'tell me about yourself',
+                'what do you do', 'what can you help with', 'how can you help', 'what services',
+                'greetings', 'salutations', 'yo', 'howdy', 'how are you', 'how do you do',
+                'nice to meet you', 'pleased to meet you', 'what is this', 'explain this',
+                'help', 'assistance', 'support', 'info', 'information', 'thanks', 'thank you'
+            ]
+            
+            query_lower = user_query.lower().strip()
+            is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
+            
+            # For basic queries, always return True regardless of similarity score
+            if is_basic:
+                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
+                match_result = True
+            else:
+                # For non-basic queries, use the similarity threshold
+                match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
             
             # Cache the result
             self._cache[cache_key] = {
