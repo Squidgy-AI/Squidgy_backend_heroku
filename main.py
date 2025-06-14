@@ -107,13 +107,13 @@ class AgentMatcher:
             confidence = result.data[0]['similarity'] if result.data else 0.0
             
             # For basic queries, always return True regardless of similarity score
-            # But set a minimum confidence of 0.7 for basic queries
+            # But set a minimum confidence just above threshold (0.4) for basic queries
             if is_basic:
                 print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
                 match_result = True
-                # Basic queries should have reasonable confidence even if no exact match
-                if confidence < 0.7:
-                    confidence = 0.7
+                # Basic queries should have reasonable confidence above threshold
+                if confidence < 0.4:
+                    confidence = 0.4
             else:
                 # For non-basic queries, use the similarity threshold
                 match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
@@ -644,13 +644,13 @@ class AgentMatcher:
             confidence = result.data[0]['similarity'] if result.data else 0.0
             
             # For basic queries, always return True regardless of similarity score
-            # But set a minimum confidence of 0.7 for basic queries
+            # But set a minimum confidence just above threshold (0.4) for basic queries
             if is_basic:
                 print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
                 match_result = True
-                # Basic queries should have reasonable confidence even if no exact match
-                if confidence < 0.7:
-                    confidence = 0.7
+                # Basic queries should have reasonable confidence above threshold
+                if confidence < 0.4:
+                    confidence = 0.4
             else:
                 # For non-basic queries, use the similarity threshold
                 match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
