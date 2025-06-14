@@ -1682,11 +1682,7 @@ async def save_message_to_history(session_id: str, sender: str, message: str):
 
 async def call_n8n_webhook(payload: Dict[str, Any]):
     """Call the n8n webhook and return the response"""
-<<<<<<< HEAD
-    n8n_url = N8N_STREAM_TEST
-=======
     n8n_url = os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')
->>>>>>> 7b575fb (Fix agent matching and basic greeting detection)
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
     #"https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
@@ -2508,10 +2504,6 @@ async def n8n_main_request(request: N8nMainRequest, agent_name: str, session_id:
         request_key = f"{session_id}:{request.user_mssg}:{agent_name}"
         current_time = time.time()
         
-<<<<<<< HEAD
-        # n8n_payload = await conversational_handler.handle_message(request_data)
-        n8n_payload = request_data
-=======
         # Check if duplicate within 2 seconds
         if request_key in request_cache:
             if current_time - request_cache[request_key] < 2.0:
@@ -2522,7 +2514,6 @@ async def n8n_main_request(request: N8nMainRequest, agent_name: str, session_id:
                     "request_id": request_id,
                     "agent_response": "Processing your previous message..."
                 }
->>>>>>> 7b575fb (Fix agent matching and basic greeting detection)
         
         request_cache[request_key] = current_time
         
