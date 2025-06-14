@@ -1665,11 +1665,7 @@ supabase = create_supabase_client()
 agent_matcher = AgentMatcher(supabase_client=supabase)
 conversational_handler = ConversationalHandler(
     supabase_client=supabase,
-<<<<<<< HEAD
-    n8n_webhook_url=N8N_STREAM_TEST
-=======
     n8n_url=os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')
->>>>>>> 7b575fb (Fix agent matching and basic greeting detection)
 )
 client_kb_manager = ClientKBManager(supabase_client=supabase)
 dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
