@@ -103,31 +103,38 @@ class AgentMatcher:
             query_lower = user_query.lower().strip()
             is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
             
+            # Calculate confidence score
+            confidence = result.data[0]['similarity'] if result.data else 0.0
+            
             # For basic queries, always return True regardless of similarity score
+            # But set a minimum confidence of 0.7 for basic queries
             if is_basic:
                 print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
                 match_result = True
+                # Basic queries should have reasonable confidence even if no exact match
+                if confidence < 0.7:
+                    confidence = 0.7
             else:
                 # For non-basic queries, use the similarity threshold
                 match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
             
-            # Cache the result
+            # Cache the result with confidence
             self._cache[cache_key] = {
-                'result': match_result,
+                'result': (match_result, confidence),
                 'timestamp': datetime.now()
             }
 
             # Only log for real queries
             if user_query and user_query.strip():
                 if match_result:
-                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query")
+                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query (confidence: {confidence:.3f})")
                 else:
                     print(f"✗ Agent match FAILED: {agent_name} - checking for better alternatives...")
-            return match_result
+            return match_result, confidence
             
         except Exception as e:
             logger.error(f"Error checking agent match: {str(e)}")
-            return False
+            return False, 0.0
 
     async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[Tuple[str, float]]:
         """Find the best matching agents for a user query using vector similarity"""
@@ -595,10 +602,6 @@ class AgentMatcher:
             query_lower = user_query.lower().strip()
             is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
             
-            if is_basic:
-                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
-                return True
-                
             # Skip check if agent doesn't exist
             agent_check = self.supabase.table('agent_documents')\
                 .select('id')\
@@ -608,7 +611,7 @@ class AgentMatcher:
             
             if not agent_check.data:
                 print(f"⚠️ Warning: No documents found for agent '{agent_name}' in database")
-                return False
+                return False, 0.0
 
             # Get cached result if exists
             cache_key = f"agent_match_{agent_name}_{user_query}"
@@ -616,6 +619,7 @@ class AgentMatcher:
             if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
                 return cached['result']
 
+            # Always perform vector search first to get similarity score
             query_embedding = await self.get_query_embedding(user_query)
             
             result = self.supabase.rpc(
@@ -636,25 +640,38 @@ class AgentMatcher:
             else:
                 print(f"  Vector search result: No matches found for agent '{agent_name}'")
 
-            match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
+            # Calculate confidence score
+            confidence = result.data[0]['similarity'] if result.data else 0.0
             
-            # Cache the result
+            # For basic queries, always return True regardless of similarity score
+            # But set a minimum confidence of 0.7 for basic queries
+            if is_basic:
+                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
+                match_result = True
+                # Basic queries should have reasonable confidence even if no exact match
+                if confidence < 0.7:
+                    confidence = 0.7
+            else:
+                # For non-basic queries, use the similarity threshold
+                match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
+            
+            # Cache the result with confidence
             self._cache[cache_key] = {
-                'result': match_result,
+                'result': (match_result, confidence),
                 'timestamp': datetime.now()
             }
 
             # Only log for real queries
             if user_query and user_query.strip():
                 if match_result:
-                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query")
+                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query (confidence: {confidence:.3f})")
                 else:
                     print(f"✗ Agent match FAILED: {agent_name} - checking for better alternatives...")
-            return match_result
+            return match_result, confidence
             
         except Exception as e:
             logger.error(f"Error checking agent match: {str(e)}")
-            return False
+            return False, 0.0
 
     async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[Tuple[str, float]]:
         """Find the best matching agents for a user query using vector similarity"""
@@ -1080,7 +1097,7 @@ class ConversationalHandler:
         else:
             # Only check for non-empty messages
             if user_message and user_message.strip():
-                is_appropriate = await agent_matcher.check_agent_match(agent_name, user_message)
+                is_appropriate, _ = await agent_matcher.check_agent_match(agent_name, user_message)
                 if not is_appropriate:
                     better_agents = await agent_matcher.find_best_agents(user_message, top_n=1)
                     if better_agents and better_agents[0][1] > 70:
@@ -1829,46 +1846,19 @@ async def debug_agent_docs(agent_name: str):
 async def n8n_check_agent_match(request: N8nCheckAgentMatchRequest):
     """N8N webhook endpoint to check if a specific agent matches the user query"""
     try:
-        is_match = await agent_matcher.check_agent_match(
+        is_match, confidence = await agent_matcher.check_agent_match(
             agent_name=request.agent_name,
             user_query=request.user_query,
             threshold=request.threshold
         )
-        
-        query_embedding = await agent_matcher.get_query_embedding(request.user_query)
         
         # Debug logging
         print(f"\n🔍 DEBUG - Agent Match Check:")
         print(f"  Agent: {request.agent_name}")
         print(f"  Query: {request.user_query}")
         print(f"  Threshold: {request.threshold}")
-        # Query embedding generated successfully
-        
-        # Check if agent documents exist
-        agent_docs = agent_matcher.supabase.table('agent_documents')\
-            .select('id, content')\
-            .eq('agent_name', request.agent_name)\
-            .execute()
-        
-        print(f"  Agent documents found: {len(agent_docs.data) if agent_docs.data else 0}")
-        if agent_docs.data:
-            print(f"  First document preview: {agent_docs.data[0]['content'][:100]}...")
-        
-        result = agent_matcher.supabase.rpc(
-            'match_agent_documents',
-            {
-                'query_embedding': query_embedding,
-                'match_threshold': request.threshold,
-                'match_count': 1,
-                'filter_agent': request.agent_name
-            }
-        ).execute()
-        
-        print(f"  Vector search results: {len(result.data) if result.data else 0}")
-        if result.data:
-            print(f"  Best similarity: {result.data[0]['similarity']:.4f}")
-        
-        confidence = result.data[0]['similarity'] if result.data else 0.0
+        print(f"  Match Result: {is_match}")
+        print(f"  Confidence: {confidence:.3f}")
         
         if is_match:
             recommendation = f"Agent '{request.agent_name}' is suitable for this query"
@@ -1882,7 +1872,6 @@ async def n8n_check_agent_match(request: N8nCheckAgentMatchRequest):
             "confidence": round(confidence, 3),
             "threshold_used": request.threshold,
             "recommendation": recommendation,
-            "result": result.data,
             "status": "success"
         }
         
@@ -1982,10 +1971,11 @@ async def n8n_analyze_agent_query(request: Dict[str, Any]):
         }
         
         if current_agent:
-            is_match = await agent_matcher.check_agent_match(current_agent, user_query)
+            is_match, match_confidence = await agent_matcher.check_agent_match(current_agent, user_query)
             response["current_agent_analysis"] = {
                 "agent_name": current_agent,
                 "is_suitable": is_match,
+                "confidence": round(match_confidence, 3),
                 "recommendation": "Keep current agent" if is_match else "Consider switching agents"
             }
         
@@ -2290,6 +2280,34 @@ async def agent_kb_query(request: AgentKBQueryRequest):
         
         kb_data = await client_kb_manager.get_client_kb(request.user_id, 'website_info')
         
+        # Retrieve additional context from chat history
+        chat_history = []
+        try:
+            history_result = supabase.table('chat_history')\
+                .select('sender, message, timestamp')\
+                .eq('user_id', request.user_id)\
+                .order('timestamp', desc=True)\
+                .limit(20)\
+                .execute()
+            if history_result.data:
+                chat_history = history_result.data
+        except Exception as e:
+            logger.warning(f"Failed to retrieve chat history: {str(e)}")
+        
+        # Retrieve website data
+        website_data = []
+        try:
+            website_result = supabase.table('website_data')\
+                .select('url, analysis, created_at')\
+                .eq('user_id', request.user_id)\
+                .order('created_at', desc=True)\
+                .limit(5)\
+                .execute()
+            if website_result.data:
+                website_data = website_result.data
+        except Exception as e:
+            logger.warning(f"Failed to retrieve website data: {str(e)}")
+        
         kb_context = {}
         if kb_data:
             content = kb_data.get('content', {})
@@ -2304,6 +2322,31 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 'topics': chat_insights.get('topics', []),
                 'interaction_count': content.get('interaction_history', {}).get('total_messages', 0)
             }
+        
+        # Enhance kb_context with chat history insights
+        if chat_history:
+            # Extract recent topics and context from chat history
+            recent_messages = [msg['message'] for msg in chat_history[:10] if msg['sender'] == 'User']
+            kb_context['recent_topics'] = recent_messages
+            kb_context['chat_history_count'] = len(chat_history)
+            
+            # Find any mentions of websites, products, or services in recent chat
+            for msg in chat_history[:10]:
+                if msg['sender'] == 'User':
+                    msg_lower = msg['message'].lower()
+                    if any(url_indicator in msg_lower for url_indicator in ['http://', 'https://', 'www.', '.com', '.org']):
+                        kb_context['mentioned_urls'] = kb_context.get('mentioned_urls', [])
+                        kb_context['mentioned_urls'].append(msg['message'])
+        
+        # Enhance kb_context with website analysis data
+        if website_data:
+            kb_context['analyzed_websites'] = []
+            for site in website_data:
+                kb_context['analyzed_websites'].append({
+                    'url': site['url'],
+                    'analysis': site.get('analysis', ''),
+                    'analyzed_at': site['created_at']
+                })
         
         must_questions = agent_context.get('must_questions', [])
         missing_must_info = []
