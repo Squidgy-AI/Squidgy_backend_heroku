@@ -1756,8 +1756,14 @@ async def process_n8n_request_async(payload: dict, websocket: WebSocket, request
         
         n8n_response = await call_n8n_webhook(n8n_payload)
         
-        if n8n_response.get("status") == "success" and "agent_response" in n8n_response:
+        print(f"DEBUG - n8n_response after parsing: {json.dumps(n8n_response, indent=2)}")
+        print(f"DEBUG - Has agent_response: {'agent_response' in n8n_response}")
+        print(f"DEBUG - Status field: {n8n_response.get('status', 'NOT_FOUND')}")
+        
+        if "agent_response" in n8n_response and n8n_response.get("agent_response"):
             agent_response = n8n_response.get("agent_response", "")
+            
+            print(f"DEBUG - Sending WebSocket response with agent_response: {agent_response[:100]}...")
             
             await websocket.send_json({
                 "type": "agent_response",
