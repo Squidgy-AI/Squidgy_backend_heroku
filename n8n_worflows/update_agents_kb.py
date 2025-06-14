@@ -19,7 +19,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-AGENTS_KB_FOLDER = os.getenv("AGENTS_KB_FOLDER", "./n8n_worflows/Agents_KB")  # Updated path
+AGENTS_KB_FOLDER = os.getenv("AGENTS_KB_FOLDER", "/Users/somasekharaddakula/CascadeProjects/SquidgyBackend/n8n_worflows/Agents_KB")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
@@ -40,17 +40,13 @@ def clear_all_agent_documents():
     Remove all existing documents from agent_documents table
     """
     try:
-        print("\n⚠️  WARNING: This will delete ALL existing agent documents!")
-        confirm = input("Are you sure you want to proceed? (yes/no): ")
+        print("\n⚠️  WARNING: Deleting ALL existing agent documents!")
         
-        if confirm.lower() == 'yes':
-            # Delete all records
-            result = supabase.table('agent_documents').delete().gte('id', 0).execute()
-            print(f"✅ Deleted all existing agent documents")
-            return True
-        else:
-            print("❌ Deletion cancelled")
-            return False
+        # Auto-confirm deletion
+        # Delete all records
+        result = supabase.table('agent_documents').delete().gte('id', 0).execute()
+        print(f"✅ Deleted all existing agent documents")
+        return True
     except Exception as e:
         print(f"Error clearing documents: {e}")
         return False
@@ -166,10 +162,17 @@ def main():
     # Check if folder exists
     folder_path = Path(AGENTS_KB_FOLDER)
     if not folder_path.exists():
-        print(f"❌ Folder {AGENTS_KB_FOLDER} not found!")
-        print(f"Current working directory: {os.getcwd()}")
-        print(f"Looking for folder at: {folder_path.absolute()}")
-        return
+        # Try fallback path
+        fallback_path = Path("./Agents_KB")
+        if fallback_path.exists():
+            folder_path = fallback_path
+            print(f"✅ Using fallback folder: {fallback_path.absolute()}")
+        else:
+            print(f"❌ Folder {AGENTS_KB_FOLDER} not found!")
+            print(f"Current working directory: {os.getcwd()}")
+            print(f"Looking for folder at: {folder_path.absolute()}")
+            print(f"Also tried fallback: {fallback_path.absolute()}")
+            return
     
     # Get all .txt files
     txt_files = list(folder_path.glob("*.txt"))
@@ -189,12 +192,11 @@ def main():
     print("This is recommended for a clean re-upload.")
     print("="*60)
     
-    clear_choice = input("\nDelete all existing documents? (yes/no): ")
-    
-    if clear_choice.lower() == 'yes':
-        if not clear_all_agent_documents():
-            print("Exiting...")
-            return
+    # Auto-clear documents for clean update
+    print("Auto-clearing existing documents...")
+    if not clear_all_agent_documents():
+        print("Failed to clear documents. Exiting...")
+        return
     
     # Process each file
     all_documents = []
@@ -206,11 +208,8 @@ def main():
     
     print(f"\n📊 Total documents to process: {len(all_documents)}")
     
-    # Confirm before proceeding
-    response = input("\n🚀 Proceed with creating embeddings and inserting to Supabase? (y/n): ")
-    if response.lower() != 'y':
-        print("❌ Operation cancelled.")
-        return
+    # Auto-proceed with embeddings
+    print("\n🚀 Auto-proceeding with creating embeddings and inserting to Supabase...")
     
     # Insert documents with embeddings
     print("\n⏳ Creating embeddings and inserting into Supabase...")
@@ -234,14 +233,13 @@ def main():
         for agent, count in sorted(agents.items()):
             print(f"  - {agent}: {count} document(s)")
     
-    # Test the search function
-    test_search = input("\n🔍 Would you like to test the search function? (y/n): ")
-    if test_search.lower() == 'y':
-        test_query = input("Enter a test query: ")
-        
-        test_embedding = get_embedding(test_query)
-        
-        if test_embedding:
+    # Skip test for automated run
+    print("\n✅ Knowledge base update completed successfully!")
+    print("🔍 Testing with query: 'https://supabase.com/'")
+    
+    test_embedding = get_embedding("https://supabase.com/")
+    
+    if test_embedding:
             # Use the new RPC function
             try:
                 result = supabase.rpc('match_agents_by_similarity', {

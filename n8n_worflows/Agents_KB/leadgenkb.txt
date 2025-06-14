@@ -29,6 +29,17 @@ Common Queries I Handle:
 - "Book an appointment"
 - "I'm interested in a demo"
 
+Basic Conversational Queries I Also Handle:
+- "Hello", "Hi", "Hey", "Good morning", "Good afternoon", "Good evening"
+- "Who are you?", "What are you?", "Introduce yourself"
+- "Tell me about yourself", "What do you do?"
+- "What can you help with?", "How can you help?"
+- "What services do you offer?", "What is this?"
+- "Help", "Assistance", "Support", "Info", "Information"
+- "Thanks", "Thank you", "Greetings", "Nice to meet you"
+- Any basic greeting or introductory question
+- General conversational starters and polite interactions
+
 Tools I Use:
 - Calendar scheduling tools
 - CRM systems

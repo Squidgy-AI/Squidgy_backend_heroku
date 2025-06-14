@@ -1,5 +1,5 @@
 # main.py - Complete integration with conversational handler and vector search agent matching
-from typing import Dict, Any, Optional, AsyncGenerator, List, Tuple
+from typing import Dict, Any, Optional, AsyncGenerator, List, Tuple, Set
 import httpx
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -24,10 +24,389 @@ import aiohttp
 from concurrent.futures import ThreadPoolExecutor
 from agent_config import get_agent_config, AGENTS
 
-
 # Add this near the top with other imports
 from Website.web_scrape import capture_website_screenshot_async, get_website_favicon_async
 
+# Handler classes
+
+class AgentMatcher:
+    def __init__(self, supabase_client, openai_api_key: str = None):
+        self.supabase = supabase_client
+        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        self.openai_client = OpenAI(api_key=self.openai_api_key)
+        self._cache = {}  # Cache for agent matching results
+        self._cache_ttl = 300  # Cache TTL in seconds (5 minutes)
+
+    async def get_query_embedding(self, text: str) -> List[float]:
+        """Generate embedding for the query text using OpenAI"""
+        try:
+            response = self.openai_client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Error generating embedding: {str(e)}")
+            raise
+
+    async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.3) -> tuple:
+        """Check if a specific agent matches the user query using vector similarity"""
+        try:
+            # Check if this is a basic greeting or general question that any agent can handle
+            basic_patterns = [
+                'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+                'who are you', 'what are you', 'introduce yourself', 'tell me about yourself',
+                'what do you do', 'what can you help with', 'how can you help', 'what services',
+                'greetings', 'salutations', 'yo', 'howdy', 'how are you', 'how do you do',
+                'nice to meet you', 'pleased to meet you', 'what is this', 'explain this',
+                'help', 'assistance', 'support', 'info', 'information', 'thanks', 'thank you'
+            ]
+            
+            query_lower = user_query.lower().strip()
+            is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
+            
+            if is_basic:
+                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
+                return True
+                
+            # Skip check if agent doesn't exist
+            agent_check = self.supabase.table('agent_documents')\
+                .select('id')\
+                .eq('agent_name', agent_name)\
+                .limit(1)\
+                .execute()
+            
+            if not agent_check.data:
+                print(f"⚠️ Warning: No documents found for agent '{agent_name}' in database")
+                return False
+
+            # Get cached result if exists
+            cache_key = f"agent_match_{agent_name}_{user_query}"
+            cached = self._cache.get(cache_key)
+            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['result']
+
+            query_embedding = await self.get_query_embedding(user_query)
+            
+            result = self.supabase.rpc(
+                'match_agent_documents',
+                {
+                    'query_embedding': query_embedding,
+                    'match_threshold': threshold,
+                    'match_count': 1,
+                    'filter_agent': agent_name
+                }
+            ).execute()
+            
+            # Debug logging
+            if result.data:
+                print(f"  Vector search result: {len(result.data)} matches found")
+                if len(result.data) > 0:
+                    print(f"  Best match similarity: {result.data[0]['similarity']:.3f} (threshold: {threshold})")
+            else:
+                print(f"  Vector search result: No matches found for agent '{agent_name}'")
+
+            match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
+            
+            # Cache the result
+            self._cache[cache_key] = {
+                'result': match_result,
+                'timestamp': datetime.now()
+            }
+
+            # Only log for real queries
+            if user_query and user_query.strip():
+                if match_result:
+                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query")
+                else:
+                    print(f"✗ Agent match FAILED: {agent_name} - checking for better alternatives...")
+            return match_result
+            
+        except Exception as e:
+            logger.error(f"Error checking agent match: {str(e)}")
+            return False
+
+    async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[Tuple[str, float]]:
+        """Find the best matching agents for a user query using vector similarity"""
+        try:
+            # Get cached result if exists
+            cache_key = f"best_agents_{user_query}"
+            cached = self._cache.get(cache_key)
+            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['result']
+
+            query_embedding = await self.get_query_embedding(user_query)
+            
+            result = self.supabase.rpc(
+                'match_agents_by_similarity',
+                {
+                    'query_embedding': query_embedding,
+                    'match_threshold': 0.3,
+                    'match_count': top_n * 5
+                }
+            ).execute()
+            
+            if not result.data:
+                return [('presaleskb', 50.0)]
+            
+            agent_scores = {}
+            for item in result.data:
+                agent_name = item['agent_name']
+                similarity = item['similarity'] * 100
+                
+                if agent_name not in agent_scores or similarity > agent_scores[agent_name]:
+                    agent_scores[agent_name] = similarity
+            
+            sorted_agents = sorted(agent_scores.items(), key=lambda x: x[1], reverse=True)
+            
+            # Cache the result
+            self._cache[cache_key] = {
+                'result': sorted_agents[:top_n],
+                'timestamp': datetime.now()
+            }
+            
+            return sorted_agents[:top_n]
+            
+        except Exception as e:
+            logger.error(f"Error finding best agents: {str(e)}")
+            return [('presaleskb', 50.0)]
+
+    async def get_recommended_agent(self, user_query: str) -> str:
+        """Get the single best recommended agent for a query"""
+        try:
+            # Get cached result if exists
+            cache_key = f"recommended_agent_{user_query}"
+            cached = self._cache.get(cache_key)
+            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['result']
+
+            best_agents = await self.find_best_agents(user_query, top_n=1)
+            
+            if best_agents and best_agents[0][1] >= 60:
+                agent = best_agents[0][0]
+            else:
+                agent = 'presaleskb'
+
+            # Cache the result
+            self._cache[cache_key] = {
+                'result': agent,
+                'timestamp': datetime.now()
+            }
+            
+            return agent
+            
+        except Exception as e:
+            logger.error(f"Error getting recommended agent: {str(e)}")
+            return 'presaleskb'
+
+# Conversational Handler Class
+class ConversationalHandler:
+    def __init__(self, supabase_client, n8n_url: str = os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')):
+        self._cache = {}  # Simple in-memory cache
+        self._cache_ttl = 300  # Cache TTL in seconds (5 minutes)
+        self.supabase = supabase_client
+        self.n8n_url = n8n_url
+
+    async def get_cached_response(self, request_id: str):
+        """Get cached response if it exists and is not expired"""
+        cache_key = f"response_{request_id}"
+        if cache_key in self._cache:
+            cached = self._cache[cache_key]
+            if (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['response']
+            del self._cache[cache_key]
+        return None
+
+    async def cache_response(self, request_id: str, response: dict):
+        """Cache a response with TTL"""
+        cache_key = f"response_{request_id}"
+        self._cache[cache_key] = {
+            'response': response,
+            'timestamp': datetime.now()
+        }
+
+    async def save_to_history(self, session_id: str, user_id: str, user_message: str, agent_response: str):
+        """Save message to chat history"""
+        try:
+            entry = {
+                'session_id': session_id,
+                'user_id': user_id,
+                'user_message': user_message,
+                'agent_response': agent_response,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            result = self.supabase.table('chat_history')\
+                .insert(entry)\
+                .execute()
+            
+            return result.data[0] if result.data else None
+            
+        except Exception as e:
+            logger.error(f"Error saving to history: {str(e)}")
+            return None
+
+    async def handle_message(self, request_data: dict):
+        """Handle incoming message with conversational logic"""
+        try:
+            user_mssg = request_data.get('user_mssg', '')
+            session_id = request_data.get('session_id', '')
+            user_id = request_data.get('user_id', '')
+            agent_name = request_data.get('agent_name', 'presaleskb')
+            request_id = request_data.get('request_id', str(uuid.uuid4()))
+
+            # Skip empty messages
+            if not user_mssg.strip():
+                return {
+                    'status': 'error',
+                    'message': 'Empty message received'
+                }
+
+            # Check cache first
+            cached_response = await self.get_cached_response(request_id)
+            if cached_response:
+                return cached_response
+
+            # Process the message
+            response = await self.process_message(user_mssg, session_id, user_id, agent_name)
+
+            # Cache the response
+            await self.cache_response(request_id, response)
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error handling message: {str(e)}")
+            raise
+
+    async def process_message(self, user_mssg: str, session_id: str, user_id: str, agent_name: str):
+        """Process the actual message and get response from n8n"""
+        try:
+            # Prepare payload for n8n
+            payload = {
+                'user_id': user_id,
+                'user_mssg': user_mssg,
+                'session_id': session_id,
+                'agent_name': agent_name,
+                '_original_message': user_mssg  # Store original message for history
+            }
+
+            # Call n8n webhook
+            async with httpx.AsyncClient(timeout=None) as client:
+                response = await client.post(self.n8n_url, json=payload)
+                response.raise_for_status()
+                n8n_response = response.json()
+                
+                # Log the full N8N response for testing
+                print("\n" + "="*80)
+                print("N8N RESPONSE DEBUG:")
+                print("="*80)
+                print(json.dumps(n8n_response, indent=2))
+                print("="*80 + "\n")
+
+            # Format response
+            formatted_response = {
+                'status': n8n_response.get('status', 'success'),
+                'agent_name': n8n_response.get('agent_name', agent_name),
+                'agent_response': n8n_response.get('agent_response', ''),
+                'conversation_state': n8n_response.get('conversation_state', 'complete'),
+                'missing_info': n8n_response.get('missing_info', []),
+                'timestamp': datetime.now().isoformat()
+            }
+
+            return formatted_response
+
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
+
+# Client KB Manager Class
+class ClientKBManager:
+    def __init__(self, supabase_client):
+        self.supabase = supabase_client
+        
+    async def update_client_kb(self, user_id: str, query: str, agent_name: str):
+        """Update client's knowledge base with new query"""
+        try:
+            # Get existing KB entries for this user
+            existing_entries = self.supabase.table('client_kb')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('agent_name', agent_name)\
+                .execute()
+            
+            # Update or insert new entry
+            entry = {
+                'user_id': user_id,
+                'agent_name': agent_name,
+                'query': query,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            if existing_entries.data:
+                # Update existing entry
+                entry_id = existing_entries.data[0]['id']
+                result = self.supabase.table('client_kb')\
+                    .update(entry)\
+                    .eq('id', entry_id)\
+                    .execute()
+            else:
+                # Insert new entry
+                result = self.supabase.table('client_kb')\
+                    .insert(entry)\
+                    .execute()
+            
+            return result.data[0] if result.data else None
+            
+        except Exception as e:
+            logger.error(f"Error updating client KB: {str(e)}")
+            return None
+
+# Dynamic Agent KB Handler Class
+class DynamicAgentKBHandler:
+    def __init__(self, supabase_client):
+        self.supabase = supabase_client
+        
+    async def update_agent_kb(self, agent_name: str, query: str, user_id: str):
+        """Update agent's knowledge base with new query"""
+        try:
+            # Get existing KB entries for this agent
+            existing_entries = self.supabase.table('agent_kb')\
+                .select('*')\
+                .eq('agent_name', agent_name)\
+                .execute()
+            
+            # Update or insert new entry
+            entry = {
+                'agent_name': agent_name,
+                'query': query,
+                'user_id': user_id,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            if existing_entries.data:
+                # Update existing entry
+                entry_id = existing_entries.data[0]['id']
+                result = self.supabase.table('agent_kb')\
+                    .update(entry)\
+                    .eq('id', entry_id)\
+                    .execute()
+            else:
+                # Insert new entry
+                result = self.supabase.table('agent_kb')\
+                    .insert(entry)\
+                    .execute()
+            
+            return result.data[0] if result.data else None
+            
+        except Exception as e:
+            logger.error(f"Error updating agent KB: {str(e)}")
+            return None
+
+# Import requests after handler classes
 import requests
 
 load_dotenv()
@@ -36,6 +415,8 @@ app = FastAPI()
 logger = logging.getLogger(__name__)
 active_connections: Dict[str, WebSocket] = {}
 streaming_sessions: Dict[str, Dict[str, Any]] = {}
+# Request deduplication cache
+request_cache: Dict[str, float] = {}
 
 # Environment variables
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -51,12 +432,30 @@ N8N_STREAM_TEST_TEST = os.getenv("N8N_STREAM_TEST_TEST")
 
 print(f"Using Supabase URL: {SUPABASE_URL}")
 
-background_results = {}
-running_tasks: Dict[str, Dict[str, Any]] = {}
+# Initialize Supabase client
+def create_supabase_client() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# Initialize handlers
+active_connections: Dict[str, WebSocket] = {}
+active_requests: Set[str] = set()
 
 # Initialize Supabase client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = create_supabase_client()
+
+# Initialize handlers
+agent_matcher = AgentMatcher(supabase_client=supabase)
+conversational_handler = ConversationalHandler(
+    supabase_client=supabase,
+    n8n_url=os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')
+)
+client_kb_manager = ClientKBManager(supabase_client=supabase)
+dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
+
+print("Application initialized")
+
+background_results = {}
+running_tasks: Dict[str, Dict[str, Any]] = {}
 
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -67,6 +466,11 @@ AGENT_DESCRIPTIONS = {
 
 
 # Models
+class WebsiteFaviconRequest(BaseModel):
+    url: str
+    session_id: str
+    user_id: str
+
 class N8nMainRequest(BaseModel):
     user_id: str
     user_mssg: str
@@ -151,23 +555,18 @@ class WebsiteScreenshotRequest(BaseModel):
     session_id: Optional[str] = None
     user_id: Optional[str] = None
 
-class WebsiteFaviconRequest(BaseModel):
-    url: str
-    session_id: Optional[str] = None
-    user_id: Optional[str] = None
-
 # Agent Matcher Class using Vector Search
 class AgentMatcher:
     def __init__(self, supabase_client, openai_api_key: str = None):
         self.supabase = supabase_client
         self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        # Use the new OpenAI client
         self.openai_client = OpenAI(api_key=self.openai_api_key)
-        
+        self._cache = {}  # Cache for agent matching results
+        self._cache_ttl = 300  # Cache TTL in seconds (5 minutes)
+
     async def get_query_embedding(self, text: str) -> List[float]:
         """Generate embedding for the query text using OpenAI"""
         try:
-            # New v1.0+ syntax
             response = self.openai_client.embeddings.create(
                 model="text-embedding-3-small",
                 input=text
@@ -176,77 +575,106 @@ class AgentMatcher:
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
             raise
-    
+
     async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.3) -> tuple:
         """Check if a specific agent matches the user query using vector similarity"""
         try:
-            query_embedding = await self.get_query_embedding(user_query)
+            # Check if this is a basic greeting or general question that any agent can handle
+            basic_patterns = [
+                'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
+                'who are you', 'what are you', 'introduce yourself', 'tell me about yourself',
+                'what do you do', 'what can you help with', 'how can you help', 'what services',
+                'greetings', 'salutations', 'yo', 'howdy', 'how are you', 'how do you do',
+                'nice to meet you', 'pleased to meet you', 'what is this', 'explain this',
+                'help', 'assistance', 'support', 'info', 'information', 'thanks', 'thank you'
+            ]
             
-            # Debug: Check embedding dimensions
-            # print(f"Query embedding dimensions: {len(query_embedding)}")
-            # print(f"First 5 values of query embedding: {query_embedding[:5]}")
+            query_lower = user_query.lower().strip()
+            is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
             
-            # result = self.supabase.rpc(
-            #     'match_agent_documents',
-            #     {
-            #         'query_embedding': query_embedding,
-            #         'match_threshold': threshold,
-            #         'match_count': 1,
-            #         'filter_agent': agent_name
-            #     }
-            # ).execute()
-
-            result = self.supabase.rpc(
-                'match_agent_documents',
-                {
-                    'query_embedding': query_embedding,  # Pass as list, not string
-                    'match_threshold': threshold,
-                    'match_count': 1,
-                    'filter_agent': agent_name
-                }
-            ).execute()
-
-            print(f"Agent match result: {result.data}")
-            
-            # Return both boolean and data for debugging
-            return (len(result.data) > 0 and result.data[0]['similarity'] >= threshold)
-            #, result.data
-        
-        except Exception as e:
-            logger.error(f"Error checking agent match: {str(e)}")
-            # Fallback check
+            if is_basic:
+                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
+                return True
+                
+            # Skip check if agent doesn't exist
             agent_check = self.supabase.table('agent_documents')\
                 .select('id')\
                 .eq('agent_name', agent_name)\
                 .limit(1)\
                 .execute()
-            return len(agent_check.data) > 0, []
-    
+            
+            if not agent_check.data:
+                print(f"⚠️ Warning: No documents found for agent '{agent_name}' in database")
+                return False
+
+            # Get cached result if exists
+            cache_key = f"agent_match_{agent_name}_{user_query}"
+            cached = self._cache.get(cache_key)
+            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['result']
+
+            query_embedding = await self.get_query_embedding(user_query)
+            
+            result = self.supabase.rpc(
+                'match_agent_documents',
+                {
+                    'query_embedding': query_embedding,
+                    'match_threshold': threshold,
+                    'match_count': 1,
+                    'filter_agent': agent_name
+                }
+            ).execute()
+            
+            # Debug logging
+            if result.data:
+                print(f"  Vector search result: {len(result.data)} matches found")
+                if len(result.data) > 0:
+                    print(f"  Best match similarity: {result.data[0]['similarity']:.3f} (threshold: {threshold})")
+            else:
+                print(f"  Vector search result: No matches found for agent '{agent_name}'")
+
+            match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
+            
+            # Cache the result
+            self._cache[cache_key] = {
+                'result': match_result,
+                'timestamp': datetime.now()
+            }
+
+            # Only log for real queries
+            if user_query and user_query.strip():
+                if match_result:
+                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query")
+                else:
+                    print(f"✗ Agent match FAILED: {agent_name} - checking for better alternatives...")
+            return match_result
+            
+        except Exception as e:
+            logger.error(f"Error checking agent match: {str(e)}")
+            return False
+
     async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[Tuple[str, float]]:
         """Find the best matching agents for a user query using vector similarity"""
         try:
+            # Get cached result if exists
+            cache_key = f"best_agents_{user_query}"
+            cached = self._cache.get(cache_key)
+            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['result']
+
             query_embedding = await self.get_query_embedding(user_query)
             
-            # result = self.supabase.rpc(
-            #     'match_agents_by_similarity',
-            #     {
-            #         'query_embedding': query_embedding,
-            #         'match_threshold': 0.5,
-            #         'match_count': top_n * 5
-            #     }
-            # ).execute()
-
             result = self.supabase.rpc(
                 'match_agents_by_similarity',
                 {
-                    'query_embedding': query_embedding,  # Pass as list, not string
+                    'query_embedding': query_embedding,
                     'match_threshold': 0.3,
                     'match_count': top_n * 5
                 }
             ).execute()
             
             if not result.data:
-                return [('No Result', 100.0)]
+                return [('presaleskb', 50.0)]
             
             agent_scores = {}
             for item in result.data:
@@ -257,24 +685,195 @@ class AgentMatcher:
                     agent_scores[agent_name] = similarity
             
             sorted_agents = sorted(agent_scores.items(), key=lambda x: x[1], reverse=True)
+            
+            # Cache the result
+            self._cache[cache_key] = {
+                'result': sorted_agents[:top_n],
+                'timestamp': datetime.now()
+            }
+            
             return sorted_agents[:top_n]
             
         except Exception as e:
             logger.error(f"Error finding best agents: {str(e)}")
             return [('presaleskb', 50.0)]
-    
+
     async def get_recommended_agent(self, user_query: str) -> str:
         """Get the single best recommended agent for a query"""
-        best_agents = await self.find_best_agents(user_query, top_n=1)
-        
-        if best_agents and best_agents[0][1] >= 60:
-            return best_agents[0][0]
-        
-        return 'presaleskb'
+        try:
+            # Get cached result if exists
+            cache_key = f"recommended_agent_{user_query}"
+            cached = self._cache.get(cache_key)
+            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['result']
+
+            best_agents = await self.find_best_agents(user_query, top_n=1)
+            
+            if best_agents and best_agents[0][1] >= 60:
+                agent = best_agents[0][0]
+            else:
+                agent = 'presaleskb'
+
+            # Cache the result
+            self._cache[cache_key] = {
+                'result': agent,
+                'timestamp': datetime.now()
+            }
+            
+            return agent
+            
+        except Exception as e:
+            logger.error(f"Error getting recommended agent: {str(e)}")
+            return 'presaleskb'
 
 # Conversational Handler Class
 class ConversationalHandler:
-    def __init__(self, supabase_client, n8n_webhook_url: str):
+    def __init__(self, supabase_client, n8n_url: str = os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')):
+        self._cache = {}
+        self._cache_ttl = 300
+        self.supabase = supabase_client
+        self.n8n_url = n8n_url
+
+    def _get_cache_key(self, request_id):
+        return f"response_{request_id}"
+
+    async def cache_response(self, request_id: str, response: dict):
+        """Cache a response with TTL"""
+        cache_key = self._get_cache_key(request_id)
+        self._cache[cache_key] = {
+            'response': response,
+            'timestamp': datetime.now()
+        }
+
+    async def get_cached_response(self, request_id: str):
+        """Get cached response if it exists and is not expired"""
+        cache_key = self._get_cache_key(request_id)
+        if cache_key in self._cache:
+            cached = self._cache[cache_key]
+            if (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
+                return cached['response']
+            del self._cache[cache_key]
+        return None
+
+    async def save_to_history(self, session_id: str, user_id: str, user_message: str, agent_response: str):
+        """Save message to chat history"""
+        try:
+            entry = {
+                'session_id': session_id,
+                'user_id': user_id,
+                'user_message': user_message,
+                'agent_response': agent_response,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            result = self.supabase.table('chat_history')\
+                .insert(entry)\
+                .execute()
+            
+            return result.data[0] if result.data else None
+            
+        except Exception as e:
+            logger.error(f"Error saving to history: {str(e)}")
+            return None
+
+    async def handle_message(self, request_data: dict):
+        """Handle incoming message with conversational logic"""
+        try:
+            user_mssg = request_data.get('user_mssg', '')
+            session_id = request_data.get('session_id', '')
+            user_id = request_data.get('user_id', '')
+            agent_name = request_data.get('agent_name', 'presaleskb')
+            request_id = request_data.get('request_id', str(uuid.uuid4()))
+
+            # Skip empty messages
+            if not user_mssg.strip():
+                return {
+                    'status': 'error',
+                    'message': 'Empty message received'
+                }
+
+            # Check cache first
+            cached_response = await self.get_cached_response(request_id)
+            if cached_response:
+                return cached_response
+
+            # Process the message
+            response = await self.process_message(user_mssg, session_id, user_id, agent_name)
+
+            # Cache the response
+            await self.cache_response(request_id, response)
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error handling message: {str(e)}")
+            raise
+
+    async def process_message(self, user_mssg: str, session_id: str, user_id: str, agent_name: str):
+        """Process the actual message and get response from n8n"""
+        try:
+            # Prepare payload for n8n
+            payload = {
+                'user_id': user_id,
+                'user_mssg': user_mssg,
+                'session_id': session_id,
+                'agent_name': agent_name,
+                '_original_message': user_mssg  # Store original message for history
+            }
+
+            # Call n8n webhook
+            async with httpx.AsyncClient(timeout=None) as client:
+                response = await client.post(self.n8n_url, json=payload)
+                response.raise_for_status()
+                n8n_response = response.json()
+                
+                # Log the full N8N response for testing
+                print("\n" + "="*80)
+                print("N8N RESPONSE DEBUG:")
+                print("="*80)
+                print(json.dumps(n8n_response, indent=2))
+                print("="*80 + "\n")
+
+            # Format response
+            formatted_response = {
+                'status': n8n_response.get('status', 'success'),
+                'agent_name': n8n_response.get('agent_name', agent_name),
+                'agent_response': n8n_response.get('agent_response', ''),
+                'conversation_state': n8n_response.get('conversation_state', 'complete'),
+                'missing_info': n8n_response.get('missing_info', []),
+                'timestamp': datetime.now().isoformat()
+            }
+
+            return formatted_response
+
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
+
+    async def get_cached_response(self, request_id):
+        """Get cached response if available"""
+        cache_key = self._get_cache_key(request_id)
+        if cache_key in self._cache:
+            cached_data = self._cache[cache_key]
+            if (datetime.now() - cached_data['timestamp']).total_seconds() < self._cache_ttl:
+                return cached_data['response']
+            else:
+                # Remove expired cache entry
+                del self._cache[cache_key]
+                return None
+        return None
+        return None
+
+    async def cache_response(self, request_id, response):
+        """Cache a response"""
+        cache_key = self._get_cache_key(request_id)
+        self._cache[cache_key] = {
+            'response': response,
+            'timestamp': time.time()
+        }
         self.supabase = supabase_client
         self.n8n_url = n8n_webhook_url
         self.conversation_states: Dict[str, Dict[str, Any]] = {}
@@ -347,32 +946,12 @@ class ConversationalHandler:
             'original_message': user_message
         }
     
-    async def generate_contextual_prompt(self, user_message: str, missing_info: List[str], context: Dict[str, Any]) -> str:
-        """Generate a prompt that will make the agent ask for missing info naturally"""
-        conversation_history = context.get('conversation_history', [])
-        
-        history_text = "\n".join([f"{msg['role']}: {msg['message']}" for msg in conversation_history[-5:]])
-        
-        prompt = f"""Previous conversation:
-{history_text}
-
-User's current message: {user_message}
-
-You need to collect the following information before you can fully answer: {', '.join(missing_info)}
-
-Instructions:
-1. First acknowledge the user's question
-2. If you can provide partial information, do so
-3. Then naturally ask for the missing information
-4. Explain why you need this information
-5. Be conversational and helpful
-
-Missing information needed:
-{chr(10).join([f"- {info}: " + self.get_info_description(info) for info in missing_info])}
-
-Respond naturally while collecting this information."""
-        
-        return prompt
+    # DEPRECATED: No longer used - N8N workflow handles instruction logic internally
+    # async def generate_contextual_prompt(self, user_message: str, missing_info: List[str], context: Dict[str, Any]) -> str:
+    #     """Generate a prompt that will make the agent ask for missing info naturally"""
+    #     # This function is deprecated - we now send simple user messages to N8N
+    #     # and let the N8N workflow handle all conversation logic internally
+    #     return user_message
     
     def get_info_description(self, info_type: str) -> str:
         """Get description for each type of information"""
@@ -496,13 +1075,22 @@ Respond naturally while collecting this information."""
             logger.info(f"Auto-selected agent: {agent_name} for query: {user_message}")
         
         else:
-            is_appropriate = await agent_matcher.check_agent_match(agent_name, user_message)
-            if not is_appropriate:
-                better_agents = await agent_matcher.find_best_agents(user_message, top_n=1)
-                if better_agents and better_agents[0][1] > 70:
-                    request_data['_suggested_agent'] = better_agents[0][0]
-                    request_data['_suggestion_confidence'] = better_agents[0][1]
-                    logger.warning(f"Agent mismatch: {agent_name} may not be optimal. Suggested: {better_agents[0][0]}")
+            # Only check for non-empty messages
+            if user_message and user_message.strip():
+                is_appropriate = await agent_matcher.check_agent_match(agent_name, user_message)
+                if not is_appropriate:
+                    better_agents = await agent_matcher.find_best_agents(user_message, top_n=1)
+                    if better_agents and better_agents[0][1] > 70:
+                        request_data['_suggested_agent'] = better_agents[0][0]
+                        request_data['_suggestion_confidence'] = better_agents[0][1]
+                        suggested_name = better_agents[0][0]
+                        print(f"→ Better agent found: {suggested_name} (confidence: {better_agents[0][1]:.1f}%)")
+                    else:
+                        suggested_name = "None"
+                        print(f"→ No better agent found (all matches below 70% threshold)")
+                    logger.warning(f"Agent mismatch: {agent_name} may not be optimal. Suggested: {suggested_name}")
+                else:
+                    print(f"→ Agent {agent_name} is appropriate for this query")
         
         context = await self.get_conversation_context(session_id, user_id)
         
@@ -519,14 +1107,11 @@ Respond naturally while collecting this information."""
         n8n_payload = request_data.copy()
         
         if not requirements['has_all_required'] and intent['type'] == 'general_query':
-            contextual_prompt = await self.generate_contextual_prompt(
-                user_message, 
-                requirements['missing_info'], 
-                context
-            )
-            n8n_payload['user_mssg'] = contextual_prompt
-            n8n_payload['_original_message'] = user_message
+            # Keep the original user message instead of generating complex prompts
+            # N8N workflow should handle information collection logic internally
+            n8n_payload['user_mssg'] = user_message
             n8n_payload['_missing_info'] = requirements['missing_info']
+            n8n_payload['_requires_info'] = True
         
         return n8n_payload
     
@@ -1070,10 +1655,21 @@ class DynamicAgentKBHandler:
             return ["Could you provide more details about your requirements?"]
 
 # Initialize handlers
+active_connections: Dict[str, WebSocket] = {}
+active_requests: Set[str] = set()
+
+# Initialize Supabase client
+supabase = create_supabase_client()
+
+# Initialize handlers
 agent_matcher = AgentMatcher(supabase_client=supabase)
 conversational_handler = ConversationalHandler(
     supabase_client=supabase,
+<<<<<<< HEAD
     n8n_webhook_url=N8N_STREAM_TEST
+=======
+    n8n_url=os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')
+>>>>>>> 7b575fb (Fix agent matching and basic greeting detection)
 )
 client_kb_manager = ClientKBManager(supabase_client=supabase)
 dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
@@ -1090,7 +1686,11 @@ async def save_message_to_history(session_id: str, sender: str, message: str):
 
 async def call_n8n_webhook(payload: Dict[str, Any]):
     """Call the n8n webhook and return the response"""
+<<<<<<< HEAD
     n8n_url = N8N_STREAM_TEST
+=======
+    n8n_url = os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')
+>>>>>>> 7b575fb (Fix agent matching and basic greeting detection)
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
     #"https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
     #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
@@ -1099,7 +1699,16 @@ async def call_n8n_webhook(payload: Dict[str, Any]):
         try:
             response = await client.post(n8n_url, json=payload)
             response.raise_for_status()
-            return response.json()
+            result = response.json()
+            
+            # Log the webhook response for debugging
+            print("\n" + "="*60)
+            print("CALL_N8N_WEBHOOK - RAW RESPONSE:")
+            print("="*60)
+            print(json.dumps(result, indent=2))
+            print("="*60 + "\n")
+            
+            return result
         except httpx.HTTPStatusError as e:
             logger.error(f"N8N HTTP error: {e.response.status_code} - {e.response.text}")
             raise HTTPException(status_code=e.response.status_code, detail=f"N8N error: {e.response.text}")
@@ -1167,6 +1776,24 @@ async def health_check_detailed():
         "streaming_sessions": len(streaming_sessions)
     }
 
+@app.get("/debug/agent-docs/{agent_name}")
+async def debug_agent_docs(agent_name: str):
+    """Debug endpoint to check agent documents in database"""
+    try:
+        docs = supabase.table('agent_documents')\
+            .select('id, content')\
+            .eq('agent_name', agent_name)\
+            .execute()
+        
+        return {
+            "agent_name": agent_name,
+            "documents_found": len(docs.data) if docs.data else 0,
+            "documents": docs.data[:3] if docs.data else [],  # Show first 3 docs
+            "sample_content": docs.data[0]['content'][:200] + "..." if docs.data else None
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 # Agent matching endpoints
 # @app.post("/api/agents/check-match")
 # async def check_agent_match_endpoint(agent_name: str, user_query: str):
@@ -1215,6 +1842,23 @@ async def n8n_check_agent_match(request: N8nCheckAgentMatchRequest):
         
         query_embedding = await agent_matcher.get_query_embedding(request.user_query)
         
+        # Debug logging
+        print(f"\n🔍 DEBUG - Agent Match Check:")
+        print(f"  Agent: {request.agent_name}")
+        print(f"  Query: {request.user_query}")
+        print(f"  Threshold: {request.threshold}")
+        # Query embedding generated successfully
+        
+        # Check if agent documents exist
+        agent_docs = agent_matcher.supabase.table('agent_documents')\
+            .select('id, content')\
+            .eq('agent_name', request.agent_name)\
+            .execute()
+        
+        print(f"  Agent documents found: {len(agent_docs.data) if agent_docs.data else 0}")
+        if agent_docs.data:
+            print(f"  First document preview: {agent_docs.data[0]['content'][:100]}...")
+        
         result = agent_matcher.supabase.rpc(
             'match_agent_documents',
             {
@@ -1224,6 +1868,10 @@ async def n8n_check_agent_match(request: N8nCheckAgentMatchRequest):
                 'filter_agent': request.agent_name
             }
         ).execute()
+        
+        print(f"  Vector search results: {len(result.data) if result.data else 0}")
+        if result.data:
+            print(f"  Best similarity: {result.data[0]['similarity']:.4f}")
         
         confidence = result.data[0]['similarity'] if result.data else 0.0
         
@@ -1240,7 +1888,6 @@ async def n8n_check_agent_match(request: N8nCheckAgentMatchRequest):
             "threshold_used": request.threshold,
             "recommendation": recommendation,
             "result": result.data,
-            "query_embedding": query_embedding,
             "status": "success"
         }
         
@@ -1846,55 +2493,117 @@ async def refresh_agent_kb(agent_name: str):
 async def n8n_main_request(request: N8nMainRequest, agent_name: str, session_id: str):
     """Handle main request to n8n workflow with conversational logic"""
     try:
-
+        # Generate a unique request ID
+        request_id = request.request_id or str(uuid.uuid4())
+        
         request.agent_name = agent_name
         request.session_id = session_id
-
-        request_id = str(uuid.uuid4())
         
-        if not request.timestamp_of_call_made:
-            request.timestamp_of_call_made = datetime.now().isoformat()
+        # Skip empty messages
+        if not request.user_mssg or request.user_mssg.strip() == "":
+            logger.info("Skipping empty message")
+            return {
+                "status": "success",
+                "message": "Empty message ignored",
+                "request_id": request_id
+            }
         
-        request_data = {
-            "user_id": request.user_id,
-            "user_mssg": request.user_mssg,
-            "session_id": request.session_id,
-            "agent_name": request.agent_name,
-            "timestamp_of_call_made": request.timestamp_of_call_made,
-            "request_id": request_id
-        }
+        # Deduplicate requests
+        request_key = f"{session_id}:{request.user_mssg}:{agent_name}"
+        current_time = time.time()
         
+<<<<<<< HEAD
         # n8n_payload = await conversational_handler.handle_message(request_data)
         n8n_payload = request_data
+=======
+        # Check if duplicate within 2 seconds
+        if request_key in request_cache:
+            if current_time - request_cache[request_key] < 2.0:
+                logger.info(f"Duplicate request detected: {request.user_mssg[:30]}...")
+                return {
+                    "status": "success",
+                    "message": "Duplicate request ignored",
+                    "request_id": request_id,
+                    "agent_response": "Processing your previous message..."
+                }
+>>>>>>> 7b575fb (Fix agent matching and basic greeting detection)
         
-        logger.info(f"Sending to n8n: {n8n_payload}")
+        request_cache[request_key] = current_time
         
-        n8n_response = await call_n8n_webhook(n8n_payload)
+        # Clean old cache entries
+        for k in list(request_cache.keys()):
+            if current_time - request_cache[k] > 10:
+                del request_cache[k]
         
-        logger.info(f"Received from n8n: {n8n_response}")
-        
-        formatted_response = {
-            "user_id": n8n_response.get("user_id", request.user_id),
-            "agent_name": n8n_response.get("agent_name", request.agent_name),
-            "agent_response": n8n_response.get("agent_response", n8n_response.get("agent_responses", "")),
-            "responses": n8n_response.get("responses", []),
-            "timestamp": n8n_response.get("timestamp", datetime.now().isoformat()),
-            "status": n8n_response.get("status", "success"),
-            "request_id": request_id,
-            "conversation_state": n8n_response.get("conversation_state", "complete"),
-            "missing_info": n8n_response.get("missing_info", []),
-            "images": extract_image_urls(n8n_response.get("agent_response", ""))  # Add this
-        }
-        
-        await conversational_handler.save_to_history(
-            request.session_id,
-            request.user_id,
-            request_data.get("_original_message", request.user_mssg),
-            formatted_response["agent_response"]
-        )
-        
-        return formatted_response
-        
+        # Only process the request if it's not an initial message or session change
+        if request.user_mssg and request.user_mssg.strip() != "":
+            request_data = {
+                "user_id": request.user_id,
+                "user_mssg": request.user_mssg,
+                "session_id": request.session_id,
+                "agent_name": request.agent_name,
+                "timestamp_of_call_made": datetime.now().isoformat(),
+                "request_id": request_id
+            }
+            
+            # Check cache first
+            cached_response = await conversational_handler.get_cached_response(request_id)
+            if cached_response:
+                logger.info(f"Returning cached response for request_id: {request_id}")
+                return cached_response
+                
+            n8n_payload = await conversational_handler.handle_message(request_data)
+            logger.info(f"Sending to n8n: {n8n_payload}")
+            
+            n8n_response = await call_n8n_webhook(n8n_payload)
+            
+            # Enhanced logging for debugging
+            print("\n" + "="*80)
+            print("N8N MAIN REQUEST - FULL RESPONSE:")
+            print("="*80)
+            print(f"Request ID: {request_id}")
+            print(f"Session ID: {session_id}")
+            print(f"Agent: {agent_name}")
+            print(f"User Message: {request.user_mssg}")
+            print("-"*80)
+            print("N8N Response:")
+            print(json.dumps(n8n_response, indent=2))
+            print("="*80 + "\n")
+            
+            logger.info(f"Received from n8n: {n8n_response}")
+            
+            formatted_response = {
+                "user_id": n8n_response.get("user_id", request.user_id),
+                "agent_name": n8n_response.get("agent_name", request.agent_name),
+                "agent_response": n8n_response.get("agent_response", n8n_response.get("agent_responses", "")),
+                "responses": n8n_response.get("responses", []),
+                "timestamp": n8n_response.get("timestamp", datetime.now().isoformat()),
+                "status": n8n_response.get("status", "success"),
+                "request_id": request_id,
+                "conversation_state": n8n_response.get("conversation_state", "complete"),
+                "missing_info": n8n_response.get("missing_info", []),
+                "images": extract_image_urls(n8n_response.get("agent_response", ""))
+            }
+            
+            # Cache the response
+            await conversational_handler.cache_response(request_id, formatted_response)
+            
+            await conversational_handler.save_to_history(
+                request.session_id,
+                request.user_id,
+                request_data.get("_original_message", request.user_mssg),
+                formatted_response["agent_response"]
+            )
+            
+            return formatted_response
+        else:
+            # For initial messages or empty messages, just return a success response
+            return {
+                "status": "success",
+                "message": "Initial message received",
+                "request_id": request_id
+            }
+            
     except HTTPException:
         raise
     except Exception as e:
@@ -2363,6 +3072,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     active_connections[connection_id] = websocket
     
     try:
+        # Send initial connection status
         await websocket.send_json({
             "type": "connection_status",
             "status": "connected",
@@ -2371,33 +3081,53 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         })
         
         while True:
-            data = await websocket.receive_text()
-            message_data = json.loads(data)
-            
-            request_id = message_data.get("requestId", str(uuid.uuid4()))
-            
-            user_input = message_data.get("message", "").strip()
-            
-            await websocket.send_json({
-                "type": "ack",
-                "requestId": request_id,
-                "message": "Message received, processing...",
-                "timestamp": int(time.time() * 1000)
-            })
-            
-            n8n_payload = {
-                "user_id": user_id,
-                "user_mssg": user_input,
-                "session_id": session_id,
-                "agent_name": message_data.get("agent", "presaleskb"),
-                "timestamp_of_call_made": datetime.now().isoformat(),
-                "request_id": request_id
-            }
-            
-            asyncio.create_task(
-                process_n8n_request_async(n8n_payload, websocket, request_id)
-            )
-            
+            try:
+                data = await websocket.receive_text()
+                message_data = json.loads(data)
+                
+                request_id = message_data.get("requestId", str(uuid.uuid4()))
+                
+                user_input = message_data.get("message", "").strip()
+                
+                # Skip processing for empty messages or connection status messages
+                if not user_input or message_data.get("type") == "connection_status":
+                    continue
+                    
+                # Check if this request is already being processed
+                if request_id in active_requests:
+                    logger.info(f"Request {request_id} is already being processed, skipping")
+                    continue
+                    
+                active_requests.add(request_id)
+                
+                try:
+                    await websocket.send_json({
+                        "type": "ack",
+                        "requestId": request_id,
+                        "message": "Message received, processing...",
+                        "timestamp": int(time.time() * 1000)
+                    })
+                    
+                    n8n_payload = {
+                        "user_id": user_id,
+                        "user_mssg": user_input,
+                        "session_id": session_id,
+                        "agent_name": message_data.get("agent", "presaleskb"),
+                        "timestamp_of_call_made": datetime.now().isoformat(),
+                        "request_id": request_id
+                    }
+                    
+                    asyncio.create_task(
+                        process_n8n_request_async(n8n_payload, websocket, request_id)
+                    )
+                    
+                finally:
+                    active_requests.discard(request_id)
+                    
+            except json.JSONDecodeError:
+                logger.warning("Invalid JSON received, skipping")
+                continue
+                
     except WebSocketDisconnect:
         if connection_id in active_connections:
             del active_connections[connection_id]
