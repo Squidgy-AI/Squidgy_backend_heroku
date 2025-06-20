@@ -1,55 +1,52 @@
 # main.py - Complete integration with conversational handler and vector search agent matching
-from typing import Dict, Any, Optional, AsyncGenerator, List, Tuple, Set
-import httpx
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+
+# Standard library imports
+import asyncio
 import json
 import logging
+import os
 import time
 import uuid
-import asyncio
+from collections import deque
 from datetime import datetime
 from enum import Enum
-from supabase import create_client, Client
-import os
-# import openai
-from openai import OpenAI
+from typing import Dict, Any, Optional, List, Set
+
+# Third-party imports
+import httpx
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from openai import OpenAI
+from pydantic import BaseModel
+from supabase import create_client, Client
 
-from fastapi import BackgroundTasks
-
-import aiohttp
-from concurrent.futures import ThreadPoolExecutor
+# Local imports
 from agent_config import get_agent_config, AGENTS
-
-# Add this near the top with other imports
 from Website.web_scrape import capture_website_screenshot_async, get_website_favicon_async
+from embedding_service import get_embedding
 
 # Handler classes
 
 class AgentMatcher:
-    def __init__(self, supabase_client, openai_api_key: str = None):
+    def __init__(self, supabase_client):
         self.supabase = supabase_client
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        self.openai_client = OpenAI(api_key=self.openai_api_key)
         self._cache = {}  # Cache for agent matching results
         self._cache_ttl = 300  # Cache TTL in seconds (5 minutes)
 
     async def get_query_embedding(self, text: str) -> List[float]:
-        """Generate embedding for the query text using OpenAI"""
+        """Generate embedding for the query text using free embedding service"""
         try:
-            response = self.openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
-            )
-            return response.data[0].embedding
+            embedding = get_embedding(text)
+            if embedding is None:
+                raise Exception("Failed to generate embedding")
+            return embedding
         except Exception as e:
             logger.error(f"Error generating embedding: {str(e)}")
             raise
 
-    async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.3) -> tuple:
+    async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.2) -> bool:
         """Check if a specific agent matches the user query using vector similarity"""
         try:
             # Skip check if agent doesn't exist
@@ -60,7 +57,7 @@ class AgentMatcher:
                 .execute()
             
             if not agent_check.data:
-                print(f"⚠️ Warning: No documents found for agent '{agent_name}' in database")
+                logger.warning(f"No documents found for agent '{agent_name}' in database")
                 return False
 
             # Get cached result if exists
@@ -69,28 +66,7 @@ class AgentMatcher:
             if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
                 return cached['result']
 
-            # Always perform vector search first to get similarity score
-            query_embedding = await self.get_query_embedding(user_query)
-            
-            result = self.supabase.rpc(
-                'match_agent_documents',
-                {
-                    'query_embedding': query_embedding,
-                    'match_threshold': threshold,
-                    'match_count': 1,
-                    'filter_agent': agent_name
-                }
-            ).execute()
-            
-            # Debug logging
-            if result.data:
-                print(f"  Vector search result: {len(result.data)} matches found")
-                if len(result.data) > 0:
-                    print(f"  Best match similarity: {result.data[0]['similarity']:.3f} (threshold: {threshold})")
-            else:
-                print(f"  Vector search result: No matches found for agent '{agent_name}'")
-
-            # Check if this is a basic greeting or general question that any agent can handle
+            # Check if this is a basic greeting - any agent can handle these
             basic_patterns = [
                 'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
                 'who are you', 'what are you', 'introduce yourself', 'tell me about yourself',
@@ -103,40 +79,40 @@ class AgentMatcher:
             query_lower = user_query.lower().strip()
             is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
             
-            # Calculate confidence score
-            confidence = result.data[0]['similarity'] if result.data else 0.0
-            
-            # For basic queries, always return True regardless of similarity score
-            # But set a minimum confidence just above threshold (0.4) for basic queries
             if is_basic:
-                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
+                logger.debug(f"Basic query detected: Any agent can handle: '{user_query}'")
                 match_result = True
-                # Basic queries should have reasonable confidence above threshold
-                if confidence < 0.4:
-                    confidence = 0.4
             else:
-                # For non-basic queries, use the similarity threshold
-                match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
+                # Perform vector search for specific queries
+                query_embedding = await self.get_query_embedding(user_query)
+                
+                result = self.supabase.rpc(
+                    'match_agent_documents',
+                    {
+                        'query_embedding': query_embedding,
+                        'match_threshold': threshold,
+                        'match_count': 1,
+                        'filter_agent': agent_name
+                    }
+                ).execute()
+                
+                # Simple check: if we have results above threshold, it's a match
+                match_result = bool(result.data and len(result.data) > 0)
             
-            # Cache the result with confidence
+            # Cache the result
             self._cache[cache_key] = {
-                'result': (match_result, confidence),
+                'result': match_result,
                 'timestamp': datetime.now()
             }
 
-            # Only log for real queries
-            if user_query and user_query.strip():
-                if match_result:
-                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query (confidence: {confidence:.3f})")
-                else:
-                    print(f"✗ Agent match FAILED: {agent_name} - checking for better alternatives...")
-            return match_result, confidence
+            logger.debug(f"Agent match {agent_name}: {'SUCCESS' if match_result else 'FAILED'}")
+            return match_result
             
         except Exception as e:
             logger.error(f"Error checking agent match: {str(e)}")
-            return False, 0.0
+            return False
 
-    async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[Tuple[str, float]]:
+    async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[str]:
         """Find the best matching agents for a user query using vector similarity"""
         try:
             # Get cached result if exists
@@ -151,35 +127,28 @@ class AgentMatcher:
                 'match_agents_by_similarity',
                 {
                     'query_embedding': query_embedding,
-                    'match_threshold': 0.3,
-                    'match_count': top_n * 5
+                    'match_threshold': 0.2,  # Lower threshold
+                    'match_count': top_n
                 }
             ).execute()
             
             if not result.data:
-                return [('presaleskb', 50.0)]
+                return ['presaleskb']
             
-            agent_scores = {}
-            for item in result.data:
-                agent_name = item['agent_name']
-                similarity = item['similarity'] * 100
-                
-                if agent_name not in agent_scores or similarity > agent_scores[agent_name]:
-                    agent_scores[agent_name] = similarity
-            
-            sorted_agents = sorted(agent_scores.items(), key=lambda x: x[1], reverse=True)
+            # Extract just agent names in order of similarity
+            agent_names = [item['agent_name'] for item in result.data]
             
             # Cache the result
             self._cache[cache_key] = {
-                'result': sorted_agents[:top_n],
+                'result': agent_names,
                 'timestamp': datetime.now()
             }
             
-            return sorted_agents[:top_n]
+            return agent_names
             
         except Exception as e:
             logger.error(f"Error finding best agents: {str(e)}")
-            return [('presaleskb', 50.0)]
+            return ['presaleskb']
 
     async def get_recommended_agent(self, user_query: str) -> str:
         """Get the single best recommended agent for a query"""
@@ -192,10 +161,8 @@ class AgentMatcher:
 
             best_agents = await self.find_best_agents(user_query, top_n=1)
             
-            if best_agents and best_agents[0][1] >= 60:
-                agent = best_agents[0][0]
-            else:
-                agent = 'presaleskb'
+            # Return first agent if found, else default
+            agent = best_agents[0] if best_agents else 'presaleskb'
 
             # Cache the result
             self._cache[cache_key] = {
@@ -305,14 +272,20 @@ class ConversationalHandler:
             async with httpx.AsyncClient(timeout=None) as client:
                 response = await client.post(self.n8n_url, json=payload)
                 response.raise_for_status()
-                n8n_response = response.json()
+                
+                # Check if response has content before parsing JSON
+                if not response.text.strip():
+                    logger.error(f"N8N returned empty response body. Status: {response.status_code}")
+                    raise Exception("N8N workflow returned empty response - check workflow configuration")
+                
+                try:
+                    n8n_response = response.json()
+                except json.JSONDecodeError as e:
+                    logger.error(f"N8N returned invalid JSON. Raw response: '{response.text}'")
+                    raise Exception(f"N8N workflow returned invalid JSON: {str(e)}")
                 
                 # Log the full N8N response for testing
-                print("\n" + "="*80)
-                print("N8N RESPONSE DEBUG:")
-                print("="*80)
-                print(json.dumps(n8n_response, indent=2))
-                print("="*80 + "\n")
+                logger.debug(f"N8N Response: {json.dumps(n8n_response, indent=2)}")
 
             # Format response
             formatted_response = {
@@ -339,41 +312,93 @@ class ClientKBManager:
         self.supabase = supabase_client
         
     async def update_client_kb(self, user_id: str, query: str, agent_name: str):
-        """Update client's knowledge base with new query"""
+        """Update client's knowledge base with new query using optimized schema"""
         try:
-            # Get existing KB entries for this user
-            existing_entries = self.supabase.table('client_kb')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .eq('agent_name', agent_name)\
-                .execute()
+            start_time = time.time()
             
-            # Update or insert new entry
-            entry = {
-                'user_id': user_id,
-                'agent_name': agent_name,
+            # Generate embedding for the query using free service
+            query_embedding = await AgentMatcher(self.supabase).get_query_embedding(query)
+            
+            # Determine context type based on query content
+            context_type = self._determine_context_type(query)
+            
+            # Structure content for better searchability
+            content = {
                 'query': query,
-                'timestamp': datetime.now().isoformat()
+                'agent_interaction': agent_name,
+                'interaction_timestamp': datetime.now().isoformat(),
+                'query_type': context_type,
+                'user_intent': self._extract_user_intent(query)
             }
             
-            if existing_entries.data:
-                # Update existing entry
-                entry_id = existing_entries.data[0]['id']
-                result = self.supabase.table('client_kb')\
-                    .update(entry)\
-                    .eq('id', entry_id)\
-                    .execute()
-            else:
-                # Insert new entry
-                result = self.supabase.table('client_kb')\
-                    .insert(entry)\
-                    .execute()
+            # Use optimized client_context table for better performance
+            entry = {
+                'client_id': user_id,
+                'context_type': context_type,
+                'content': content,
+                'embedding': query_embedding,
+                'source_url': None,
+                'confidence_score': 1.0,
+                'is_active': True
+            }
+            
+            # Use upsert to avoid duplicates while maintaining speed
+            result = self.supabase.table('client_context')\
+                .upsert(entry, on_conflict='client_id,context_type')\
+                .execute()
+            
+            # Log performance for monitoring
+            execution_time = int((time.time() - start_time) * 1000)
+            await log_performance_metric("update_client_kb", execution_time, {
+                "user_id": user_id,
+                "agent_name": agent_name,
+                "context_type": context_type,
+                "has_embedding": bool(query_embedding)
+            })
             
             return result.data[0] if result.data else None
             
         except Exception as e:
+            # Log error performance
+            execution_time = int((time.time() - start_time) * 1000)
+            await log_performance_metric("update_client_kb_error", execution_time, {
+                "user_id": user_id,
+                "agent_name": agent_name,
+                "error": str(e)
+            }, success=False, error_message=str(e))
+            
             logger.error(f"Error updating client KB: {str(e)}")
             return None
+    
+    def _determine_context_type(self, query: str) -> str:
+        """Determine the type of context based on query content for faster categorization"""
+        query_lower = query.lower()
+        
+        if any(indicator in query_lower for indicator in ['http://', 'https://', 'www.', '.com', '.org']):
+            return 'website_info'
+        elif any(social in query_lower for social in ['facebook', 'instagram', 'linkedin', 'twitter', 'social']):
+            return 'social_media'
+        elif any(business in query_lower for business in ['business', 'company', 'industry', 'service', 'product']):
+            return 'business_info'
+        elif any(location in query_lower for location in ['address', 'location', 'city', 'state', 'country']):
+            return 'location_info'
+        else:
+            return 'general_query'
+    
+    def _extract_user_intent(self, query: str) -> str:
+        """Extract user intent for better context understanding"""
+        query_lower = query.lower()
+        
+        if any(intent in query_lower for intent in ['want', 'need', 'looking for', 'require']):
+            return 'requirement'
+        elif any(intent in query_lower for intent in ['how', 'what', 'where', 'when', 'why']):
+            return 'information_seeking'
+        elif any(intent in query_lower for intent in ['help', 'assist', 'support']):
+            return 'assistance_request'
+        elif any(intent in query_lower for intent in ['problem', 'issue', 'error', 'wrong']):
+            return 'problem_solving'
+        else:
+            return 'general_interaction'
 
 # Dynamic Agent KB Handler Class
 class DynamicAgentKBHandler:
@@ -383,13 +408,7 @@ class DynamicAgentKBHandler:
     async def update_agent_kb(self, agent_name: str, query: str, user_id: str):
         """Update agent's knowledge base with new query"""
         try:
-            # Get existing KB entries for this agent
-            existing_entries = self.supabase.table('agent_kb')\
-                .select('*')\
-                .eq('agent_name', agent_name)\
-                .execute()
-            
-            # Update or insert new entry
+            # Use upsert for more efficient database operation
             entry = {
                 'agent_name': agent_name,
                 'query': query,
@@ -397,27 +416,241 @@ class DynamicAgentKBHandler:
                 'timestamp': datetime.now().isoformat()
             }
             
-            if existing_entries.data:
-                # Update existing entry
-                entry_id = existing_entries.data[0]['id']
-                result = self.supabase.table('agent_kb')\
-                    .update(entry)\
-                    .eq('id', entry_id)\
-                    .execute()
-            else:
-                # Insert new entry
-                result = self.supabase.table('agent_kb')\
-                    .insert(entry)\
-                    .execute()
+            result = self.supabase.table('agent_kb')\
+                .upsert(entry, on_conflict='agent_name')\
+                .execute()
             
             return result.data[0] if result.data else None
             
         except Exception as e:
             logger.error(f"Error updating agent KB: {str(e)}")
             return None
+    
+    async def get_agent_context_from_kb(self, agent_name: str) -> Dict[str, Any]:
+        """Get agent context and knowledge base information"""
+        try:
+            # Get agent configuration from agent_config.py
+            from agent_config import get_agent_config
+            agent_config = get_agent_config(agent_name)
+            
+            if not agent_config:
+                logger.warning(f"No configuration found for agent: {agent_name}")
+                return {
+                    'agent_name': agent_name,
+                    'description': f"General purpose {agent_name} agent",
+                    'must_questions': [],
+                    'tools': [],
+                    'system_prompt': f"You are {agent_name}, a helpful AI assistant."
+                }
+            
+            # Get recent agent knowledge from database
+            try:
+                kb_result = self.supabase.table('agent_documents')\
+                    .select('content, metadata')\
+                    .eq('agent_name', agent_name)\
+                    .limit(5)\
+                    .execute()
+                
+                recent_knowledge = []
+                if kb_result.data:
+                    recent_knowledge = [doc['content'][:500] for doc in kb_result.data[:3]]
+                
+                agent_config['recent_knowledge'] = recent_knowledge
+                
+            except Exception as e:
+                logger.warning(f"Error getting agent knowledge: {e}")
+                agent_config['recent_knowledge'] = []
+            
+            return agent_config
+            
+        except Exception as e:
+            logger.error(f"Error getting agent context: {e}")
+            return {
+                'agent_name': agent_name,
+                'description': f"General purpose {agent_name} agent",
+                'must_questions': [],
+                'tools': [],
+                'system_prompt': f"You are {agent_name}, a helpful AI assistant.",
+                'recent_knowledge': []
+            }
+    
+    async def get_client_industry_context(self, user_id: str) -> Dict[str, Any]:
+        """Get client industry and context information"""
+        try:
+            # Try to get from client_kb first
+            result = self.supabase.table('client_kb')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .limit(1)\
+                .execute()
+            
+            if result.data:
+                content = result.data[0].get('content', {})
+                return {
+                    'user_id': user_id,
+                    'niche': content.get('niche', 'Unknown'),
+                    'industry': content.get('industry', 'General'),
+                    'business_type': content.get('business_type', 'Unknown'),
+                    'context_available': True
+                }
+            
+            # Fallback: infer from website data
+            website_result = self.supabase.table('website_data')\
+                .select('analysis')\
+                .eq('user_id', user_id)\
+                .limit(1)\
+                .execute()
+            
+            if website_result.data:
+                analysis = website_result.data[0].get('analysis', '')
+                # Simple industry detection
+                industry = 'General'
+                if any(term in analysis.lower() for term in ['tech', 'software', 'saas']):
+                    industry = 'Technology'
+                elif any(term in analysis.lower() for term in ['health', 'medical', 'wellness']):
+                    industry = 'Healthcare'
+                elif any(term in analysis.lower() for term in ['finance', 'investment', 'banking']):
+                    industry = 'Finance'
+                
+                return {
+                    'user_id': user_id,
+                    'niche': 'Inferred from website',
+                    'industry': industry,
+                    'business_type': 'Unknown',
+                    'context_available': True
+                }
+            
+            return {
+                'user_id': user_id,
+                'niche': 'Unknown',
+                'industry': 'General',
+                'business_type': 'Unknown',
+                'context_available': False
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting client context: {e}")
+            return {
+                'user_id': user_id,
+                'niche': 'Unknown',
+                'industry': 'General',
+                'business_type': 'Unknown',
+                'context_available': False
+            }
+    
+    async def analyze_query_with_context(self, query: str, agent_context: Dict, client_context: Dict, kb_context: Dict) -> Dict[str, Any]:
+        """Analyze if the query can be answered with available context"""
+        try:
+            # Simple analysis logic
+            confidence = 0.5  # Base confidence
+            
+            # Increase confidence if we have relevant context
+            if kb_context.get('has_sufficient_context', False):
+                confidence += 0.3
+            
+            if client_context.get('context_available', False):
+                confidence += 0.2
+            
+            if len(agent_context.get('recent_knowledge', [])) > 0:
+                confidence += 0.2
+            
+            # Check if query matches agent's domain
+            agent_name = agent_context.get('agent_name', '').lower()
+            query_lower = query.lower()
+            
+            if agent_name in query_lower or any(keyword in query_lower for keyword in [
+                'social media' if 'social' in agent_name else '',
+                'lead' if 'lead' in agent_name else '',
+                'sales' if 'sales' in agent_name or 'presales' in agent_name else ''
+            ]):
+                confidence += 0.2
+            
+            confidence = min(confidence, 1.0)
+            
+            return {
+                'can_answer': confidence > 0.7,
+                'confidence': confidence,
+                'required_tools': [],
+                'missing_info': []
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing query: {e}")
+            return {
+                'can_answer': False,
+                'confidence': 0.3,
+                'required_tools': [],
+                'missing_info': ['context_analysis_failed']
+            }
+    
+    async def generate_contextual_response(self, query: str, agent_context: Dict, client_context: Dict, kb_context: Dict, tools: List = None) -> str:
+        """Generate a contextual response using available information"""
+        try:
+            agent_name = agent_context.get('agent_name', 'Assistant')
+            industry = client_context.get('industry', 'your business')
+            
+            # Build a simple contextual response
+            response_parts = [
+                f"Hello! I'm {agent_name}, your {industry.lower()} specialist.",
+                f"Regarding your question: '{query}'"
+            ]
+            
+            # Add context-specific information
+            if kb_context.get('website_info'):
+                response_parts.append("Based on your website information, I can provide targeted advice.")
+            
+            if agent_context.get('recent_knowledge'):
+                response_parts.append("I have relevant knowledge from my training that applies to your situation.")
+            
+            # Add domain-specific response
+            if 'social' in agent_name.lower():
+                response_parts.append("For social media marketing, I recommend starting with a content strategy that aligns with your brand voice and target audience.")
+            elif 'lead' in agent_name.lower():
+                response_parts.append("For lead generation, let's focus on identifying your ideal customer profile and the most effective channels to reach them.")
+            elif 'sales' in agent_name.lower() or 'presales' in agent_name.lower():
+                response_parts.append("For sales optimization, we should analyze your current sales funnel and identify opportunities for improvement.")
+            else:
+                response_parts.append("I'm here to help you with your business needs.")
+            
+            if tools:
+                response_parts.append(f"I have {len(tools)} specialized tools available to assist you further.")
+            
+            return " ".join(response_parts)
+            
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            return f"I understand you're asking about '{query}'. I'm here to help, though I may need a bit more context to provide the most relevant advice."
+    
+    async def generate_contextual_questions(self, query: str, agent_context: Dict, missing_info: List[str], client_context: Dict) -> List[str]:
+        """Generate follow-up questions to gather missing information"""
+        try:
+            questions = []
+            
+            for info in missing_info:
+                if info == 'website_url':
+                    questions.append("What's your website URL so I can better understand your business?")
+                elif info == 'client_niche':
+                    questions.append("What industry or niche is your business in?")
+                elif info == 'property_address':
+                    questions.append("What's the address or location for this property?")
+                else:
+                    questions.append(f"Could you provide more details about {info.replace('_', ' ')}?")
+            
+            # Add agent-specific questions
+            agent_name = agent_context.get('agent_name', '').lower()
+            if 'social' in agent_name and len(questions) < 3:
+                questions.append("What social media platforms are you currently using?")
+            elif 'lead' in agent_name and len(questions) < 3:
+                questions.append("What's your current lead generation strategy?")
+            elif 'sales' in agent_name and len(questions) < 3:
+                questions.append("What's your average deal size or sales cycle?")
+            
+            return questions[:3]  # Limit to 3 questions
+            
+        except Exception as e:
+            logger.error(f"Error generating questions: {e}")
+            return ["Could you provide more context about your business and specific needs?"]
 
-# Import requests after handler classes
-import requests
 
 load_dotenv()
 # Initialize FastAPI app
@@ -433,7 +666,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-N8N_MAIN = os.getenv("N8N_MAIN")
+N8N_MAIN = os.getenv("N8N_MAIN", "https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d")
 N8N_MAIN_TEST = os.getenv("N8N_MAIN_TEST")
 
 N8N_STREAM_TEST = os.getenv("N8N_STREAM_TEST")
@@ -447,10 +680,9 @@ def create_supabase_client() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Initialize handlers
-active_connections: Dict[str, WebSocket] = {}
 active_requests: Set[str] = set()
 
-# Initialize Supabase client
+# Initialize Supabase client  
 supabase = create_supabase_client()
 
 # Initialize handlers
@@ -566,1228 +798,7 @@ class WebsiteScreenshotRequest(BaseModel):
     session_id: Optional[str] = None
     user_id: Optional[str] = None
 
-# Agent Matcher Class using Vector Search
-class AgentMatcher:
-    def __init__(self, supabase_client, openai_api_key: str = None):
-        self.supabase = supabase_client
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        self.openai_client = OpenAI(api_key=self.openai_api_key)
-        self._cache = {}  # Cache for agent matching results
-        self._cache_ttl = 300  # Cache TTL in seconds (5 minutes)
-
-    async def get_query_embedding(self, text: str) -> List[float]:
-        """Generate embedding for the query text using OpenAI"""
-        try:
-            response = self.openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
-            )
-            return response.data[0].embedding
-        except Exception as e:
-            logger.error(f"Error generating embedding: {str(e)}")
-            raise
-
-    async def check_agent_match(self, agent_name: str, user_query: str, threshold: float = 0.3) -> tuple:
-        """Check if a specific agent matches the user query using vector similarity"""
-        try:
-            # Check if this is a basic greeting or general question that any agent can handle
-            basic_patterns = [
-                'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening',
-                'who are you', 'what are you', 'introduce yourself', 'tell me about yourself',
-                'what do you do', 'what can you help with', 'how can you help', 'what services',
-                'greetings', 'salutations', 'yo', 'howdy', 'how are you', 'how do you do',
-                'nice to meet you', 'pleased to meet you', 'what is this', 'explain this',
-                'help', 'assistance', 'support', 'info', 'information', 'thanks', 'thank you'
-            ]
-            
-            query_lower = user_query.lower().strip()
-            is_basic = any(pattern in query_lower for pattern in basic_patterns) or len(query_lower.split()) <= 3
-            
-            # Skip check if agent doesn't exist
-            agent_check = self.supabase.table('agent_documents')\
-                .select('id')\
-                .eq('agent_name', agent_name)\
-                .limit(1)\
-                .execute()
-            
-            if not agent_check.data:
-                print(f"⚠️ Warning: No documents found for agent '{agent_name}' in database")
-                return False, 0.0
-
-            # Get cached result if exists
-            cache_key = f"agent_match_{agent_name}_{user_query}"
-            cached = self._cache.get(cache_key)
-            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
-                return cached['result']
-
-            # Always perform vector search first to get similarity score
-            query_embedding = await self.get_query_embedding(user_query)
-            
-            result = self.supabase.rpc(
-                'match_agent_documents',
-                {
-                    'query_embedding': query_embedding,
-                    'match_threshold': threshold,
-                    'match_count': 1,
-                    'filter_agent': agent_name
-                }
-            ).execute()
-            
-            # Debug logging
-            if result.data:
-                print(f"  Vector search result: {len(result.data)} matches found")
-                if len(result.data) > 0:
-                    print(f"  Best match similarity: {result.data[0]['similarity']:.3f} (threshold: {threshold})")
-            else:
-                print(f"  Vector search result: No matches found for agent '{agent_name}'")
-
-            # Calculate confidence score
-            confidence = result.data[0]['similarity'] if result.data else 0.0
-            
-            # For basic queries, always return True regardless of similarity score
-            # But set a minimum confidence just above threshold (0.4) for basic queries
-            if is_basic:
-                print(f"✓ Basic query detected: Any agent (including {agent_name}) can handle: '{user_query}'")
-                match_result = True
-                # Basic queries should have reasonable confidence above threshold
-                if confidence < 0.4:
-                    confidence = 0.4
-            else:
-                # For non-basic queries, use the similarity threshold
-                match_result = len(result.data) > 0 and result.data[0]['similarity'] >= threshold
-            
-            # Cache the result with confidence
-            self._cache[cache_key] = {
-                'result': (match_result, confidence),
-                'timestamp': datetime.now()
-            }
-
-            # Only log for real queries
-            if user_query and user_query.strip():
-                if match_result:
-                    print(f"✓ Agent match SUCCESS: {agent_name} is appropriate for this query (confidence: {confidence:.3f})")
-                else:
-                    print(f"✗ Agent match FAILED: {agent_name} - checking for better alternatives...")
-            return match_result, confidence
-            
-        except Exception as e:
-            logger.error(f"Error checking agent match: {str(e)}")
-            return False, 0.0
-
-    async def find_best_agents(self, user_query: str, top_n: int = 3) -> List[Tuple[str, float]]:
-        """Find the best matching agents for a user query using vector similarity"""
-        try:
-            # Get cached result if exists
-            cache_key = f"best_agents_{user_query}"
-            cached = self._cache.get(cache_key)
-            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
-                return cached['result']
-
-            query_embedding = await self.get_query_embedding(user_query)
-            
-            result = self.supabase.rpc(
-                'match_agents_by_similarity',
-                {
-                    'query_embedding': query_embedding,
-                    'match_threshold': 0.3,
-                    'match_count': top_n * 5
-                }
-            ).execute()
-            
-            if not result.data:
-                return [('presaleskb', 50.0)]
-            
-            agent_scores = {}
-            for item in result.data:
-                agent_name = item['agent_name']
-                similarity = item['similarity'] * 100
-                
-                if agent_name not in agent_scores or similarity > agent_scores[agent_name]:
-                    agent_scores[agent_name] = similarity
-            
-            sorted_agents = sorted(agent_scores.items(), key=lambda x: x[1], reverse=True)
-            
-            # Cache the result
-            self._cache[cache_key] = {
-                'result': sorted_agents[:top_n],
-                'timestamp': datetime.now()
-            }
-            
-            return sorted_agents[:top_n]
-            
-        except Exception as e:
-            logger.error(f"Error finding best agents: {str(e)}")
-            return [('presaleskb', 50.0)]
-
-    async def get_recommended_agent(self, user_query: str) -> str:
-        """Get the single best recommended agent for a query"""
-        try:
-            # Get cached result if exists
-            cache_key = f"recommended_agent_{user_query}"
-            cached = self._cache.get(cache_key)
-            if cached and (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
-                return cached['result']
-
-            best_agents = await self.find_best_agents(user_query, top_n=1)
-            
-            if best_agents and best_agents[0][1] >= 60:
-                agent = best_agents[0][0]
-            else:
-                agent = 'presaleskb'
-
-            # Cache the result
-            self._cache[cache_key] = {
-                'result': agent,
-                'timestamp': datetime.now()
-            }
-            
-            return agent
-            
-        except Exception as e:
-            logger.error(f"Error getting recommended agent: {str(e)}")
-            return 'presaleskb'
-
 # Conversational Handler Class
-class ConversationalHandler:
-    def __init__(self, supabase_client, n8n_url: str = os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')):
-        self._cache = {}
-        self._cache_ttl = 300
-        self.supabase = supabase_client
-        self.n8n_url = n8n_url
-
-    def _get_cache_key(self, request_id):
-        return f"response_{request_id}"
-
-    async def cache_response(self, request_id: str, response: dict):
-        """Cache a response with TTL"""
-        cache_key = self._get_cache_key(request_id)
-        self._cache[cache_key] = {
-            'response': response,
-            'timestamp': datetime.now()
-        }
-
-    async def get_cached_response(self, request_id: str):
-        """Get cached response if it exists and is not expired"""
-        cache_key = self._get_cache_key(request_id)
-        if cache_key in self._cache:
-            cached = self._cache[cache_key]
-            if (datetime.now() - cached['timestamp']).total_seconds() < self._cache_ttl:
-                return cached['response']
-            del self._cache[cache_key]
-        return None
-
-    async def save_to_history(self, session_id: str, user_id: str, user_message: str, agent_response: str):
-        """Save message to chat history"""
-        try:
-            entry = {
-                'session_id': session_id,
-                'user_id': user_id,
-                'user_message': user_message,
-                'agent_response': agent_response,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            result = self.supabase.table('chat_history')\
-                .insert(entry)\
-                .execute()
-            
-            return result.data[0] if result.data else None
-            
-        except Exception as e:
-            logger.error(f"Error saving to history: {str(e)}")
-            return None
-
-    async def handle_message(self, request_data: dict):
-        """Handle incoming message with conversational logic"""
-        try:
-            user_mssg = request_data.get('user_mssg', '')
-            session_id = request_data.get('session_id', '')
-            user_id = request_data.get('user_id', '')
-            agent_name = request_data.get('agent_name', 'presaleskb')
-            request_id = request_data.get('request_id', str(uuid.uuid4()))
-
-            # Skip empty messages
-            if not user_mssg.strip():
-                return {
-                    'status': 'error',
-                    'message': 'Empty message received'
-                }
-
-            # Check cache first
-            cached_response = await self.get_cached_response(request_id)
-            if cached_response:
-                return cached_response
-
-            # Process the message
-            response = await self.process_message(user_mssg, session_id, user_id, agent_name)
-
-            # Cache the response
-            await self.cache_response(request_id, response)
-
-            return response
-
-        except Exception as e:
-            logger.error(f"Error handling message: {str(e)}")
-            raise
-
-    async def process_message(self, user_mssg: str, session_id: str, user_id: str, agent_name: str):
-        """Process the actual message and get response from n8n"""
-        try:
-            # Prepare payload for n8n
-            payload = {
-                'user_id': user_id,
-                'user_mssg': user_mssg,
-                'session_id': session_id,
-                'agent_name': agent_name,
-                '_original_message': user_mssg  # Store original message for history
-            }
-
-            # Call n8n webhook
-            async with httpx.AsyncClient(timeout=None) as client:
-                response = await client.post(self.n8n_url, json=payload)
-                response.raise_for_status()
-                n8n_response = response.json()
-                
-                # Log the full N8N response for testing
-                print("\n" + "="*80)
-                print("N8N RESPONSE DEBUG:")
-                print("="*80)
-                print(json.dumps(n8n_response, indent=2))
-                print("="*80 + "\n")
-
-            # Format response
-            formatted_response = {
-                'status': n8n_response.get('status', 'success'),
-                'agent_name': n8n_response.get('agent_name', agent_name),
-                'agent_response': n8n_response.get('agent_response', ''),
-                'conversation_state': n8n_response.get('conversation_state', 'complete'),
-                'missing_info': n8n_response.get('missing_info', []),
-                'timestamp': datetime.now().isoformat()
-            }
-
-            return formatted_response
-
-        except Exception as e:
-            logger.error(f"Error processing message: {str(e)}")
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
-
-    async def get_cached_response(self, request_id):
-        """Get cached response if available"""
-        cache_key = self._get_cache_key(request_id)
-        if cache_key in self._cache:
-            cached_data = self._cache[cache_key]
-            if (datetime.now() - cached_data['timestamp']).total_seconds() < self._cache_ttl:
-                return cached_data['response']
-            else:
-                # Remove expired cache entry
-                del self._cache[cache_key]
-                return None
-        return None
-        return None
-
-    async def cache_response(self, request_id, response):
-        """Cache a response"""
-        cache_key = self._get_cache_key(request_id)
-        self._cache[cache_key] = {
-            'response': response,
-            'timestamp': time.time()
-        }
-        
-    async def get_conversation_context(self, session_id: str, user_id: str) -> Dict[str, Any]:
-        """Get conversation context from Supabase"""
-        try:
-            result = self.supabase.rpc('get_conversation_context', {
-                'p_session_id': session_id,
-                'p_user_id': user_id
-            }).execute()
-            
-            if result.data:
-                return result.data[0]
-            return {
-                'session_id': session_id,
-                'user_id': user_id,
-                'website_data': None,
-                'client_niche': None,
-                'conversation_history': []
-            }
-        except Exception as e:
-            logger.error(f"Error getting conversation context: {str(e)}")
-            return {}
-    
-    async def check_agent_requirements(self, agent_name: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Check what information is missing for the agent"""
-        missing_info = []
-        
-        agent_requirements = {
-            'presaleskb': {
-                'website': lambda ctx: ctx.get('website_data') is not None,
-                'niche': lambda ctx: ctx.get('client_niche') is not None
-            },
-            'socialmediakb': {
-                'website': lambda ctx: ctx.get('website_data') is not None
-            },
-            'leadgenkb': {
-                'website': lambda ctx: ctx.get('website_data') is not None
-            }
-        }
-        
-        if agent_name in agent_requirements:
-            for req_name, check_func in agent_requirements[agent_name].items():
-                if not check_func(context):
-                    missing_info.append(req_name)
-        
-        return {
-            'has_all_required': len(missing_info) == 0,
-            'missing_info': missing_info
-        }
-    
-    async def analyze_user_intent(self, user_message: str, agent_name: str) -> Dict[str, Any]:
-        """Analyze what the user is asking for"""
-        message_lower = user_message.lower()
-        
-        if any(keyword in message_lower for keyword in ['http://', 'https://', '.com', '.org', '.net']):
-            return {'type': 'website_provided', 'value': user_message.strip()}
-        
-        niche_keywords = ['we are', 'our business', 'we specialize', 'our company', 'we do', 'our focus']
-        if any(keyword in message_lower for keyword in niche_keywords):
-            return {'type': 'niche_provided', 'value': user_message.strip()}
-        
-        pricing_keywords = ['price', 'cost', 'quote', 'roi', 'investment', 'budget']
-        needs_website = any(keyword in message_lower for keyword in pricing_keywords)
-        
-        return {
-            'type': 'general_query',
-            'needs_website': needs_website,
-            'original_message': user_message
-        }
-    
-    # DEPRECATED: No longer used - N8N workflow handles instruction logic internally
-    # async def generate_contextual_prompt(self, user_message: str, missing_info: List[str], context: Dict[str, Any]) -> str:
-    #     """Generate a prompt that will make the agent ask for missing info naturally"""
-    #     # This function is deprecated - we now send simple user messages to N8N
-    #     # and let the N8N workflow handle all conversation logic internally
-    #     return user_message
-    
-    def get_info_description(self, info_type: str) -> str:
-        """Get description for each type of information"""
-        descriptions = {
-            'website': "Company website URL to understand their business and provide accurate quotes",
-            'niche': "Business niche or industry focus to tailor recommendations",
-            'property_address': "Property address for location-specific analysis",
-            'budget': "Budget range to suggest appropriate solutions",
-            'timeline': "Implementation timeline to plan accordingly"
-        }
-        return descriptions.get(info_type, f"{info_type} information")
-    
-    async def process_follow_up_info(self, session_id: str, user_id: str, info_type: str, info_value: str):
-        """Process and store follow-up information"""
-        try:
-            if info_type == 'website':
-                analysis = await self.analyze_website_with_perplexity(info_value)
-                
-                self.supabase.table('website_data').upsert({
-                    'session_id': session_id,
-                    'user_id': user_id,
-                    'url': info_value,
-                    'analysis': json.dumps(analysis) if analysis else None
-                }).execute()
-                
-                if analysis and 'niche' in analysis:
-                    self.supabase.table('conversation_context').upsert({
-                        'session_id': session_id,
-                        'user_id': user_id,
-                        'client_niche': analysis['niche']
-                    }).execute()
-            
-            elif info_type == 'niche':
-                self.supabase.table('conversation_context').upsert({
-                    'session_id': session_id,
-                    'user_id': user_id,
-                    'client_niche': info_value
-                }).execute()
-            
-            else:
-                self.supabase.rpc('update_conversation_context', {
-                    'p_session_id': session_id,
-                    'p_user_id': user_id,
-                    'p_field': info_type,
-                    'p_value': info_value
-                }).execute()
-                
-        except Exception as e:
-            logger.error(f"Error processing follow-up info: {str(e)}")
-    
-    # In the ConversationalHandler class, update the analyze_website_with_perplexity method:
-
-    async def analyze_website_with_perplexity(self, url: str) -> Optional[Dict[str, Any]]:
-        """Analyze website using Perplexity API"""
-        try:
-            headers = {
-                "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
-            prompt = f"""Please analyze the website {url} and provide a summary in exactly this format:
-            --- *Company name*: [Extract company name]
-            --- *Website*: {url}
-            --- *Contact Information*: [Any available contact details]
-            --- *Description*: [2-3 sentence summary of what the company does]
-            --- *Tags*: [Main business categories, separated by periods]
-            --- *Takeaways*: [Key business value propositions]
-            --- *Niche*: [Specific market focus or specialty]"""
-            
-            # No timeout - let Perplexity take as long as needed
-            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
-                response = await client.post(
-                    "https://api.perplexity.ai/chat/completions",
-                    headers=headers,
-                    json={
-                        "model": "sonar-reasoning-pro",
-                        "messages": [{"role": "user", "content": prompt}],
-                        "max_tokens": 1000
-                    }
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    analysis_text = result["choices"][0]["message"]["content"]
-                    
-                    parsed = self.parse_perplexity_analysis(analysis_text)
-                    return parsed
-                    
-        except Exception as e:
-            logger.error(f"Error analyzing website: {str(e)}")
-            return None
-    
-    def parse_perplexity_analysis(self, analysis_text: str) -> Dict[str, Any]:
-        """Parse Perplexity analysis into structured format"""
-        parsed = {}
-        lines = analysis_text.split('\n')
-        
-        for line in lines:
-            if '*Company name*:' in line:
-                parsed['company_name'] = line.split(':', 1)[1].strip()
-            elif '*Description*:' in line:
-                parsed['description'] = line.split(':', 1)[1].strip()
-            elif '*Niche*:' in line:
-                parsed['niche'] = line.split(':', 1)[1].strip()
-            elif '*Tags*:' in line:
-                parsed['tags'] = line.split(':', 1)[1].strip()
-        
-        return parsed
-    
-    async def handle_message(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Main handler for processing messages with conversational flow"""
-        user_id = request_data['user_id']
-        session_id = request_data['session_id']
-        user_message = request_data['user_mssg']
-        agent_name = request_data['agent_name']
-        
-        if not agent_name or agent_name == 'auto':
-            agent_name = await agent_matcher.get_recommended_agent(user_message)
-            request_data['agent_name'] = agent_name
-            request_data['_auto_selected_agent'] = True
-            logger.info(f"Auto-selected agent: {agent_name} for query: {user_message}")
-        
-        else:
-            # Only check for non-empty messages
-            if user_message and user_message.strip():
-                is_appropriate, _ = await agent_matcher.check_agent_match(agent_name, user_message)
-                if not is_appropriate:
-                    better_agents = await agent_matcher.find_best_agents(user_message, top_n=1)
-                    if better_agents and better_agents[0][1] > 70:
-                        request_data['_suggested_agent'] = better_agents[0][0]
-                        request_data['_suggestion_confidence'] = better_agents[0][1]
-                        suggested_name = better_agents[0][0]
-                        print(f"→ Better agent found: {suggested_name} (confidence: {better_agents[0][1]:.1f}%)")
-                    else:
-                        suggested_name = "None"
-                        print(f"→ No better agent found (all matches below 70% threshold)")
-                    logger.warning(f"Agent mismatch: {agent_name} may not be optimal. Suggested: {suggested_name}")
-                else:
-                    print(f"→ Agent {agent_name} is appropriate for this query")
-        
-        context = await self.get_conversation_context(session_id, user_id)
-        
-        intent = await self.analyze_user_intent(user_message, agent_name)
-        
-        if intent['type'] in ['website_provided', 'niche_provided']:
-            info_type = 'website' if intent['type'] == 'website_provided' else 'niche'
-            await self.process_follow_up_info(session_id, user_id, info_type, intent['value'])
-            
-            context = await self.get_conversation_context(session_id, user_id)
-        
-        requirements = await self.check_agent_requirements(agent_name, context)
-        
-        n8n_payload = request_data.copy()
-        
-        if not requirements['has_all_required'] and intent['type'] == 'general_query':
-            # Keep the original user message instead of generating complex prompts
-            # N8N workflow should handle information collection logic internally
-            n8n_payload['user_mssg'] = user_message
-            n8n_payload['_missing_info'] = requirements['missing_info']
-            n8n_payload['_requires_info'] = True
-        
-        return n8n_payload
-    
-    async def save_to_history(self, session_id: str, user_id: str, user_message: str, agent_response: str):
-        """Save messages to chat history"""
-        try:
-            supabase.table('chat_history').insert({
-                'session_id': session_id,
-                'user_id': user_id,
-                'sender': 'user',
-                'message': user_message,
-                'timestamp': datetime.now().isoformat()
-            }).execute()
-            
-            if agent_response:
-                supabase.table('chat_history').insert({
-                    'session_id': session_id,
-                    'user_id': user_id,
-                    'sender': 'agent',
-                    'message': agent_response,
-                    'timestamp': datetime.now().isoformat()
-                }).execute()
-                
-        except Exception as e:
-            logger.error(f"Error saving to history: {str(e)}")
-
-# Client KB Manager Class
-class ClientKBManager:
-    """Manager class for client knowledge base operations"""
-    
-    def __init__(self, supabase_client, openai_api_key: str = None):
-        self.supabase = supabase_client
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        # Use the new OpenAI client
-        self.openai_client = OpenAI(api_key=self.openai_api_key)
-    
-    async def get_client_kb(self, user_id: str, kb_type: str = "website_info") -> Optional[Dict[str, Any]]:
-        """Retrieve client KB entry"""
-        try:
-            result = self.supabase.table('client_kb')\
-                .select('*')\
-                .eq('client_id', user_id)\
-                .eq('kb_type', kb_type)\
-                .single()\
-                .execute()
-            
-            return result.data if result.data else None
-        except Exception as e:
-            logger.error(f"Error getting client KB: {str(e)}")
-            return None
-    
-    async def update_client_kb(self, user_id: str, kb_type: str, content: Dict[str, Any]):
-        """Update or create client KB entry"""
-        try:
-            kb_entry = {
-                'client_id': user_id,
-                'kb_type': kb_type,
-                'content': content,
-                'updated_at': datetime.now().isoformat()
-            }
-            
-            result = self.supabase.table('client_kb')\
-                .upsert(kb_entry, on_conflict='client_id,kb_type')\
-                .execute()
-            
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logger.error(f"Error updating client KB: {str(e)}")
-            return None
-    
-    async def generate_embedding(self, text: str) -> List[float]:
-        """Generate embedding for text content"""
-        try:
-            # New v1.0+ syntax
-            response = self.openai_client.embeddings.create(
-                model="text-embedding-3-small",
-                input=text
-            )
-            return response.data[0].embedding
-        except Exception as e:
-            logger.error(f"Error generating embedding: {str(e)}")
-            return []
-    
-    async def analyze_and_update_kb(self, user_id: str, website_data: Dict[str, Any], chat_history: List[Dict[str, Any]]):
-        """Analyze website data and chat history to update KB"""
-        try:
-            website_info = {
-                'url': website_data.get('url'),
-                'company_name': json.loads(website_data.get('analysis', '{}')).get('company_name'),
-                'description': json.loads(website_data.get('analysis', '{}')).get('description'),
-                'niche': json.loads(website_data.get('analysis', '{}')).get('niche'),
-                'tags': json.loads(website_data.get('analysis', '{}')).get('tags'),
-                'services': json.loads(website_data.get('analysis', '{}')).get('services', []),
-                'contact_info': json.loads(website_data.get('analysis', '{}')).get('contact_info', {}),
-                'last_analyzed': website_data.get('created_at')
-            }
-            
-            chat_insights = await self.extract_chat_insights(chat_history)
-            
-            kb_content = {
-                'website_info': website_info,
-                'chat_insights': chat_insights,
-                'extracted_requirements': [],
-                'preferences': {},
-                'interaction_history': {
-                    'total_messages': len(chat_history),
-                    'last_interaction': chat_history[-1]['timestamp'] if chat_history else None
-                }
-            }
-            
-            searchable_text = f"""
-            Company: {website_info.get('company_name', 'Unknown')}
-            Description: {website_info.get('description', '')}
-            Niche: {website_info.get('niche', '')}
-            Services: {', '.join(website_info.get('services', []))}
-            Chat Topics: {', '.join(chat_insights.get('topics', []))}
-            Requirements: {', '.join(chat_insights.get('requirements', []))}
-            """
-            
-            embedding = await self.generate_embedding(searchable_text)
-            kb_content['embedding'] = embedding
-            kb_content['searchable_text'] = searchable_text
-            
-            await self.update_client_kb(user_id, 'website_info', kb_content)
-            
-            if website_info.get('services'):
-                await self.update_client_kb(user_id, 'services', {'services': website_info['services']})
-            
-            if chat_insights.get('requirements'):
-                await self.update_client_kb(user_id, 'requirements', {'requirements': chat_insights['requirements']})
-            
-            return kb_content
-            
-        except Exception as e:
-            logger.error(f"Error analyzing and updating KB: {str(e)}")
-            return None
-    
-    async def extract_chat_insights(self, chat_history: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Extract insights from chat history using AI"""
-        if not chat_history:
-            return {'topics': [], 'requirements': [], 'questions': []}
-        
-        try:
-            transcript = "\n".join([
-                f"{msg['sender']}: {msg['message']}" 
-                for msg in chat_history[-20:]
-            ])
-            
-            # New v1.0+ syntax
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "Extract key topics, requirements, and questions from this chat transcript. Return as JSON with keys: topics (list), requirements (list), questions (list), pain_points (list)."
-                    },
-                    {
-                        "role": "user",
-                        "content": transcript
-                    }
-                ],
-                temperature=0.3,
-                max_tokens=500
-            )
-            
-            insights = json.loads(response.choices[0].message.content)
-            return insights
-            
-        except Exception as e:
-            logger.error(f"Error extracting chat insights: {str(e)}")
-            return {'topics': [], 'requirements': [], 'questions': []}
-
-# Dynamic Agent KB Handler
-class DynamicAgentKBHandler:
-    """Handler that dynamically loads agent context from KB"""
-    
-    def __init__(self, supabase_client, openai_api_key: str = None):
-        self.supabase = supabase_client
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        # Use the new OpenAI client
-        self.openai_client = OpenAI(api_key=self.openai_api_key)
-        
-    async def get_agent_context_from_kb(self, agent_name: str) -> Dict[str, Any]:
-        """Extract agent context from agent_documents table"""
-        try:
-            result = self.supabase.table('agent_documents')\
-                .select('content, metadata')\
-                .eq('agent_name', agent_name)\
-                .order('metadata->chunk_index')\
-                .execute()
-            
-            if not result.data:
-                return {
-                    'role': 'AI Assistant',
-                    'tools': [],
-                    'must_questions': [],
-                    'expertise': []
-                }
-            
-            full_content = '\n'.join([doc['content'] for doc in result.data])
-            
-            agent_context = {
-                'role': self._extract_role(full_content),
-                'tools': self._extract_tools(full_content),
-                'must_questions': self._extract_must_questions(full_content),
-                'expertise': self._extract_expertise(full_content),
-                'full_content': full_content
-            }
-            
-            return agent_context
-            
-        except Exception as e:
-            logger.error(f"Error getting agent context from KB: {str(e)}")
-            return {
-                'role': 'AI Assistant',
-                'tools': [],
-                'must_questions': [],
-                'expertise': []
-            }
-    
-    def _extract_role(self, content: str) -> str:
-        """Extract agent role from content"""
-        lines = content.split('\n')
-        for line in lines:
-            if 'You are' in line and ('named' in line or 'expert' in line or 'specialist' in line):
-                return line.strip()
-        return 'AI Assistant'
-    
-    def _extract_tools(self, content: str) -> List[Dict[str, str]]:
-        """Extract tools from agent KB content"""
-        tools = []
-        in_tools_section = False
-        
-        for line in content.split('\n'):
-            if 'Tools_names:' in line or 'Tools:' in line:
-                in_tools_section = True
-                continue
-            
-            if in_tools_section and line.strip():
-                if line.strip().startswith('-'):
-                    tool_line = line.strip()[1:].strip()
-                    if '(' in tool_line and ')' in tool_line:
-                        func_start = tool_line.find('(')
-                        func_name = tool_line[:func_start]
-                        
-                        desc_start = tool_line.find(')') + 1
-                        description = tool_line[desc_start:].strip()
-                        if description.startswith('for '):
-                            description = description[4:]
-                        elif description.startswith('to '):
-                            description = description[3:]
-                        
-                        tools.append({
-                            'name': func_name.strip(),
-                            'description': description.strip()
-                        })
-                elif not line.startswith(' ') and line.strip():
-                    in_tools_section = False
-        
-        return tools
-    
-    def _extract_must_questions(self, content: str) -> List[str]:
-        """Extract MUST questions from agent KB"""
-        must_questions = []
-        in_must_section = False
-        
-        for line in content.split('\n'):
-            if 'MUST Questions:' in line or 'Required Information:' in line:
-                in_must_section = True
-                continue
-            
-            if in_must_section and line.strip():
-                if line.strip()[0].isdigit() and '.' in line:
-                    question = line.split('.', 1)[1].strip()
-                    must_questions.append(question)
-                elif not line.startswith(' ') and line.strip() and not line.strip()[0].isdigit():
-                    in_must_section = False
-        
-        return must_questions
-    
-    def _extract_expertise(self, content: str) -> List[str]:
-        """Extract expertise areas from content"""
-        expertise = []
-        
-        for line in content.split('\n'):
-            if line.strip() and (
-                ('expertise' in line.lower() and ':' in line) or
-                ('role combines' in line.lower()) or
-                ('responsibilities' in line.lower())
-            ):
-                continue
-            
-            if line.strip() and line.strip()[0].isdigit() and '.' in line:
-                if any(keyword in line.lower() for keyword in ['analyze', 'present', 'explain', 'collect', 'handle', 'discuss']):
-                    expertise_item = line.split('.', 1)[1].strip()
-                    expertise.append(expertise_item)
-        
-        return expertise[:5]
-    
-    async def get_client_industry_context(self, user_id: str) -> Dict[str, Any]:
-        """Get client's industry/niche from their KB"""
-        try:
-            kb_data = await client_kb_manager.get_client_kb(user_id, 'website_info')
-            
-            if not kb_data:
-                return {
-                    'industry': 'Unknown',
-                    'niche': 'Unknown',
-                    'company_type': 'Unknown',
-                    'jargon': []
-                }
-            
-            content = kb_data.get('content', {})
-            website_info = content.get('website_info', {})
-            
-            niche = website_info.get('niche', 'Unknown')
-            tags = website_info.get('tags', '')
-            description = website_info.get('description', '')
-            
-            industry_context = await self._generate_industry_jargon(niche, tags, description)
-            
-            return {
-                'industry': niche,
-                'niche': niche,
-                'company_type': self._determine_company_type(tags, description),
-                'jargon': industry_context.get('jargon', []),
-                'key_metrics': industry_context.get('metrics', [])
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting client industry context: {str(e)}")
-            return {
-                'industry': 'Unknown',
-                'niche': 'Unknown',
-                'company_type': 'Unknown',
-                'jargon': []
-            }
-    
-    def _determine_company_type(self, tags: str, description: str) -> str:
-        """Determine company type from tags and description"""
-        combined_text = f"{tags} {description}".lower()
-        
-        if any(term in combined_text for term in ['saas', 'software', 'app', 'platform']):
-            return 'Technology/Software'
-        elif any(term in combined_text for term in ['retail', 'store', 'shop', 'commerce']):
-            return 'Retail/E-commerce'
-        elif any(term in combined_text for term in ['consulting', 'agency', 'services']):
-            return 'Professional Services'
-        elif any(term in combined_text for term in ['manufacturing', 'production', 'factory']):
-            return 'Manufacturing'
-        elif any(term in combined_text for term in ['real estate', 'property', 'realty']):
-            return 'Real Estate'
-        else:
-            return 'General Business'
-    
-    async def _generate_industry_jargon(self, niche: str, tags: str, description: str) -> Dict[str, Any]:
-        """Use AI to generate industry-specific jargon and metrics"""
-        try:
-            prompt = f"""
-            Given this business context:
-            - Niche: {niche}
-            - Tags: {tags}
-            - Description: {description}
-
-            Generate industry-specific terminology and metrics that would be relevant.
-            Return as JSON with two arrays:
-            1. "jargon": 10-15 industry-specific terms
-            2. "metrics": 5-8 key performance indicators for this industry
-
-            Example format:
-            {{
-                "jargon": ["term1", "term2", ...],
-                "metrics": ["metric1", "metric2", ...]
-            }}
-            """
-            
-            # New v1.0+ syntax
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are an industry expert. Generate relevant terminology."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=300
-            )
-            
-            return json.loads(response.choices[0].message.content)
-            
-        except Exception as e:
-            logger.error(f"Error generating industry jargon: {str(e)}")
-            return {'jargon': [], 'metrics': []}
-    
-    async def analyze_query_with_context(self, user_query: str, agent_context: Dict[str, Any], 
-                                       client_context: Dict[str, Any], kb_context: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze query using both agent and client context"""
-        
-        analysis_prompt = f"""
-            You are acting as: {agent_context.get('role', 'AI Assistant')}
-
-            Agent Capabilities:
-            - Available tools: {', '.join([t['name'] for t in agent_context.get('tools', [])])}
-            - Must have information: {', '.join(agent_context.get('must_questions', []))}
-            - Expertise areas: {', '.join(agent_context.get('expertise', []))}
-
-            Client Context:
-            - Industry/Niche: {client_context.get('industry', 'Unknown')}
-            - Company Type: {client_context.get('company_type', 'Unknown')}
-            - Current KB Status: {'Complete' if kb_context.get('website_url') else 'Missing website info'}
-
-            User Query: "{user_query}"
-
-            Analyze and determine:
-            1. Can this query be answered with current information? (yes/no)
-            2. What specific information is missing from MUST questions?
-            3. Which tools would be needed to answer this query?
-            4. How confident are you in understanding this query? (0-1)
-            5. Does this query match the agent's expertise? (yes/no)
-
-            Consider the client's industry context and use appropriate terminology.
-
-            Return as JSON with keys: can_answer, missing_info, required_tools, confidence, in_expertise
-        """
-        
-        try:
-            # New v1.0+ syntax
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are an expert analyst. Return valid JSON only."},
-                    {"role": "user", "content": analysis_prompt}
-                ],
-                temperature=0.3,
-                max_tokens=400
-            )
-            
-            return json.loads(response.choices[0].message.content)
-            
-        except Exception as e:
-            logger.error(f"Error analyzing query: {str(e)}")
-            return {
-                "can_answer": False,
-                "missing_info": ["Unable to analyze query"],
-                "required_tools": [],
-                "confidence": 0.5,
-                "in_expertise": True
-            }
-    
-    async def generate_contextual_response(self, user_query: str, agent_context: Dict[str, Any],
-                                         client_context: Dict[str, Any], kb_context: Dict[str, Any],
-                                         tools_to_use: List[Dict[str, Any]]) -> str:
-        """Generate response using full context"""
-        
-        response_prompt = f"""
-            You are: {agent_context.get('role', 'AI Assistant')}
-
-            Your full context and instructions:
-            {agent_context.get('full_content', '')[:1000]}
-
-            Client Information:
-            - Company: {kb_context.get('company_name', 'Not specified')}
-            - Industry: {client_context.get('industry', 'Not specified')}
-            - Website: {kb_context.get('website_url', 'Not provided')}
-            - Services: {', '.join(kb_context.get('services', []) or ['Not specified'])}
-
-            Industry-specific terminology to use when relevant:
-            {', '.join(client_context.get('jargon', [])[:10])}
-
-            User Query: "{user_query}"
-
-            Tools you will use:
-            {chr(10).join([f"- {tool['name']}: {tool['description']}" for tool in tools_to_use])}
-
-            Instructions:
-            1. Respond according to your role and expertise
-            2. Use industry-appropriate language for their {client_context.get('industry')} business
-            3. If using tools, explain what each will do
-            4. Be specific to their business context
-            5. Follow any specific instructions from your agent KB
-
-            Generate your response:
-            """
-        
-        try:
-            # New v1.0+ syntax
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are an expert assistant. Be professional and helpful."},
-                    {"role": "user", "content": response_prompt}
-                ],
-                temperature=0.7,
-                max_tokens=800
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"Error generating response: {str(e)}")
-            return "I apologize, but I'm having trouble generating a response. Please try again."
-    
-    async def generate_contextual_questions(self, user_query: str, agent_context: Dict[str, Any],
-                                          missing_info: List[str], client_context: Dict[str, Any]) -> List[str]:
-        """Generate follow-up questions based on context"""
-        
-        questions_prompt = f"""
-        As {agent_context.get('role', 'AI Assistant')}, you need to collect missing information.
-
-        MUST have information for this agent:
-        {chr(10).join([f"- {q}" for q in agent_context.get('must_questions', [])])}
-
-        Currently missing: {', '.join(missing_info)}
-        Client's industry: {client_context.get('industry', 'Unknown')}
-        User asked: "{user_query}"
-
-        Generate 2-3 natural follow-up questions that:
-        1. Collect the missing MUST information
-        2. Are relevant to their {client_context.get('industry')} industry
-        3. Explain why you need this information
-        4. Use appropriate industry terminology
-
-        Return as a JSON array of question strings.
-        """
-        
-        try:
-            # New v1.0+ syntax
-            response = self.openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "Generate professional follow-up questions. Return only JSON array."},
-                    {"role": "user", "content": questions_prompt}
-                ],
-                temperature=0.5,
-                max_tokens=300
-            )
-            
-            return json.loads(response.choices[0].message.content)[:3]
-            
-        except Exception as e:
-            logger.error(f"Error generating questions: {str(e)}")
-            return ["Could you provide more details about your requirements?"]
-
-# Initialize handlers
-active_connections: Dict[str, WebSocket] = {}
-active_requests: Set[str] = set()
-
-# Initialize Supabase client
-supabase = create_supabase_client()
-
-# Initialize handlers
-agent_matcher = AgentMatcher(supabase_client=supabase)
-conversational_handler = ConversationalHandler(
-    supabase_client=supabase,
-    n8n_url=os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')
-)
-client_kb_manager = ClientKBManager(supabase_client=supabase)
-dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
-
-# Helper functions
-async def save_message_to_history(session_id: str, sender: str, message: str):
-    """Save a message to the appropriate history table"""
-    await conversational_handler.save_to_history(
-        session_id=session_id,
-        user_id="",
-        user_message=message if sender == "User" else "",
-        agent_response=message if sender == "AI" else ""
-    )
-
-async def call_n8n_webhook(payload: Dict[str, Any]):
-    """Call the n8n webhook and return the response"""
-    n8n_url = os.getenv('N8N_MAIN', 'https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d')
-    #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
-    #"https://n8n.theaiteam.uk/webhook/01ca0029-17f6-4c5f-a859-e4f44484a2c9"
-    #"https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d"
-    
-    async with httpx.AsyncClient(timeout=None) as client:
-        try:
-            response = await client.post(n8n_url, json=payload)
-            response.raise_for_status()
-            result = response.json()
-            
-            # Log the webhook response for debugging
-            print("\n" + "="*60)
-            print("CALL_N8N_WEBHOOK - RAW RESPONSE:")
-            print("="*60)
-            print(json.dumps(result, indent=2))
-            print("="*60 + "\n")
-            
-            # Parse the output field if it exists (n8n returns JSON string in output field)
-            if 'output' in result and isinstance(result['output'], str):
-                try:
-                    parsed_output = json.loads(result['output'])
-                    return parsed_output
-                except json.JSONDecodeError:
-                    logger.error(f"Failed to parse n8n output JSON: {result['output']}")
-                    return result
-            
-            return result
-        except httpx.HTTPStatusError as e:
-            logger.error(f"N8N HTTP error: {e.response.status_code} - {e.response.text}")
-            raise HTTPException(status_code=e.response.status_code, detail=f"N8N error: {e.response.text}")
-        except Exception as e:
-            logger.error(f"N8N request error: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Failed to connect to n8n: {str(e)}")
-
-async def stream_n8n_response(payload: Dict[str, Any]) -> AsyncGenerator[str, None]:
-    """Stream response from n8n webhook using SSE"""
-    n8n_stream_url = "https://n8n.theaiteam.uk/webhook/c2fcbad6-abc0-43af-8aa8-d1661ff4461d/stream"
-    
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        try:
-            async with client.stream("POST", n8n_stream_url, json=payload) as response:
-                async for line in response.aiter_lines():
-                    if line.strip():
-                        yield f"data: {line}\n\n"
-        except Exception as e:
-            logger.error(f"N8N streaming error: {str(e)}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-async def process_n8n_request_async(payload: dict, websocket: WebSocket, request_id: str):
-    """Process n8n request asynchronously with conversational logic"""
-    try:
-        n8n_payload = await conversational_handler.handle_message(payload)
-        
-        n8n_response = await call_n8n_webhook(n8n_payload)
-        
-        print(f"DEBUG - n8n_response after parsing: {json.dumps(n8n_response, indent=2)}")
-        print(f"DEBUG - Has agent_response: {'agent_response' in n8n_response}")
-        print(f"DEBUG - Status field: {n8n_response.get('status', 'NOT_FOUND')}")
-        
-        if "agent_response" in n8n_response and n8n_response.get("agent_response"):
-            agent_response = n8n_response.get("agent_response", "")
-            
-            print(f"DEBUG - Sending WebSocket response with agent_response: {agent_response[:100]}...")
-            
-            await websocket.send_json({
-                "type": "agent_response",
-                "agent": n8n_response.get("agent_name", "Squidgy"),
-                "message": agent_response,
-                "requestId": request_id,
-                "final": True,
-                "timestamp": int(time.time() * 1000),
-                "conversation_state": n8n_response.get("conversation_state", "complete"),
-                "missing_info": n8n_response.get("missing_info", [])
-            })
-            
-            await save_message_to_history(payload["session_id"], "User", payload.get("_original_message", payload["user_mssg"]))
-            await save_message_to_history(payload["session_id"], "AI", agent_response)
-            
-    except Exception as e:
-        logger.error(f"Error in process_n8n_request_async: {str(e)}")
-        await websocket.send_json({
-            "type": "error",
-            "message": f"Error processing request: {str(e)}",
-            "requestId": request_id,
-            "timestamp": int(time.time() * 1000)
-        })
-
 # API Endpoints
 @app.get("/")
 async def health_check():
@@ -1859,32 +870,21 @@ async def debug_agent_docs(agent_name: str):
 async def n8n_check_agent_match(request: N8nCheckAgentMatchRequest):
     """N8N webhook endpoint to check if a specific agent matches the user query"""
     try:
-        is_match, confidence = await agent_matcher.check_agent_match(
+        is_match = await agent_matcher.check_agent_match(
             agent_name=request.agent_name,
             user_query=request.user_query,
             threshold=request.threshold
         )
         
         # Debug logging
-        print(f"\n🔍 DEBUG - Agent Match Check:")
-        print(f"  Agent: {request.agent_name}")
-        print(f"  Query: {request.user_query}")
-        print(f"  Threshold: {request.threshold}")
-        print(f"  Match Result: {is_match}")
-        print(f"  Confidence: {confidence:.3f}")
-        
-        if is_match:
-            recommendation = f"Agent '{request.agent_name}' is suitable for this query"
-        else:
-            recommendation = f"Agent '{request.agent_name}' may not be optimal for this query"
+        logger.debug(f"Agent Match Check - Agent: {request.agent_name}, Query: {request.user_query}, Result: {is_match}")
         
         return {
             "agent_name": request.agent_name,
             "user_query": request.user_query,
             "is_match": is_match,
-            "confidence": round(confidence, 3),
             "threshold_used": request.threshold,
-            "recommendation": recommendation,
+            "recommendation": f"Agent '{request.agent_name}' is {'suitable' if is_match else 'not optimal'} for this query",
             "status": "success"
         }
         
@@ -1907,34 +907,14 @@ async def n8n_find_best_agents(request: N8nFindBestAgentsRequest):
             top_n=request.top_n
         )
         
-        if request.min_threshold:
-            best_agents = [(name, score) for name, score in best_agents if score >= request.min_threshold * 100]
-        
         recommendations = []
-        for idx, (agent_name, score) in enumerate(best_agents):
-            if score >= 90:
-                quality = "Excellent match"
-            elif score >= 75:
-                quality = "Good match"
-            elif score >= 60:
-                quality = "Fair match"
-            else:
-                quality = "Possible match"
-            
-            # agent_descriptions = {
-            #     "presaleskb": "specializes in sales and pricing queries",
-            #     "socialmediakb": "handles social media and digital marketing",
-            #     "leadgenkb": "general purpose assistant for various queries"
-            # }
-
+        for idx, agent_name in enumerate(best_agents):
+            # Simplified quality assessment - all matched agents are good
+            quality = "Good match"
             description = f"{quality} - {AGENT_DESCRIPTIONS.get(agent_name, 'handles specialized queries')}"
-
-            
-            # description = f"{quality} - {agent_descriptions.get(agent_name, 'handles specialized queries')}"
             
             recommendations.append({
                 "agent_name": agent_name,
-                "match_percentage": round(score, 1),
                 "rank": idx + 1,
                 "description": description
             })
@@ -1948,11 +928,9 @@ async def n8n_find_best_agents(request: N8nFindBestAgentsRequest):
         
         if recommendations:
             response["best_agent"] = recommendations[0]["agent_name"]
-            response["best_agent_confidence"] = recommendations[0]["match_percentage"]
         else:
             response["best_agent"] = "presaleskb"
-            response["best_agent_confidence"] = 100.0
-            response["message"] = "No agents found above threshold, using default agent"
+            response["message"] = "No agents found, using default agent"
         
         return response
         
@@ -1960,8 +938,7 @@ async def n8n_find_best_agents(request: N8nFindBestAgentsRequest):
         logger.error(f"Error in n8n_find_best_agents: {str(e)}")
         return {
             "user_query": request.user_query,
-            "best_agent": "",
-            "best_agent_confidence": 100.0,
+            "best_agent": "presaleskb",
             "recommendations": [],
             "error": str(e),
             "status": "error",
@@ -1984,11 +961,10 @@ async def n8n_analyze_agent_query(request: Dict[str, Any]):
         }
         
         if current_agent:
-            is_match, match_confidence = await agent_matcher.check_agent_match(current_agent, user_query)
+            is_match = await agent_matcher.check_agent_match(current_agent, user_query)
             response["current_agent_analysis"] = {
                 "agent_name": current_agent,
                 "is_suitable": is_match,
-                "confidence": round(match_confidence, 3),
                 "recommendation": "Keep current agent" if is_match else "Consider switching agents"
             }
         
@@ -1998,26 +974,25 @@ async def n8n_analyze_agent_query(request: Dict[str, Any]):
             response["recommended_agents"] = [
                 {
                     "agent_name": name,
-                    "confidence": round(score, 1),
                     "rank": idx + 1
                 }
-                for idx, (name, score) in enumerate(best_agents)
+                for idx, name in enumerate(best_agents)
             ]
             
             if best_agents:
-                best_agent, best_score = best_agents[0]
+                best_agent = best_agents[0]
                 
                 if current_agent and current_agent == best_agent:
                     response["routing_decision"] = "keep_current"
                     response["routing_message"] = f"Current agent '{current_agent}' is optimal"
-                elif best_score >= 70:
+                else:
                     response["routing_decision"] = "switch_agent"
                     response["suggested_agent"] = best_agent
-                    response["routing_message"] = f"Switch to '{best_agent}' (confidence: {best_score}%)"
-                else:
-                    response["routing_decision"] = "use_default"
-                    response["suggested_agent"] = "presaleskb"
-                    response["routing_message"] = "No strong match found, use general agent"
+                    response["routing_message"] = f"Switch to '{best_agent}'"
+            else:
+                response["routing_decision"] = "use_default"
+                response["suggested_agent"] = "presaleskb"
+                response["routing_message"] = "No match found, use default agent"
         
         return response
         
@@ -2035,7 +1010,7 @@ async def n8n_analyze_agent_query(request: Dict[str, Any]):
 async def n8n_agent_matcher_health():
     """Health check for agent matching service"""
     try:
-        test_result = agent_matcher.supabase.table('agent_documents').select('id').limit(1).execute()
+        agent_matcher.supabase.table('agent_documents').select('id').limit(1).execute()
         
         return {
             "service": "agent_matcher",
@@ -2057,7 +1032,7 @@ async def n8n_agent_matcher_health():
         }
 
 # Client KB endpoints
-@app.post("/api/client/check_kb")
+@app.post("/n8n/client/check_kb")
 async def check_client_kb(request: ClientKBCheckRequest):
     """Check if client has website information in KB and return appropriate response"""
     try:
@@ -2153,7 +1128,7 @@ async def check_client_kb(request: ClientKBCheckRequest):
             action_required='retry'
         )
 
-@app.post("/api/client/update_website")
+@app.post("/n8n/client/update_website")
 async def update_client_website(request: Dict[str, Any]):
     """Update client KB when website URL is provided"""
     try:
@@ -2206,7 +1181,7 @@ async def update_client_website(request: Dict[str, Any]):
         logger.error(f"Error updating client website: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/client/context/{user_id}")
+@app.get("/n8n/client/context/{user_id}")
 async def get_client_context(user_id: str):
     """Get complete client context for agent use"""
     try:
@@ -2261,7 +1236,7 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
         
         response = await check_client_kb(kb_request)
         
-        n8n_response = response.dict()
+        n8n_response = response.model_dump()
         
         if response.has_website_info:
             n8n_response['next_action'] = 'proceed_with_agent'
@@ -2282,96 +1257,325 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
             'routing': 'error'
         }
 
-# Agent KB query endpoints
-@app.post("/api/agent/query")
-async def agent_kb_query(request: AgentKBQueryRequest):
-    """Query agent with user message using dynamic KB context"""
+# WebSocket message processing function that calls n8n
+async def process_websocket_message_with_n8n(request_data: Dict[str, Any], websocket: WebSocket, request_id: str):
+    """Process WebSocket message through n8n workflow (same as HTTP endpoints)"""
     try:
-        agent_context = await dynamic_agent_kb_handler.get_agent_context_from_kb(request.agent)
+        logger.info(f"Processing WebSocket message via n8n: {request_id}")
         
-        client_context = await dynamic_agent_kb_handler.get_client_industry_context(request.user_id)
+        # Use the same conversational handler as HTTP endpoints
+        n8n_response = await conversational_handler.handle_message(request_data)
         
-        kb_data = await client_kb_manager.get_client_kb(request.user_id, 'website_info')
+        logger.info(f"✅ n8n response received for request {request_id}")
+        print(f"✅ n8n response received for request {request_id}")
         
-        # Retrieve additional context from chat history
-        chat_history = []
+        # Send response back through WebSocket
         try:
-            history_result = supabase.table('chat_history')\
-                .select('sender, message, timestamp')\
-                .eq('user_id', request.user_id)\
-                .order('timestamp', desc=True)\
-                .limit(20)\
-                .execute()
-            if history_result.data:
-                chat_history = history_result.data
-        except Exception as e:
-            logger.warning(f"Failed to retrieve chat history: {str(e)}")
+            await websocket.send_json({
+                "type": "response",
+                "requestId": request_id,
+                "response": n8n_response,
+                "timestamp": int(time.time() * 1000)
+            })
+            logger.info(f"📤 Response sent via WebSocket for request {request_id}")
+            print(f"📤 Response sent via WebSocket for request {request_id}")
+        except Exception as ws_error:
+            logger.error(f"❌ Failed to send WebSocket response for request {request_id}: {ws_error}")
+            print(f"❌ Failed to send WebSocket response for request {request_id}: {ws_error}")
+            raise
         
-        # Retrieve website data
-        website_data = []
+        # Save to chat history (same as HTTP endpoints)
+        await conversational_handler.save_to_history(
+            request_data["session_id"],
+            request_data["user_id"], 
+            request_data["user_mssg"],
+            n8n_response.get("agent_response", "")
+        )
+        
+        logger.info(f"✅ WebSocket message processed successfully: {request_id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error processing WebSocket message {request_id}: {str(e)}")
+        
+        # Send error response
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "requestId": request_id,
+                "error": str(e),
+                "timestamp": int(time.time() * 1000)
+            })
+        except Exception as send_error:
+            logger.error(f"Failed to send error response: {send_error}")
+
+# Helper functions for optimized client context aggregation
+async def get_optimized_client_context(user_id: str, query_embedding: List[float]) -> Dict[str, Any]:
+    """Get comprehensive client context using optimized database functions"""
+    try:
+        # Use the optimized function from the new schema
+        result = supabase.rpc('get_client_context_similarity', {
+            'client_id_param': user_id,
+            'query_embedding': query_embedding,
+            'similarity_threshold': 0.7,
+            'limit_count': 10
+        }).execute()
+        
+        context_data = {}
+        if result.data:
+            # Aggregate different types of context
+            for item in result.data:
+                context_type = item['context_type']
+                content = item['content']
+                similarity = item['similarity']
+                
+                if context_type not in context_data:
+                    context_data[context_type] = []
+                
+                context_data[context_type].append({
+                    'content': content,
+                    'similarity': similarity,
+                    'id': item['id']
+                })
+        
+        # Fallback to legacy client industry context if no optimized data
+        if not context_data:
+            return await dynamic_agent_kb_handler.get_client_industry_context(user_id)
+        
+        # Build structured client context
+        structured_context = {
+            'user_id': user_id,
+            'context_sources': len(context_data),
+            'website_info': context_data.get('website_info', []),
+            'social_media': context_data.get('social_media', []),
+            'business_info': context_data.get('business_info', []),
+            'other_sources': {k: v for k, v in context_data.items() 
+                           if k not in ['website_info', 'social_media', 'business_info']}
+        }
+        
+        return structured_context
+        
+    except Exception as e:
+        logger.warning(f"Error getting optimized client context: {e}")
+        # Fallback to legacy method
+        return await dynamic_agent_kb_handler.get_client_industry_context(user_id)
+
+async def get_optimized_agent_knowledge(agent_name: str, query_embedding: List[float]) -> Dict[str, Any]:
+    """Get agent knowledge using optimized database function with usage tracking"""
+    try:
+        # Use the optimized function from the new schema
+        result = supabase.rpc('get_agent_knowledge_smart', {
+            'agent_name_param': agent_name,
+            'query_embedding': query_embedding,
+            'similarity_threshold': 0.7,
+            'limit_count': 5
+        }).execute()
+        
+        knowledge_data = {
+            'agent_name': agent_name,
+            'knowledge_items': [],
+            'total_relevance': 0.0
+        }
+        
+        if result.data:
+            for item in result.data:
+                knowledge_item = {
+                    'id': item['id'],
+                    'content': item['content'],
+                    'metadata': item['metadata'],
+                    'similarity': item['similarity'],
+                    'relevance_score': item['relevance_score'],
+                    'combined_score': item['similarity'] * item['relevance_score']
+                }
+                knowledge_data['knowledge_items'].append(knowledge_item)
+                knowledge_data['total_relevance'] += knowledge_item['combined_score']
+        
+        return knowledge_data
+        
+    except Exception as e:
+        logger.warning(f"Error getting optimized agent knowledge: {e}")
+        # Fallback to legacy method
+        return await dynamic_agent_kb_handler.get_agent_context_from_kb(agent_name)
+
+async def build_enhanced_kb_context(user_id: str, client_context: Dict, agent_knowledge: Dict) -> Dict[str, Any]:
+    """Build comprehensive KB context from multiple optimized sources"""
+    try:
+        kb_context = {
+            'sources': [],
+            'website_info': {},
+            'social_media': {},
+            'business_info': {},
+            'chat_history': {},
+            'agent_insights': {},
+            'similarity_scores': {}
+        }
+        
+        # Process client context data
+        if client_context.get('website_info'):
+            for item in client_context['website_info']:
+                content = item['content']
+                kb_context['website_info'].update(content)
+                kb_context['sources'].append('website_info')
+                kb_context['similarity_scores']['website_info'] = item['similarity']
+        
+        if client_context.get('social_media'):
+            for item in client_context['social_media']:
+                content = item['content']
+                kb_context['social_media'].update(content)
+                kb_context['sources'].append('social_media')
+                kb_context['similarity_scores']['social_media'] = item['similarity']
+        
+        if client_context.get('business_info'):
+            for item in client_context['business_info']:
+                content = item['content']
+                kb_context['business_info'].update(content)
+                kb_context['sources'].append('business_info')
+                kb_context['similarity_scores']['business_info'] = item['similarity']
+        
+        # Process agent knowledge
+        if agent_knowledge.get('knowledge_items'):
+            kb_context['agent_insights'] = {
+                'relevant_knowledge': [item['content'] for item in agent_knowledge['knowledge_items'][:3]],
+                'total_relevance': agent_knowledge.get('total_relevance', 0.0),
+                'knowledge_count': len(agent_knowledge['knowledge_items'])
+            }
+            kb_context['sources'].append('agent_knowledge')
+        
+        # Get enhanced chat history with better indexing
+        try:
+            chat_result = supabase.table('chat_history')\
+                .select('sender, message, timestamp')\
+                .eq('user_id', user_id)\
+                .order('timestamp', desc=True)\
+                .limit(10)\
+                .execute()
+            
+            if chat_result.data:
+                recent_messages = [msg for msg in chat_result.data if msg['sender'] == 'User'][:5]
+                kb_context['chat_history'] = {
+                    'recent_user_messages': [msg['message'] for msg in recent_messages],
+                    'message_count': len(chat_result.data),
+                    'last_interaction': chat_result.data[0]['timestamp'] if chat_result.data else None
+                }
+                kb_context['sources'].append('chat_history')
+        except Exception as e:
+            logger.warning(f"Error getting chat history: {e}")
+        
+        # Get website data with better performance
         try:
             website_result = supabase.table('website_data')\
                 .select('url, analysis, created_at')\
-                .eq('user_id', request.user_id)\
+                .eq('user_id', user_id)\
                 .order('created_at', desc=True)\
-                .limit(5)\
+                .limit(3)\
                 .execute()
+            
             if website_result.data:
-                website_data = website_result.data
-        except Exception as e:
-            logger.warning(f"Failed to retrieve website data: {str(e)}")
-        
-        kb_context = {}
-        if kb_data:
-            content = kb_data.get('content', {})
-            website_info = content.get('website_info', {})
-            chat_insights = content.get('chat_insights', {})
-            
-            kb_context = {
-                'company_name': website_info.get('company_name'),
-                'website_url': website_info.get('url'),
-                'services': website_info.get('services', []),
-                'description': website_info.get('description'),
-                'topics': chat_insights.get('topics', []),
-                'interaction_count': content.get('interaction_history', {}).get('total_messages', 0)
-            }
-        
-        # Enhance kb_context with chat history insights
-        if chat_history:
-            # Extract recent topics and context from chat history
-            recent_messages = [msg['message'] for msg in chat_history[:10] if msg['sender'] == 'User']
-            kb_context['recent_topics'] = recent_messages
-            kb_context['chat_history_count'] = len(chat_history)
-            
-            # Find any mentions of websites, products, or services in recent chat
-            for msg in chat_history[:10]:
-                if msg['sender'] == 'User':
-                    msg_lower = msg['message'].lower()
-                    if any(url_indicator in msg_lower for url_indicator in ['http://', 'https://', 'www.', '.com', '.org']):
-                        kb_context['mentioned_urls'] = kb_context.get('mentioned_urls', [])
-                        kb_context['mentioned_urls'].append(msg['message'])
-        
-        # Enhance kb_context with website analysis data
-        if website_data:
-            kb_context['analyzed_websites'] = []
-            for site in website_data:
-                kb_context['analyzed_websites'].append({
+                kb_context['analyzed_websites'] = [{
                     'url': site['url'],
                     'analysis': site.get('analysis', ''),
                     'analyzed_at': site['created_at']
-                })
+                } for site in website_result.data]
+                kb_context['sources'].append('website_analysis')
+        except Exception as e:
+            logger.warning(f"Error getting website data: {e}")
         
-        must_questions = agent_context.get('must_questions', [])
-        missing_must_info = []
+        # Calculate overall context quality score
+        kb_context['context_quality'] = len(kb_context['sources']) / 6.0  # Max 6 sources
+        kb_context['has_sufficient_context'] = len(kb_context['sources']) >= 3
         
+        return kb_context
+        
+    except Exception as e:
+        logger.error(f"Error building enhanced KB context: {e}")
+        return {}
+
+async def check_missing_must_info(must_questions: List[str], kb_context: Dict, client_context: Dict) -> List[str]:
+    """Check for missing must-have information using enhanced context"""
+    missing_info = []
+    
+    try:
         for must_q in must_questions:
-            if 'website' in must_q.lower() and not kb_context.get('website_url'):
-                missing_must_info.append('website_url')
-            elif 'niche' in must_q.lower() and client_context.get('niche') == 'Unknown':
-                missing_must_info.append('client_niche')
-            elif 'property address' in must_q.lower() and not kb_context.get('property_address'):
-                missing_must_info.append('property_address')
+            question_lower = must_q.lower()
+            
+            if 'website' in question_lower:
+                has_website = (
+                    kb_context.get('website_info', {}).get('url') or
+                    kb_context.get('analyzed_websites') or
+                    any('http' in msg for msg in kb_context.get('chat_history', {}).get('recent_user_messages', []))
+                )
+                if not has_website:
+                    missing_info.append('website_url')
+            
+            elif 'niche' in question_lower or 'industry' in question_lower:
+                has_niche = (
+                    client_context.get('niche') and client_context.get('niche') != 'Unknown' or
+                    kb_context.get('business_info', {}).get('industry') or
+                    kb_context.get('website_info', {}).get('industry')
+                )
+                if not has_niche:
+                    missing_info.append('client_niche')
+            
+            elif 'address' in question_lower or 'location' in question_lower:
+                has_location = (
+                    kb_context.get('business_info', {}).get('address') or
+                    kb_context.get('website_info', {}).get('location') or
+                    client_context.get('location')
+                )
+                if not has_location:
+                    missing_info.append('property_address')
+    
+    except Exception as e:
+        logger.warning(f"Error checking missing must info: {e}")
+    
+    return missing_info
+
+async def log_performance_metric(operation_type: str, execution_time_ms: int, operation_details: Dict, success: bool = True, error_message: str = None):
+    """Log performance metrics to the optimized performance table"""
+    try:
+        metric_data = {
+            'operation_type': operation_type,
+            'operation_details': operation_details,
+            'execution_time_ms': execution_time_ms,
+            'success': success,
+            'error_message': error_message
+        }
         
+        supabase.table('performance_metrics').insert(metric_data).execute()
+        
+    except Exception as e:
+        logger.warning(f"Error logging performance metric: {e}")
+
+# Agent KB query endpoints with optimized database schema
+@app.post("/n8n/agent/query")
+async def agent_kb_query(request: AgentKBQueryRequest):
+    """Enhanced agent query with optimized client context aggregation using new schema"""
+    try:
+        start_time = time.time()
+        
+        # Generate query embedding for similarity searches
+        query_embedding = await AgentMatcher(supabase).get_query_embedding(request.user_mssg)
+        
+        # Get agent context from KB with smart caching and usage tracking
+        agent_context = await dynamic_agent_kb_handler.get_agent_context_from_kb(request.agent)
+        
+        # Get comprehensive client context using optimized database functions
+        client_context = await get_optimized_client_context(request.user_id, query_embedding)
+        
+        # Get agent-specific knowledge with usage tracking
+        agent_knowledge = await get_optimized_agent_knowledge(request.agent, query_embedding)
+        
+        # Build comprehensive KB context from multiple sources
+        kb_context = await build_enhanced_kb_context(
+            request.user_id, 
+            client_context, 
+            agent_knowledge
+        )
+        
+        # Check for must-have information requirements
+        must_questions = agent_context.get('must_questions', [])
+        missing_must_info = await check_missing_must_info(must_questions, kb_context, client_context)
+        
+        # Handle critical missing information
         if 'website_url' in missing_must_info:
             follow_up_questions = await dynamic_agent_kb_handler.generate_contextual_questions(
                 request.user_mssg,
@@ -2379,6 +1583,14 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 ['website_url'],
                 client_context
             )
+            
+            # Log performance metrics
+            execution_time = int((time.time() - start_time) * 1000)
+            await log_performance_metric("agent_query_missing_info", execution_time, {
+                "agent": request.agent,
+                "user_id": request.user_id,
+                "missing_info": missing_must_info
+            })
             
             return AgentKBQueryResponse(
                 user_id=request.user_id,
@@ -2391,10 +1603,11 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                     "priority": "critical"
                 }],
                 confidence_score=0.9,
-                kb_context_used=False,
+                kb_context_used=bool(kb_context),
                 status="missing_critical_info"
             )
         
+        # Analyze query with enhanced context
         analysis = await dynamic_agent_kb_handler.analyze_query_with_context(
             request.user_mssg,
             agent_context,
@@ -2402,6 +1615,7 @@ async def agent_kb_query(request: AgentKBQueryRequest):
             kb_context
         )
         
+        # Generate response based on analysis
         if analysis.get('can_answer') and analysis.get('confidence', 0) > 0.7:
             available_tools = agent_context.get('tools', [])
             required_tool_names = analysis.get('required_tools', [])
@@ -2415,6 +1629,16 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 tools_to_use
             )
             
+            # Log successful performance
+            execution_time = int((time.time() - start_time) * 1000)
+            await log_performance_metric("agent_query_success", execution_time, {
+                "agent": request.agent,
+                "user_id": request.user_id,
+                "confidence": analysis.get('confidence', 0.8),
+                "tools_used": len(tools_to_use),
+                "context_sources": len(kb_context.get('sources', []))
+            })
+            
             return AgentKBQueryResponse(
                 user_id=request.user_id,
                 agent=request.agent,
@@ -2422,11 +1646,12 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 agent_response=agent_response,
                 required_tools=tools_to_use if tools_to_use else None,
                 confidence_score=analysis.get('confidence', 0.8),
-                kb_context_used=bool(kb_context.get('company_name')),
+                kb_context_used=bool(kb_context),
                 status="success"
             )
         
         else:
+            # Handle insufficient information case
             all_missing = missing_must_info + analysis.get('missing_info', [])
             
             follow_up_questions = await dynamic_agent_kb_handler.generate_contextual_questions(
@@ -2444,6 +1669,15 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                     "priority": "high" if info in missing_must_info else "medium"
                 })
             
+            # Log performance for insufficient info case
+            execution_time = int((time.time() - start_time) * 1000)
+            await log_performance_metric("agent_query_needs_info", execution_time, {
+                "agent": request.agent,
+                "user_id": request.user_id,
+                "missing_info_count": len(all_missing),
+                "confidence": analysis.get('confidence', 0.5)
+            })
+            
             return AgentKBQueryResponse(
                 user_id=request.user_id,
                 agent=request.agent,
@@ -2451,11 +1685,19 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 follow_up_questions=follow_up_questions,
                 missing_information=missing_info_formatted,
                 confidence_score=analysis.get('confidence', 0.5),
-                kb_context_used=bool(kb_context.get('company_name')),
+                kb_context_used=bool(kb_context),
                 status="needs_more_info"
             )
             
     except Exception as e:
+        # Log error performance
+        execution_time = int((time.time() - start_time) * 1000)
+        await log_performance_metric("agent_query_error", execution_time, {
+            "agent": request.agent,
+            "user_id": request.user_id,
+            "error": str(e)
+        }, success=False, error_message=str(e))
+        
         logger.error(f"Error in agent_kb_query: {str(e)}")
         return AgentKBQueryResponse(
             user_id=request.user_id,
@@ -2467,7 +1709,7 @@ async def agent_kb_query(request: AgentKBQueryRequest):
             status="error"
         )
 
-@app.post("/n8n/agent/query")
+@app.post("/n8n/agent/query/wrapper")
 async def n8n_agent_kb_query(request: Dict[str, Any]):
     """N8N-compatible version of agent KB query endpoint"""
     try:
@@ -2479,7 +1721,7 @@ async def n8n_agent_kb_query(request: Dict[str, Any]):
         
         response = await agent_kb_query(query_request)
         
-        n8n_response = response.dict()
+        n8n_response = response.model_dump()
         
         if response.response_type == "direct_answer":
             n8n_response['workflow_action'] = 'send_response'
@@ -2513,7 +1755,7 @@ async def n8n_agent_kb_query(request: Dict[str, Any]):
             'next_node': 'error_handler'
         }
 
-@app.post("/api/agent/refresh_kb")
+@app.post("/n8n/agent/refresh_kb")
 async def refresh_agent_kb(agent_name: str):
     """Refresh agent KB by re-reading from agent_documents"""
     try:
@@ -2604,17 +1846,7 @@ async def n8n_main_request(request: N8nMainRequest, agent_name: str, session_id:
             n8n_response = await call_n8n_webhook(n8n_payload)
             
             # Enhanced logging for debugging
-            print("\n" + "="*80)
-            print("N8N MAIN REQUEST - FULL RESPONSE:")
-            print("="*80)
-            print(f"Request ID: {request_id}")
-            print(f"Session ID: {session_id}")
-            print(f"Agent: {agent_name}")
-            print(f"User Message: {request.user_mssg}")
-            print("-"*80)
-            print("N8N Response:")
-            print(json.dumps(n8n_response, indent=2))
-            print("="*80 + "\n")
+            logger.debug(f"N8N Main Request - ID: {request_id}, Session: {session_id}, Agent: {agent_name}, Message: {request.user_mssg}, Response: {json.dumps(n8n_response, indent=2)}")
             
             logger.info(f"Received from n8n: {n8n_response}")
             
@@ -2696,7 +1928,7 @@ async def receive_stream_update(update: StreamUpdate):
                 "complete": False
             }
         
-        streaming_sessions[session_key]["updates"].append(update.dict())
+        streaming_sessions[session_key]["updates"].append(update.model_dump())
         
         if update.type in ["complete", "final"]:
             streaming_sessions[session_key]["complete"] = True
@@ -3014,6 +2246,60 @@ async def get_chat_history(session_id: str):
         logger.error(f"Error fetching chat history: {str(e)}")
         return {'history': [], 'status': 'error', 'error': str(e)}
 
+# Application logs endpoint
+
+# Keep last 100 log entries in memory
+app_logs = deque(maxlen=100)
+
+# Custom log handler to capture logs
+class InMemoryLogHandler(logging.Handler):
+    def emit(self, record):
+        log_entry = {
+            'timestamp': record.created,
+            'level': record.levelname,
+            'message': record.getMessage(),
+            'module': record.module,
+            'function': record.funcName
+        }
+        app_logs.append(log_entry)
+
+# Add the handler to the logger
+memory_handler = InMemoryLogHandler()
+memory_handler.setLevel(logging.INFO)
+logger.addHandler(memory_handler)
+
+@app.get("/logs")
+async def get_application_logs(limit: int = 50):
+    """Get recent application logs"""
+    try:
+        # Get last N logs
+        recent_logs = list(app_logs)[-limit:]
+        
+        # Format logs for response
+        formatted_logs = []
+        for log in recent_logs:
+            formatted_logs.append({
+                'timestamp': datetime.fromtimestamp(log['timestamp']).isoformat(),
+                'level': log['level'],
+                'message': log['message'],
+                'module': log['module'],
+                'function': log['function']
+            })
+        
+        return {
+            'status': 'success',
+            'logs': formatted_logs,
+            'count': len(formatted_logs),
+            'total_available': len(app_logs)
+        }
+    except Exception as e:
+        logger.error(f"Error fetching logs: {str(e)}")
+        return {
+            'status': 'error',
+            'message': str(e),
+            'logs': []
+        }
+
 # Combined endpoint that runs all three tools
 @app.post("/api/website/full-analysis")
 async def full_website_analysis(request: WebsiteAnalysisRequest):
@@ -3117,6 +2403,22 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     
     active_connections[connection_id] = websocket
     
+    async def send_ping():
+        """Send periodic ping to keep connection alive"""
+        while connection_id in active_connections:
+            try:
+                await asyncio.sleep(30)  # Ping every 30 seconds
+                if connection_id in active_connections:
+                    await websocket.send_json({
+                        "type": "ping",
+                        "timestamp": int(time.time() * 1000)
+                    })
+            except Exception:
+                break
+    
+    # Start ping task
+    ping_task = asyncio.create_task(send_ping())
+    
     try:
         # Send initial connection status
         await websocket.send_json({
@@ -3128,15 +2430,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
         
         while True:
             try:
-                data = await websocket.receive_text()
+                # Use timeout to prevent hanging
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
                 message_data = json.loads(data)
                 
                 request_id = message_data.get("requestId", str(uuid.uuid4()))
                 
                 user_input = message_data.get("message", "").strip()
                 
-                # Skip processing for empty messages or connection status messages
-                if not user_input or message_data.get("type") == "connection_status":
+                # Handle ping/pong and skip processing for empty messages  
+                if message_data.get("type") == "ping":
+                    await websocket.send_json({
+                        "type": "pong",
+                        "timestamp": int(time.time() * 1000)
+                    })
+                    continue
+                elif message_data.get("type") == "pong":
+                    continue
+                elif not user_input or message_data.get("type") == "connection_status":
                     continue
                     
                 # Check if this request is already being processed
@@ -3154,42 +2465,72 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
                         "timestamp": int(time.time() * 1000)
                     })
                     
-                    n8n_payload = {
+                    # Use the working conversational handler (same as HTTP endpoints)
+                    request_data = {
                         "user_id": user_id,
                         "user_mssg": user_input,
                         "session_id": session_id,
                         "agent_name": message_data.get("agent", "presaleskb"),
-                        "timestamp_of_call_made": datetime.now().isoformat(),
-                        "request_id": request_id
+                        "timestamp_of_call_made": datetime.now().isoformat()
                     }
                     
-                    asyncio.create_task(
-                        process_n8n_request_async(n8n_payload, websocket, request_id)
+                    # Process via conversational handler (calls n8n webhook)
+                    # Don't await here to keep WebSocket responsive, but ensure task completion
+                    task = asyncio.create_task(
+                        process_websocket_message_with_n8n(request_data, websocket, request_id)
                     )
+                    
+                    # Add task completion callback for debugging
+                    def task_done_callback(task_result):
+                        try:
+                            if task_result.exception():
+                                logger.error(f"❌ WebSocket task failed for {request_id}: {task_result.exception()}")
+                                print(f"❌ WebSocket task failed for {request_id}: {task_result.exception()}")
+                            else:
+                                logger.info(f"✅ WebSocket task completed successfully for {request_id}")
+                                print(f"✅ WebSocket task completed successfully for {request_id}")
+                        except Exception as e:
+                            logger.error(f"Error in task callback: {e}")
+                            print(f"Error in task callback: {e}")
+                    
+                    task.add_done_callback(task_done_callback)
                     
                 finally:
                     active_requests.discard(request_id)
                     
+            except asyncio.TimeoutError:
+                logger.info(f"WebSocket timeout for {connection_id}, checking if still alive")
+                try:
+                    await websocket.send_json({
+                        "type": "ping",
+                        "timestamp": int(time.time() * 1000)
+                    })
+                except Exception:
+                    logger.info(f"Connection {connection_id} appears dead, closing")
+                    break
             except json.JSONDecodeError:
                 logger.warning("Invalid JSON received, skipping")
                 continue
                 
     except WebSocketDisconnect:
-        if connection_id in active_connections:
-            del active_connections[connection_id]
         logger.info(f"Client disconnected: {connection_id}")
         
     except Exception as e:
         logger.exception(f"WebSocket error: {str(e)}")
+        
+    finally:
+        # Clean up
+        ping_task.cancel()
         if connection_id in active_connections:
             del active_connections[connection_id]
+        logger.info(f"WebSocket connection closed: {connection_id}")
 
 
 @app.get("/api/agents/config")
 async def get_agents_config():
     """Get all agent configurations"""
     return {
-        "agents": [agent.dict() for agent in AGENTS.values()]
+        "agents": [agent.model_dump() for agent in AGENTS.values()]
     }
 
 @app.get("/api/agents/config/{agent_name}")
@@ -3198,7 +2539,7 @@ async def get_agent_config_endpoint(agent_name: str):
     agent = get_agent_config(agent_name)
     if not agent:
         raise HTTPException(status_code=404, detail=f"Agent {agent_name} not found")
-    return agent.dict()
+    return agent.model_dump()
 
 def extract_image_urls(text: str) -> List[str]:
     """Extract Supabase storage URLs from text"""
@@ -3254,6 +2595,62 @@ async def get_background_task_result(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
     
     return background_results[task_id]
+
+@app.post("/api/send-invitation-email")
+async def send_invitation_email(request: dict):
+    """Send invitation email using backend Supabase client"""
+    try:
+        email = request.get('email')
+        token = request.get('token')
+        sender_name = request.get('senderName', 'Someone')
+        invite_url = request.get('inviteUrl')
+        
+        if not email or not token or not invite_url:
+            return {
+                "success": False,
+                "error": "Missing required fields",
+                "details": f"Missing: {', '.join([k for k, v in {'email': email, 'token': token, 'invite_url': invite_url}.items() if not v])}"
+            }
+        
+        print(f"Backend: Attempting to send invitation email to {email}")
+        print(f"Backend: Invite URL: {invite_url}")
+        
+        # Try using the backend's Supabase client for admin operations
+        try:
+            # Check if user already exists
+            existing_user = supabase.table('profiles').select('id, email').eq('email', email).execute()
+            print(f"Backend: Existing user check: {len(existing_user.data) if existing_user.data else 0} users found")
+            
+            # For now, return success with manual link since SMTP might not be configured
+            return {
+                "success": False,
+                "error": "Email sending not configured in backend",
+                "fallback_url": invite_url,
+                "message": f"Invitation created for {email}. Please share the link manually.",
+                "invitation_details": {
+                    "recipient": email,
+                    "sender": sender_name,
+                    "link": invite_url,
+                    "token": token
+                }
+            }
+            
+        except Exception as supabase_error:
+            print(f"Backend: Supabase operation failed: {str(supabase_error)}")
+            return {
+                "success": False,
+                "error": "Backend database error",
+                "details": str(supabase_error),
+                "fallback_url": invite_url
+            }
+            
+    except Exception as e:
+        print(f"Backend: Send invitation email error: {str(e)}")
+        return {
+            "success": False,
+            "error": "Backend invitation processing failed",
+            "details": str(e)
+        }
 
 # CORS middleware
 app.add_middleware(
