@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "url": "https://squidgy-back-919bc0659e35.herokuapp.com/api/stream",
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
@@ -39,7 +39,7 @@
     },
     {
       "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/chat",
+        "url": "https://squidgy-back-919bc0659e35.herokuapp.com/chat",
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
@@ -59,7 +59,7 @@
     },
     {
       "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "url": "https://squidgy-back-919bc0659e35.herokuapp.com/api/stream",
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
@@ -105,7 +105,7 @@
     },
     {
       "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "url": "https://squidgy-back-919bc0659e35.herokuapp.com/api/stream",
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
@@ -123,7 +123,7 @@
     },
     {
       "parameters": {
-        "url": "https://squidgy-backend-d9475a8a4505.herokuapp.com/api/stream",
+        "url": "https://squidgy-back-919bc0659e35.herokuapp.com/api/stream",
         "method": "POST",
         "sendBody": true,
         "specifyBody": "json",
