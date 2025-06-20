@@ -399,21 +399,6 @@ class ClientKBManager:
             return 'problem_solving'
         else:
             return 'general_interaction'
-    
-    async def get_client_kb(self, user_id: str, kb_type: str = "website_info") -> Optional[Dict[str, Any]]:
-        """Retrieve client KB entry"""
-        try:
-            result = self.supabase.table('client_kb')\
-                .select('*')\
-                .eq('client_id', user_id)\
-                .eq('kb_type', kb_type)\
-                .single()\
-                .execute()
-            
-            return result.data if result.data else None
-        except Exception as e:
-            logger.error(f"Error getting client KB: {str(e)}")
-            return None
 
 # Dynamic Agent KB Handler Class
 class DynamicAgentKBHandler:
