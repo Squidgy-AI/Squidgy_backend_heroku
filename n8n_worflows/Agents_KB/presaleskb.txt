@@ -29,10 +29,10 @@ Common Queries I Handle:
 - "Can you review my site and suggest improvements?"
 - "I need pricing for website automation"
 - "Analyze my business website"
-- Website URLs like "https://example.com"
-- "https://mycompany.com/"
-- "www.business.com"
-- "Check out my site: https://domain.com"
+- Website URLs for analysis
+- Company website addresses
+- Business domain URLs
+- "Check out my site" requests with URLs
 - Any web address or URL that needs analysis
 - Company websites ending in .com, .org, .ai, .io, .net
 - Business domains and web properties

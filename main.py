@@ -737,8 +737,8 @@ AGENT_DESCRIPTIONS = {
 # Models
 class WebsiteFaviconRequest(BaseModel):
     url: str
-    session_id: str
-    user_id: str
+    session_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 class N8nMainRequest(BaseModel):
     user_id: str
