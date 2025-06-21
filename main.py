@@ -1378,17 +1378,48 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
         
         # Send response back through WebSocket
         try:
-            # Send only the agent_response format that the frontend expects
-            if n8n_response.get("agent_response"):
+            # Check if we need to switch agents based on output_action
+            output_action = n8n_response.get("output_action")
+            current_agent = request_data.get("agent_name", "AI")
+            target_agent = n8n_response.get("agent_name", current_agent)
+            
+            print(f"🔍 Agent switching check - Current: {current_agent}, Target: {target_agent}, Action: {output_action}")
+            
+            # Handle agent switching for need_website_info
+            if output_action == "need_website_info" and target_agent != current_agent:
+                # Send agent switch message
+                transition_message = f"Hey, I will be able to better answer your question. {n8n_response.get('agent_response', '')}"
+                
                 await websocket.send_json({
-                    "type": "agent_response",
-                    "agent": n8n_response.get("agent_name", "AI"),
-                    "message": n8n_response.get("agent_response"),
+                    "type": "agent_switch",
+                    "from_agent": current_agent,
+                    "to_agent": target_agent,
+                    "message": transition_message,
                     "requestId": request_id,
-                    "final": True,
+                    "session_id": request_data.get("session_id"),
+                    "maintain_history": True,
                     "timestamp": int(time.time() * 1000)
                 })
-                print(f"✅ Sent agent_response via WebSocket: {n8n_response.get('agent_response')[:100]}...")
+                print(f"✅ Sent agent_switch message from {current_agent} to {target_agent}")
+                
+            elif n8n_response.get("agent_response"):
+                # Normal agent response (same agent or different action)
+                final_message = n8n_response.get("agent_response")
+                
+                # If it's need_website_info but same agent, add transition phrase
+                if output_action == "need_website_info" and target_agent == current_agent:
+                    final_message = f"Let me help you with that. {final_message}"
+                
+                await websocket.send_json({
+                    "type": "agent_response",
+                    "agent": target_agent,
+                    "message": final_message,
+                    "requestId": request_id,
+                    "final": True,
+                    "output_action": output_action,
+                    "timestamp": int(time.time() * 1000)
+                })
+                print(f"✅ Sent agent_response via WebSocket: {final_message[:100]}...")
             else:
                 print(f"⚠️ No agent_response found in n8n_response to send via WebSocket")
             
