@@ -334,9 +334,25 @@ class ConversationalHandler:
                         print(f"🔍 STEP 2 - No 'output' field, using first_item directly")
                         parsed_data = first_item
                 elif isinstance(n8n_response, dict):
-                    # Handle direct object format
+                    # Handle direct object format - but check if it has output field first
                     print(f"🔍 STEP 2 - Direct dict format")
-                    parsed_data = n8n_response
+                    
+                    if 'output' in n8n_response:
+                        try:
+                            # Parse the JSON string inside output field  
+                            output_string = n8n_response['output']
+                            print(f"🔍 STEP 2.1 - Dict has 'output' field: {output_string}")
+                            print(f"🔍 STEP 2.1 - output_string type: {type(output_string)}")
+                            
+                            parsed_data = json.loads(output_string)
+                            print(f"🔍 STEP 2.2 - parsed dict output: {json.dumps(parsed_data, indent=2)}")
+                            print(f"🔍 STEP 2.2 - parsed dict agent_response: '{parsed_data.get('agent_response', 'NOT_FOUND')}'")
+                        except json.JSONDecodeError as e:
+                            print(f"🔍 STEP 2.1 - Dict JSON parse error: {e}")
+                            parsed_data = n8n_response
+                    else:
+                        print(f"🔍 STEP 2.1 - Dict has no 'output' field, using directly")
+                        parsed_data = n8n_response
                 else:
                     print(f"🔍 STEP 2 - Unexpected format")
                     logger.error(f"Unexpected n8n response format: {type(n8n_response)}")
