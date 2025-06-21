@@ -1365,15 +1365,7 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
         
         # Send response back through WebSocket
         try:
-            # Send the main response message (for debugging)
-            await websocket.send_json({
-                "type": "response",
-                "requestId": request_id,
-                "response": n8n_response,
-                "timestamp": int(time.time() * 1000)
-            })
-            
-            # Also send the agent_response format that the working frontend expects
+            # Send only the agent_response format that the frontend expects
             if n8n_response.get("agent_response"):
                 await websocket.send_json({
                     "type": "agent_response",
@@ -1383,6 +1375,9 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
                     "final": True,
                     "timestamp": int(time.time() * 1000)
                 })
+                print(f"✅ Sent agent_response via WebSocket: {n8n_response.get('agent_response')[:100]}...")
+            else:
+                print(f"⚠️ No agent_response found in n8n_response to send via WebSocket")
             
             logger.info(f"📤 Response sent via WebSocket for request {request_id}")
             print(f"📤 Response sent via WebSocket for request {request_id}")
