@@ -297,7 +297,8 @@ class ConversationalHandler:
                     raise Exception(f"N8N workflow returned invalid JSON: {str(e)}")
                 
                 # Log the full N8N response for testing
-                logger.debug(f"N8N Response: {json.dumps(n8n_response, indent=2)}")
+                logger.info(f"N8N Response: {json.dumps(n8n_response, indent=2)}")
+                print(f"🔍 N8N Response: {json.dumps(n8n_response, indent=2)}")
                 
                 # Parse n8n response - handle both direct object and array with output field
                 parsed_data = {}
@@ -309,6 +310,7 @@ class ConversationalHandler:
                             # Parse the JSON string inside output field
                             parsed_data = json.loads(first_item['output'])
                             logger.info(f"Parsed output data: {json.dumps(parsed_data, indent=2)}")
+                            print(f"✅ Parsed output data: {json.dumps(parsed_data, indent=2)}")
                         except json.JSONDecodeError as e:
                             logger.error(f"Failed to parse output JSON: {e}")
                             parsed_data = first_item
@@ -330,6 +332,9 @@ class ConversationalHandler:
                 'missing_info': parsed_data.get('missing_info', []),
                 'timestamp': datetime.now().isoformat()
             }
+            
+            logger.info(f"Final formatted response: {json.dumps(formatted_response, indent=2)}")
+            print(f"📤 Final formatted response: {json.dumps(formatted_response, indent=2)}")
 
             return formatted_response
 
