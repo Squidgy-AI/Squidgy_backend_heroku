@@ -257,7 +257,7 @@ class ConversationalHandler:
                 return cached_response
 
             # Process the message
-            response = await self.process_message(user_mssg, session_id, user_id, agent_name)
+            response = await self.process_message(user_mssg, session_id, user_id, agent_name, request_id)
 
             # Cache the response
             await self.cache_response(request_id, response)
@@ -268,15 +268,21 @@ class ConversationalHandler:
             logger.error(f"Error handling message: {str(e)}")
             raise
 
-    async def process_message(self, user_mssg: str, session_id: str, user_id: str, agent_name: str):
+    async def process_message(self, user_mssg: str, session_id: str, user_id: str, agent_name: str, request_id: Optional[str] = None):
         """Process the actual message and get response from n8n"""
         try:
+            # Generate request_id if not provided
+            if not request_id:
+                request_id = str(uuid.uuid4())
+                
             # Prepare payload for n8n
             payload = {
                 'user_id': user_id,
                 'user_mssg': user_mssg,
                 'session_id': session_id,
                 'agent_name': agent_name,
+                'timestamp_of_call_made': datetime.now().isoformat(),
+                'request_id': request_id,
                 '_original_message': user_mssg  # Store original message for history
             }
 
