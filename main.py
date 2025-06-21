@@ -302,28 +302,50 @@ class ConversationalHandler:
                 
                 # Parse n8n response - handle both direct object and array with output field
                 parsed_data = {}
+                print(f"🔍 STEP 1 - n8n_response type: {type(n8n_response)}")
+                print(f"🔍 STEP 1 - n8n_response is list: {isinstance(n8n_response, list)}")
+                if isinstance(n8n_response, list):
+                    print(f"🔍 STEP 1 - list length: {len(n8n_response)}")
+                
                 if isinstance(n8n_response, list) and len(n8n_response) > 0:
                     # Handle array format: [{"output": "JSON_STRING"}]
                     first_item = n8n_response[0]
+                    print(f"🔍 STEP 2 - first_item: {json.dumps(first_item, indent=2)}")
+                    print(f"🔍 STEP 2 - 'output' in first_item: {'output' in first_item}")
+                    
                     if 'output' in first_item:
                         try:
                             # Parse the JSON string inside output field
-                            parsed_data = json.loads(first_item['output'])
+                            output_string = first_item['output']
+                            print(f"🔍 STEP 3 - output_string: {output_string}")
+                            print(f"🔍 STEP 3 - output_string type: {type(output_string)}")
+                            
+                            parsed_data = json.loads(output_string)
+                            print(f"🔍 STEP 4 - parsed_data: {json.dumps(parsed_data, indent=2)}")
+                            print(f"🔍 STEP 4 - parsed_data agent_response: '{parsed_data.get('agent_response', 'NOT_FOUND')}'")
+                            
                             logger.info(f"Parsed output data: {json.dumps(parsed_data, indent=2)}")
                             print(f"✅ Parsed output data: {json.dumps(parsed_data, indent=2)}")
                         except json.JSONDecodeError as e:
+                            print(f"🔍 STEP 3 - JSON parse error: {e}")
                             logger.error(f"Failed to parse output JSON: {e}")
                             parsed_data = first_item
                     else:
+                        print(f"🔍 STEP 2 - No 'output' field, using first_item directly")
                         parsed_data = first_item
                 elif isinstance(n8n_response, dict):
                     # Handle direct object format
+                    print(f"🔍 STEP 2 - Direct dict format")
                     parsed_data = n8n_response
                 else:
+                    print(f"🔍 STEP 2 - Unexpected format")
                     logger.error(f"Unexpected n8n response format: {type(n8n_response)}")
                     parsed_data = {}
 
             # Format response using parsed data
+            print(f"🔍 STEP 5 - About to format response using parsed_data")
+            print(f"🔍 STEP 5 - parsed_data.get('agent_response'): '{parsed_data.get('agent_response', 'NOT_FOUND')}'")
+            
             formatted_response = {
                 'status': parsed_data.get('status', 'success'),
                 'agent_name': parsed_data.get('agent_name', agent_name),
@@ -332,6 +354,8 @@ class ConversationalHandler:
                 'missing_info': parsed_data.get('missing_info', []),
                 'timestamp': datetime.now().isoformat()
             }
+            
+            print(f"🔍 STEP 6 - Final formatted response agent_response: '{formatted_response.get('agent_response', 'NOT_FOUND')}'")
             
             logger.info(f"Final formatted response: {json.dumps(formatted_response, indent=2)}")
             print(f"📤 Final formatted response: {json.dumps(formatted_response, indent=2)}")
