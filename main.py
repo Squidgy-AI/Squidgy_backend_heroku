@@ -26,6 +26,7 @@ from supabase import create_client, Client
 from agent_config import get_agent_config, AGENTS
 from Website.web_scrape import capture_website_screenshot_async, get_website_favicon_async
 from embedding_service import get_embedding
+from tools_connector import tools
 
 # Handler classes
 
@@ -2863,6 +2864,96 @@ async def send_invitation_email(request: dict):
             "error": "Backend invitation processing failed",
             "details": str(e)
         }
+
+# =============================================================================
+# TOOL ENDPOINTS - Organized Tools Integration
+# =============================================================================
+
+@app.get("/api/solar/insights")
+async def solar_insights_endpoint(address: str):
+    """Get solar insights for an address using RealWave API"""
+    try:
+        result = tools.get_solar_insights(address)
+        return result
+    except Exception as e:
+        logger.error(f"Error in solar insights endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/solar/data-layers")
+async def solar_data_layers_endpoint(address: str):
+    """Get solar data layers for visualization"""
+    try:
+        result = tools.get_solar_data_layers(address)
+        return result
+    except Exception as e:
+        logger.error(f"Error in solar data layers endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/solar/report")
+async def solar_report_endpoint(address: str):
+    """Generate comprehensive solar report"""
+    try:
+        result = tools.generate_solar_report(address)
+        return result
+    except Exception as e:
+        logger.error(f"Error in solar report endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/website/screenshot")
+async def website_screenshot_endpoint(url: str, session_id: str = None):
+    """Capture website screenshot"""
+    try:
+        result = await tools.capture_website_screenshot_async(url, session_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error in website screenshot endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/website/favicon")
+async def website_favicon_endpoint(url: str, session_id: str = None):
+    """Get website favicon"""
+    try:
+        result = await tools.get_website_favicon_async(url, session_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error in website favicon endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ghl/contact")
+async def create_contact_endpoint(
+    first_name: str,
+    last_name: str, 
+    email: str,
+    phone: str,
+    location_id: str = None,
+    company_name: str = None
+):
+    """Create a new contact in GoHighLevel"""
+    try:
+        result = tools.create_contact(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            phone=phone,
+            location_id=location_id,
+            company_name=company_name
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in create contact endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/ghl/contact/{contact_id}")
+async def get_contact_endpoint(contact_id: str, location_id: str = None):
+    """Get contact details from GoHighLevel"""
+    try:
+        result = tools.get_contact(contact_id, location_id)
+        return result
+    except Exception as e:
+        logger.error(f"Error in get contact endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
 
 # CORS middleware
 app.add_middleware(
