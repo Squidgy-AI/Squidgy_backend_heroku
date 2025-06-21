@@ -782,6 +782,26 @@ def create_supabase_client() -> Client:
 # Initialize handlers
 active_requests: Set[str] = set()
 
+# Pre-warm embedding model at startup to avoid cold start delays
+@app.on_event("startup")
+async def startup_event():
+    """Pre-warm models and initialize caches for optimal performance"""
+    try:
+        print("🚀 Starting high-performance optimizations...")
+        
+        # Pre-warm embedding model
+        start_time = time.time()
+        dummy_embedding = await AgentMatcher(supabase).get_query_embedding("warmup query")
+        warmup_time = int((time.time() - start_time) * 1000)
+        print(f"🧠 Embedding model pre-warmed in {warmup_time}ms")
+        
+        # Initialize any other caches or connections here
+        print("✅ High-performance optimizations ready!")
+        
+    except Exception as e:
+        print(f"⚠️ Startup optimization warning: {e}")
+        # Don't fail startup if optimization fails
+
 # Initialize Supabase client  
 supabase = create_supabase_client()
 
@@ -1694,28 +1714,60 @@ async def log_performance_metric(operation_type: str, execution_time_ms: int, op
 # Agent KB query endpoints with optimized database schema
 @app.post("/n8n/agent/query")
 async def agent_kb_query(request: AgentKBQueryRequest):
-    """Enhanced agent query with optimized client context aggregation using new schema"""
+    """High-performance agent query with parallel processing and multi-level caching"""
     try:
         start_time = time.time()
+        print(f"🚀 Starting optimized agent query for {request.agent}")
         
+        # Check cache first for entire response
+        cache_key = f"agent_query_{request.agent}_{hash(request.user_mssg)}_{request.user_id}"
+        cached_response = await conversational_handler.get_cached_response(cache_key)
+        if cached_response:
+            print(f"⚡ Cache hit! Returning cached response in {int((time.time() - start_time) * 1000)}ms")
+            return cached_response
+        
+        embedding_start = time.time()
         # Generate query embedding for similarity searches
         query_embedding = await AgentMatcher(supabase).get_query_embedding(request.user_mssg)
+        embedding_time = int((time.time() - embedding_start) * 1000)
+        print(f"🧠 Embedding generated in {embedding_time}ms")
         
-        # Get agent context from KB with smart caching and usage tracking
-        agent_context = await dynamic_agent_kb_handler.get_agent_context_from_kb(request.agent)
+        parallel_start = time.time()
+        # PARALLEL PROCESSING - Execute all database operations simultaneously
+        agent_context_task = dynamic_agent_kb_handler.get_agent_context_from_kb(request.agent)
+        client_context_task = get_optimized_client_context(request.user_id, query_embedding)
+        agent_knowledge_task = get_optimized_agent_knowledge(request.agent, query_embedding)
         
-        # Get comprehensive client context using optimized database functions
-        client_context = await get_optimized_client_context(request.user_id, query_embedding)
+        # Wait for all operations to complete in parallel
+        agent_context, client_context, agent_knowledge = await asyncio.gather(
+            agent_context_task,
+            client_context_task, 
+            agent_knowledge_task,
+            return_exceptions=True
+        )
+        parallel_time = int((time.time() - parallel_start) * 1000)
+        print(f"🔄 Parallel operations completed in {parallel_time}ms")
         
-        # Get agent-specific knowledge with usage tracking
-        agent_knowledge = await get_optimized_agent_knowledge(request.agent, query_embedding)
+        # Handle any exceptions from parallel operations
+        if isinstance(agent_context, Exception):
+            print(f"⚠️ Agent context error: {agent_context}")
+            agent_context = {}
+        if isinstance(client_context, Exception):
+            print(f"⚠️ Client context error: {client_context}")
+            client_context = {}
+        if isinstance(agent_knowledge, Exception):
+            print(f"⚠️ Agent knowledge error: {agent_knowledge}")
+            agent_knowledge = {}
         
+        context_start = time.time()
         # Build comprehensive KB context from multiple sources
         kb_context = await build_enhanced_kb_context(
             request.user_id, 
             client_context, 
             agent_knowledge
         )
+        context_time = int((time.time() - context_start) * 1000)
+        print(f"📚 KB context built in {context_time}ms")
         
         # Check for must-have information requirements
         must_questions = agent_context.get('must_questions', [])
@@ -1775,17 +1827,8 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 tools_to_use
             )
             
-            # Log successful performance
-            execution_time = int((time.time() - start_time) * 1000)
-            await log_performance_metric("agent_query_success", execution_time, {
-                "agent": request.agent,
-                "user_id": request.user_id,
-                "confidence": analysis.get('confidence', 0.8),
-                "tools_used": len(tools_to_use),
-                "context_sources": len(kb_context.get('sources', []))
-            })
-            
-            return AgentKBQueryResponse(
+            # Create response object
+            response = AgentKBQueryResponse(
                 user_id=request.user_id,
                 agent=request.agent,
                 response_type="needs_tools" if tools_to_use else "direct_answer",
@@ -1795,6 +1838,27 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 kb_context_used=bool(kb_context),
                 status="success"
             )
+            
+            # Cache successful response for 2 minutes
+            await conversational_handler.cache_response(cache_key, response, ttl=120)
+            
+            # Log successful performance with detailed timing
+            execution_time = int((time.time() - start_time) * 1000)
+            print(f"✅ Optimized agent query completed in {execution_time}ms (Target: <8000ms)")
+            print(f"📊 Breakdown: Embedding({embedding_time}ms) + Parallel({parallel_time}ms) + Context({context_time}ms)")
+            
+            await log_performance_metric("agent_query_success", execution_time, {
+                "agent": request.agent,
+                "user_id": request.user_id,
+                "confidence": analysis.get('confidence', 0.8),
+                "tools_used": len(tools_to_use),
+                "context_sources": len(kb_context.get('sources', [])),
+                "embedding_time_ms": embedding_time,
+                "parallel_time_ms": parallel_time,
+                "context_time_ms": context_time
+            })
+            
+            return response
         
         else:
             # Handle insufficient information case
@@ -1836,15 +1900,17 @@ async def agent_kb_query(request: AgentKBQueryRequest):
             )
             
     except Exception as e:
-        # Log error performance
+        # Log error performance with timing breakdown
         execution_time = int((time.time() - start_time) * 1000)
+        print(f"❌ Agent query failed in {execution_time}ms: {str(e)}")
+        
         await log_performance_metric("agent_query_error", execution_time, {
             "agent": request.agent,
             "user_id": request.user_id,
             "error": str(e)
         }, success=False, error_message=str(e))
         
-        logger.error(f"Error in agent_kb_query: {str(e)}")
+        logger.error(f"Error in optimized agent_kb_query: {str(e)}")
         return AgentKBQueryResponse(
             user_id=request.user_id,
             agent=request.agent,
