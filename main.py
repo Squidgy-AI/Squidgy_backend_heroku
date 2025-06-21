@@ -298,14 +298,36 @@ class ConversationalHandler:
                 
                 # Log the full N8N response for testing
                 logger.debug(f"N8N Response: {json.dumps(n8n_response, indent=2)}")
+                
+                # Parse n8n response - handle both direct object and array with output field
+                parsed_data = {}
+                if isinstance(n8n_response, list) and len(n8n_response) > 0:
+                    # Handle array format: [{"output": "JSON_STRING"}]
+                    first_item = n8n_response[0]
+                    if 'output' in first_item:
+                        try:
+                            # Parse the JSON string inside output field
+                            parsed_data = json.loads(first_item['output'])
+                            logger.info(f"Parsed output data: {json.dumps(parsed_data, indent=2)}")
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Failed to parse output JSON: {e}")
+                            parsed_data = first_item
+                    else:
+                        parsed_data = first_item
+                elif isinstance(n8n_response, dict):
+                    # Handle direct object format
+                    parsed_data = n8n_response
+                else:
+                    logger.error(f"Unexpected n8n response format: {type(n8n_response)}")
+                    parsed_data = {}
 
-            # Format response
+            # Format response using parsed data
             formatted_response = {
-                'status': n8n_response.get('status', 'success'),
-                'agent_name': n8n_response.get('agent_name', agent_name),
-                'agent_response': n8n_response.get('agent_response', ''),
-                'conversation_state': n8n_response.get('conversation_state', 'complete'),
-                'missing_info': n8n_response.get('missing_info', []),
+                'status': parsed_data.get('status', 'success'),
+                'agent_name': parsed_data.get('agent_name', agent_name),
+                'agent_response': parsed_data.get('agent_response', ''),
+                'conversation_state': parsed_data.get('conversation_state', 'complete'),
+                'missing_info': parsed_data.get('missing_info', []),
                 'timestamp': datetime.now().isoformat()
             }
 
@@ -1298,12 +1320,25 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
         
         # Send response back through WebSocket
         try:
+            # Send the main response message (for debugging)
             await websocket.send_json({
                 "type": "response",
                 "requestId": request_id,
                 "response": n8n_response,
                 "timestamp": int(time.time() * 1000)
             })
+            
+            # Also send the agent_response format that the working frontend expects
+            if n8n_response.get("agent_response"):
+                await websocket.send_json({
+                    "type": "agent_response",
+                    "agent": n8n_response.get("agent_name", "AI"),
+                    "message": n8n_response.get("agent_response"),
+                    "requestId": request_id,
+                    "final": True,
+                    "timestamp": int(time.time() * 1000)
+                })
+            
             logger.info(f"📤 Response sent via WebSocket for request {request_id}")
             print(f"📤 Response sent via WebSocket for request {request_id}")
         except Exception as ws_error:
