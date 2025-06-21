@@ -871,6 +871,7 @@ class ClientKBResponse(BaseModel):
     message: str
     action_required: Optional[str] = None
     last_updated: Optional[str] = None
+    agent_name: Optional[str] = None
 
 class AgentKBQueryRequest(BaseModel):
     user_id: str
@@ -1156,7 +1157,8 @@ async def check_client_kb(request: ClientKBCheckRequest):
                 },
                 kb_status='complete',
                 message='Client information found',
-                last_updated=kb_data.get('updated_at')
+                last_updated=kb_data.get('updated_at'),
+                agent_name=request.agent_name
             )
         
         website_result = None
@@ -1208,7 +1210,8 @@ async def check_client_kb(request: ClientKBCheckRequest):
                     },
                     kb_status='updated',
                     message='Client KB updated with latest information',
-                    last_updated=datetime.now().isoformat()
+                    last_updated=datetime.now().isoformat(),
+                    agent_name=request.agent_name
                 )
         
         return ClientKBResponse(
@@ -1216,7 +1219,8 @@ async def check_client_kb(request: ClientKBCheckRequest):
             has_website_info=False,
             kb_status='missing_website',
             message='Please provide your website URL to continue',
-            action_required='collect_website_url'
+            action_required='collect_website_url',
+            agent_name=request.agent_name
         )
         
     except Exception as e:
@@ -1226,7 +1230,8 @@ async def check_client_kb(request: ClientKBCheckRequest):
             has_website_info=False,
             kb_status='error',
             message=f'Error checking client information: {str(e)}',
-            action_required='retry'
+            action_required='retry',
+            agent_name=request.agent_name
         )
 
 @app.post("/n8n/client/update_website")
