@@ -859,6 +859,7 @@ class ClientKBCheckRequest(BaseModel):
     user_id: str
     session_id: Optional[str] = None
     force_refresh: Optional[bool] = False
+    agent_name: Optional[str] = None
 
 class ClientKBResponse(BaseModel):
     user_id: str
@@ -1331,7 +1332,8 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
         kb_request = ClientKBCheckRequest(
             user_id=request.get('user_id'),
             session_id=request.get('session_id'),
-            force_refresh=request.get('force_refresh', False)
+            force_refresh=request.get('force_refresh', False),
+            agent_name=request.get('agent_name')
         )
         
         response = await check_client_kb(kb_request)
