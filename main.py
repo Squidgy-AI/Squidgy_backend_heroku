@@ -1426,6 +1426,9 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
         response = await check_client_kb(kb_request)
         n8n_response = response.model_dump()
         
+        # Store original response for reference
+        n8n_response['_original_has_website_info'] = response.has_website_info
+        
         # If no stored website info, check current user message for URLs
         if not response.has_website_info:
             user_message = request.get('user_message') or request.get('user_mssg', '')
@@ -1817,10 +1820,22 @@ async def agent_kb_query(request: AgentKBQueryRequest):
         start_time = time.time()
         print(f"🚀 Starting optimized agent query for {request.agent}")
         
+        # Check for URLs in the user message first
+        detected_urls = extract_website_urls(request.user_mssg)
+        contextual_prefix = ""
+        
+        if detected_urls:
+            logger.info(f"Detected URLs in agent query: {detected_urls}")
+            # Generate contextual response for detected URL
+            contextual_prefix = await generate_contextual_response_for_detected_url(
+                request.user_mssg, detected_urls[0], request.agent
+            )
+            contextual_prefix += "\n\nNow let me analyze your website in detail:\n\n"
+        
         # Check cache first for entire response
         cache_key = f"agent_query_{request.agent}_{hash(request.user_mssg)}_{request.user_id}"
         cached_response = await conversational_handler.get_cached_response(cache_key)
-        if cached_response:
+        if cached_response and not detected_urls:  # Don't use cache for URL queries
             print(f"⚡ Cache hit! Returning cached response in {int((time.time() - start_time) * 1000)}ms")
             return cached_response
         
@@ -1925,6 +1940,10 @@ async def agent_kb_query(request: AgentKBQueryRequest):
                 tools_to_use
             )
             
+            # Prepend contextual prefix if URLs were detected
+            if contextual_prefix:
+                agent_response = f"{contextual_prefix}{agent_response}"
+            
             # Create response object
             response = AgentKBQueryResponse(
                 user_id=request.user_id,
@@ -2009,11 +2028,16 @@ async def agent_kb_query(request: AgentKBQueryRequest):
         }, success=False, error_message=str(e))
         
         logger.error(f"Error in optimized agent_kb_query: {str(e)}")
+        # If we detected URLs, at least return the contextual response
+        error_response = "I encountered an error processing your request. Please try again."
+        if contextual_prefix:
+            error_response = f"{contextual_prefix}However, I encountered an error with the detailed analysis. Please try again."
+        
         return AgentKBQueryResponse(
             user_id=request.user_id,
             agent=request.agent,
             response_type="error",
-            agent_response="I encountered an error processing your request. Please try again.",
+            agent_response=error_response,
             confidence_score=0.0,
             kb_context_used=False,
             status="error"
