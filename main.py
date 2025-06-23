@@ -526,6 +526,120 @@ class ClientKBManager:
         except Exception as e:
             logger.error(f"Error getting client KB: {str(e)}")
             return None
+    
+    async def analyze_and_update_kb(self, user_id: str, website_data: Dict[str, Any], chat_history: List[Dict[str, Any]]):
+        """Analyze website data and chat history to update KB"""
+        try:
+            # Extract website information
+            analysis_data = {}
+            if website_data.get('analysis'):
+                try:
+                    analysis_data = json.loads(website_data.get('analysis', '{}'))
+                except json.JSONDecodeError:
+                    analysis_data = {}
+            
+            website_info = {
+                'url': website_data.get('url'),
+                'company_name': analysis_data.get('company_name'),
+                'description': analysis_data.get('description'),
+                'niche': analysis_data.get('niche'),
+                'tags': analysis_data.get('tags'),
+                'services': analysis_data.get('services', []),
+                'contact_info': analysis_data.get('contact_info', {}),
+                'last_analyzed': website_data.get('created_at')
+            }
+            
+            # Extract insights from chat history
+            chat_insights = await self.extract_chat_insights(chat_history)
+            
+            kb_content = {
+                'website_info': website_info,
+                'chat_insights': chat_insights,
+                'extracted_requirements': [],
+                'preferences': {},
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            # Save to database
+            entry = {
+                'client_id': user_id,
+                'kb_type': 'website_info',
+                'content': kb_content,
+                'is_active': True,
+                'last_updated': datetime.now().isoformat()
+            }
+            
+            result = self.supabase.table('client_kb')\
+                .upsert(entry, on_conflict='client_id,kb_type')\
+                .execute()
+            
+            logger.info(f"Updated KB for user {user_id} with website {website_info['url']}")
+            return kb_content
+            
+        except Exception as e:
+            logger.error(f"Error analyzing and updating KB: {str(e)}")
+            return None
+    
+    async def extract_chat_insights(self, chat_history: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Extract insights from chat history"""
+        insights = {
+            'topics_discussed': [],
+            'user_preferences': {},
+            'common_questions': [],
+            'interaction_summary': []
+        }
+        
+        try:
+            for chat in chat_history[-10:]:  # Look at last 10 messages
+                message = chat.get('message', '')
+                role = chat.get('role', 'user')
+                
+                if role == 'user':
+                    # Extract topics and keywords
+                    topics = self._extract_topics(message)
+                    insights['topics_discussed'].extend(topics)
+                    
+                    # Look for questions
+                    if any(q in message.lower() for q in ['what', 'how', 'where', 'when', 'why', '?']):
+                        insights['common_questions'].append(message)
+                
+                insights['interaction_summary'].append({
+                    'role': role,
+                    'message': message[:100],  # Truncate for storage
+                    'timestamp': chat.get('timestamp')
+                })
+            
+            # Remove duplicates and limit size
+            insights['topics_discussed'] = list(set(insights['topics_discussed']))[:20]
+            insights['common_questions'] = insights['common_questions'][-5:]
+            
+        except Exception as e:
+            logger.error(f"Error extracting chat insights: {str(e)}")
+        
+        return insights
+    
+    def _extract_topics(self, message: str) -> List[str]:
+        """Extract topics from a message"""
+        topics = []
+        message_lower = message.lower()
+        
+        # Common business topics
+        business_topics = {
+            'pricing': ['price', 'cost', 'fee', 'rate', 'pricing', 'budget'],
+            'services': ['service', 'offering', 'product', 'solution'],
+            'support': ['help', 'support', 'assist', 'guidance'],
+            'integration': ['integrate', 'connect', 'api', 'webhook'],
+            'features': ['feature', 'functionality', 'capability'],
+            'timeline': ['when', 'timeline', 'schedule', 'deadline'],
+            'team': ['team', 'staff', 'employee', 'person'],
+            'technology': ['tech', 'technology', 'platform', 'system']
+        }
+        
+        for topic, keywords in business_topics.items():
+            if any(keyword in message_lower for keyword in keywords):
+                topics.append(topic)
+        
+        return topics
 
 # Dynamic Agent KB Handler Class
 class DynamicAgentKBHandler:
@@ -1442,6 +1556,48 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
                     # Create a contextual response based on the user's request and detected URL
                     url = detected_urls[0]
                     agent_name = request.get('agent_name', 'presaleskb')
+                    user_id = request.get('user_id')
+                    session_id = request.get('session_id', str(uuid.uuid4()))
+                    
+                    # SAVE THE URL TO DATABASE - This was missing!
+                    try:
+                        # Analyze the website and save to database
+                        analysis = await conversational_handler.analyze_website_with_perplexity(url)
+                        
+                        website_entry = {
+                            'user_id': user_id,
+                            'session_id': session_id,
+                            'url': url,
+                            'analysis': json.dumps(analysis) if analysis else None,
+                            'created_at': datetime.now().isoformat()
+                        }
+                        
+                        website_result = supabase.table('website_data')\
+                            .upsert(website_entry, on_conflict='session_id,url')\
+                            .execute()
+                        
+                        # Update the client KB with the new website data
+                        if website_result.data:
+                            chat_history_result = supabase.table('chat_history')\
+                                .select('*')\
+                                .eq('user_id', user_id)\
+                                .order('timestamp', desc=False)\
+                                .execute()
+                            
+                            chat_history = chat_history_result.data if chat_history_result else []
+                            
+                            # Update client KB with website and chat history
+                            await client_kb_manager.analyze_and_update_kb(
+                                user_id,
+                                website_result.data[0],
+                                chat_history
+                            )
+                            
+                            logger.info(f"Successfully saved website {url} to database for user {user_id}")
+                        
+                    except Exception as e:
+                        logger.error(f"Error saving website URL to database: {str(e)}")
+                        # Continue anyway - we'll still provide contextual response
                     
                     # Generate an appropriate response based on the user's message and agent
                     contextual_response = await generate_contextual_response_for_detected_url(
@@ -1452,12 +1608,14 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
                     n8n_response.update({
                         'has_website_info': True,
                         'website_url': url,
+                        'website_analysis': analysis if 'analysis' in locals() else None,
                         'detected_urls': detected_urls,
                         'next_action': 'proceed_with_agent',
                         'routing': 'continue',
                         'url_source': 'current_message',
                         'contextual_response': contextual_response,
-                        'message': contextual_response
+                        'message': contextual_response,
+                        'kb_updated': True
                     })
                     
                     return n8n_response
