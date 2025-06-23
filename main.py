@@ -1413,7 +1413,7 @@ async def get_client_context(user_id: str):
 
 @app.post("/n8n/check_client_kb")
 async def n8n_check_client_kb(request: Dict[str, Any]):
-    """N8N-specific endpoint for checking client KB"""
+    """N8N-specific endpoint for checking client KB and current message for website URLs"""
     try:
         kb_request = ClientKBCheckRequest(
             user_id=request.get('user_id'),
@@ -1422,13 +1422,38 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
             agent_name=request.get('agent_name')
         )
         
+        # Check stored KB first
         response = await check_client_kb(kb_request)
-        
         n8n_response = response.model_dump()
         
+        # If no stored website info, check current user message for URLs
+        if not response.has_website_info:
+            user_message = request.get('user_message') or request.get('user_mssg', '')
+            
+            if user_message:
+                detected_urls = extract_website_urls(user_message)
+                
+                if detected_urls:
+                    logger.info(f"Detected website URLs in user message: {detected_urls}")
+                    
+                    # Override response to indicate we found a URL in the current message
+                    n8n_response.update({
+                        'has_website_info': True,
+                        'website_url': detected_urls[0],  # Use first detected URL
+                        'detected_urls': detected_urls,
+                        'next_action': 'proceed_with_agent',
+                        'routing': 'continue',
+                        'url_source': 'current_message',
+                        'message': f"Found website URL in message: {detected_urls[0]}"
+                    })
+                    
+                    return n8n_response
+        
+        # Original logic for existing KB data or no URLs found
         if response.has_website_info:
             n8n_response['next_action'] = 'proceed_with_agent'
             n8n_response['routing'] = 'continue'
+            n8n_response['url_source'] = 'stored_kb'
         else:
             n8n_response['next_action'] = 'request_website'
             n8n_response['routing'] = 'collect_info'
@@ -2822,6 +2847,48 @@ def extract_image_urls(text: str) -> List[str]:
     # Match Supabase storage URLs
     pattern = r'https://[^\s]+\.supabase\.co/storage/v1/[^\s]+\.(png|jpg|jpeg|gif|webp)'
     return re.findall(pattern, text, re.IGNORECASE)
+
+def extract_website_urls(text: str) -> List[str]:
+    """Extract website URLs from text"""
+    import re
+    # Match various URL patterns
+    patterns = [
+        r'https?://[^\s]+',  # http:// or https://
+        r'www\.[^\s]+\.[a-zA-Z]{2,}',  # www.example.com
+        r'[^\s]+\.[a-zA-Z]{2,}(?:/[^\s]*)?'  # example.com or example.com/path
+    ]
+    
+    urls = []
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        urls.extend(matches)
+    
+    # Filter out obvious non-URLs and clean up
+    cleaned_urls = []
+    for url in urls:
+        # Remove trailing punctuation
+        url = re.sub(r'[.,;!?]+$', '', url)
+        
+        # Skip if it's clearly not a website (email, file extensions, etc.)
+        if any(url.lower().endswith(ext) for ext in ['.jpg', '.png', '.pdf', '.doc', '.zip']):
+            continue
+        if '@' in url and '.' in url:  # Likely an email
+            continue
+        if len(url.split('.')) < 2:  # Must have at least one dot
+            continue
+            
+        # Add protocol if missing
+        if not url.startswith(('http://', 'https://')):
+            if url.startswith('www.'):
+                url = 'https://' + url
+            else:
+                # Check if it looks like a domain
+                if '.' in url and len(url.split('.')[-1]) >= 2:
+                    url = 'https://' + url
+        
+        cleaned_urls.append(url)
+    
+    return list(set(cleaned_urls))  # Remove duplicates
 
 
 @app.post("/api/website/analyze-background")
