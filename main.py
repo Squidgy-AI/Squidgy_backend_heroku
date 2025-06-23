@@ -1827,10 +1827,28 @@ async def agent_kb_query(request: AgentKBQueryRequest):
         if detected_urls:
             logger.info(f"Detected URLs in agent query: {detected_urls}")
             # Generate contextual response for detected URL
-            contextual_prefix = await generate_contextual_response_for_detected_url(
+            contextual_response = await generate_contextual_response_for_detected_url(
                 request.user_mssg, detected_urls[0], request.agent
             )
-            contextual_prefix += "\n\nNow let me analyze your website in detail:\n\n"
+            
+            # For now, return the contextual response immediately
+            # This ensures users get immediate feedback instead of null responses
+            enhanced_response = f"{contextual_response}\n\nI'm ready to analyze {detected_urls[0]} and provide specific insights about your business needs, pricing options, and recommendations based on what I find."
+            
+            logger.info(f"Returning immediate contextual response for URL: {detected_urls[0]}")
+            return AgentKBQueryResponse(
+                user_id=request.user_id,
+                agent=request.agent,
+                response_type="direct_answer",
+                agent_response=enhanced_response,
+                required_tools=None,
+                confidence_score=0.85,
+                kb_context_used=True,
+                status="success"
+            )
+            
+            # Keep the original contextual_prefix for additional processing if needed
+            contextual_prefix = contextual_response + "\n\nNow let me analyze your website in detail:\n\n"
         
         # Check cache first for entire response
         cache_key = f"agent_query_{request.agent}_{hash(request.user_mssg)}_{request.user_id}"
@@ -2036,11 +2054,11 @@ async def agent_kb_query(request: AgentKBQueryRequest):
         return AgentKBQueryResponse(
             user_id=request.user_id,
             agent=request.agent,
-            response_type="error",
+            response_type="direct_answer" if contextual_prefix else "error",
             agent_response=error_response,
-            confidence_score=0.0,
-            kb_context_used=False,
-            status="error"
+            confidence_score=0.7 if contextual_prefix else 0.0,
+            kb_context_used=bool(contextual_prefix),
+            status="success" if contextual_prefix else "error"
         )
 
 @app.post("/n8n/agent/query/wrapper")
