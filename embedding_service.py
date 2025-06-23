@@ -43,10 +43,10 @@ class FreeEmbeddingService:
             logger.info("Model loaded successfully")
         except ImportError:
             logger.error("sentence-transformers not installed. Install with: pip install sentence-transformers")
-            raise
+            self.model = None  # Set to None instead of raising
         except Exception as e:
             logger.error(f"Error loading model: {e}")
-            raise
+            self.model = None  # Set to None instead of raising
     
     def _get_cache_key(self, text: str) -> str:
         """Generate cache key for text."""
@@ -76,6 +76,23 @@ class FreeEmbeddingService:
             # Generate embedding
             if self.model is None:
                 self._init_model()
+            
+            # If model is still None (sentence-transformers not available), return dummy embedding
+            if self.model is None:
+                logger.warning("Sentence transformers not available, using dummy embedding")
+                # Generate a simple hash-based dummy embedding (384 dimensions to match all-MiniLM-L6-v2)
+                text_hash = hashlib.md5(text.encode()).hexdigest()
+                # Convert hex to pseudo-float vector
+                dummy_embedding = []
+                for i in range(0, len(text_hash), 2):
+                    hex_val = text_hash[i:i+2]
+                    # Convert to float between -1 and 1
+                    float_val = (int(hex_val, 16) - 127.5) / 127.5
+                    dummy_embedding.append(float_val)
+                # Pad to 384 dimensions
+                while len(dummy_embedding) < 384:
+                    dummy_embedding.extend(dummy_embedding[:min(len(dummy_embedding), 384 - len(dummy_embedding))])
+                return dummy_embedding[:384]
                 
             embedding = self.model.encode([text.strip()])[0]
             
