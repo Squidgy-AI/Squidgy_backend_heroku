@@ -28,6 +28,7 @@ from Website.web_scrape import capture_website_screenshot_async, get_website_fav
 from embedding_service import get_embedding
 from tools_connector import tools
 from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
+from solar_api_connector import SolarApiConnector, SolarInsightsRequest as SolarInsightsReq, SolarDataLayersRequest as SolarDataLayersReq, get_solar_analysis_for_agent
 
 # Handler classes
 
@@ -949,6 +950,20 @@ class WebsiteScreenshotRequest(BaseModel):
     url: str
     session_id: Optional[str] = None
     user_id: Optional[str] = None
+
+# Solar API Models
+class SolarInsightsRequest(BaseModel):
+    address: str
+    monthly_electric_bill: Optional[float] = None
+    monthly_electric_usage_kwh: Optional[float] = None
+    mode: Optional[str] = "summary"  # "full", "summary", "solarResults"
+    demo: Optional[bool] = False
+
+class SolarDataLayersRequest(BaseModel):
+    address: str
+    render_panels: Optional[bool] = True
+    file_format: Optional[str] = "jpeg"
+    demo: Optional[bool] = False
 
 # Conversational Handler Class
 # API Endpoints
