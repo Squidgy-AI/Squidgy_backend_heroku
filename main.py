@@ -2900,32 +2900,247 @@ def extract_website_urls(text: str) -> List[str]:
     
     return list(set(cleaned_urls))  # Remove duplicates
 
+# Cache for agent KB info to avoid repeated database queries
+_agent_kb_cache = {}
+_cache_ttl = 300  # 5 minutes
+
+async def load_agent_kb_info(agent_name: str) -> dict:
+    """Dynamically load agent information from agent_documents table with caching"""
+    import re
+    import time
+    
+    # Check cache first
+    cache_key = f"agent_kb_{agent_name}"
+    current_time = time.time()
+    
+    if cache_key in _agent_kb_cache:
+        cached_data, timestamp = _agent_kb_cache[cache_key]
+        if current_time - timestamp < _cache_ttl:
+            logger.debug(f"Using cached KB info for {agent_name}")
+            return cached_data
+    
+    default_info = {
+        'name': 'Assistant',
+        'role': 'Assistant',
+        'responsibilities': ['General assistance'],
+        'expertise_areas': ['General support'],
+        'common_queries': ['General questions']
+    }
+    
+    try:
+        # Query agent_documents table for this agent's KB content
+        result = supabase.table('agent_documents')\
+            .select('content, metadata')\
+            .eq('agent_name', agent_name)\
+            .execute()
+        
+        if not result.data:
+            logger.warning(f"No KB data found in agent_documents table for {agent_name}")
+            return default_info
+        
+        # Combine all content chunks for this agent
+        combined_content = ""
+        for doc in result.data:
+            if doc.get('content'):
+                combined_content += doc['content'] + "\n"
+        
+        if not combined_content.strip():
+            logger.warning(f"Empty KB content for {agent_name}")
+            return default_info
+        
+        # Extract information using regex patterns
+        info = {}
+        
+        # Extract role/name from "You are a [role] named [name]"
+        role_match = re.search(r'You are a(?: friendly)?\s+([^,\n]+?)(?:\s+named\s+(\w+))?(?:\s+who|\s+\.)', combined_content, re.IGNORECASE)
+        if role_match:
+            info['role'] = role_match.group(1).strip()
+            info['name'] = role_match.group(2) if role_match.group(2) else info['role']
+        else:
+            info['role'] = default_info['role']
+            info['name'] = default_info['name']
+        
+        # Extract key responsibilities
+        responsibilities_match = re.search(r'Key Responsibilities:(.*?)(?=\n\n|\nExpertise|\nCommon|$)', combined_content, re.DOTALL | re.IGNORECASE)
+        if responsibilities_match:
+            resp_text = responsibilities_match.group(1)
+            # Extract numbered/bulleted items
+            responsibilities = re.findall(r'\d+\.\s*([^\n]+)', resp_text)
+            info['responsibilities'] = responsibilities if responsibilities else default_info['responsibilities']
+        else:
+            info['responsibilities'] = default_info['responsibilities']
+        
+        # Extract expertise areas
+        expertise_match = re.search(r'Expertise Areas:(.*?)(?=\n\n|\nCommon|\nTools|$)', combined_content, re.DOTALL | re.IGNORECASE)
+        if expertise_match:
+            exp_text = expertise_match.group(1)
+            # Extract bulleted items
+            expertise = re.findall(r'-\s*([^\n]+)', exp_text)
+            info['expertise_areas'] = expertise if expertise else default_info['expertise_areas']
+        else:
+            info['expertise_areas'] = default_info['expertise_areas']
+        
+        # Extract common queries examples
+        queries_match = re.search(r'Common Queries I Handle:(.*?)(?=\n\n|\nBasic|\nTools|\nMUST|$)', combined_content, re.DOTALL | re.IGNORECASE)
+        if queries_match:
+            queries_text = queries_match.group(1)
+            queries = re.findall(r'-\s*"([^"]+)"', queries_text)
+            info['common_queries'] = queries if queries else default_info['common_queries']
+        else:
+            info['common_queries'] = default_info['common_queries']
+        
+        logger.info(f"Successfully loaded KB info for {agent_name} from database: {info['name']} - {info['role']}")
+        logger.info(f"Agent {agent_name} expertise: {info['expertise_areas'][:3]}")
+        
+        # Cache the result
+        _agent_kb_cache[cache_key] = (info, current_time)
+        
+        return info
+        
+    except Exception as e:
+        logger.error(f"Error loading KB info for {agent_name} from database: {str(e)}")
+        
+        # Fallback to file-based loading if database fails
+        try:
+            import os
+            kb_file_path = f"/Users/somasekharaddakula/CascadeProjects/SquidgyBackend/n8n_worflows/Agents_KB/{agent_name}.txt"
+            
+            if os.path.exists(kb_file_path):
+                logger.info(f"Falling back to file-based KB loading for {agent_name}")
+                with open(kb_file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                
+                # Same extraction logic as above but for file content
+                info = {}
+                
+                role_match = re.search(r'You are a(?: friendly)?\s+([^,\n]+?)(?:\s+named\s+(\w+))?(?:\s+who|\s+\.)', content, re.IGNORECASE)
+                if role_match:
+                    info['role'] = role_match.group(1).strip()
+                    info['name'] = role_match.group(2) if role_match.group(2) else info['role']
+                else:
+                    info['role'] = default_info['role']
+                    info['name'] = default_info['name']
+                
+                responsibilities_match = re.search(r'Key Responsibilities:(.*?)(?=\n\n|\nExpertise|\nCommon|$)', content, re.DOTALL | re.IGNORECASE)
+                if responsibilities_match:
+                    resp_text = responsibilities_match.group(1)
+                    responsibilities = re.findall(r'\d+\.\s*([^\n]+)', resp_text)
+                    info['responsibilities'] = responsibilities if responsibilities else default_info['responsibilities']
+                else:
+                    info['responsibilities'] = default_info['responsibilities']
+                
+                expertise_match = re.search(r'Expertise Areas:(.*?)(?=\n\n|\nCommon|\nTools|$)', content, re.DOTALL | re.IGNORECASE)
+                if expertise_match:
+                    exp_text = expertise_match.group(1)
+                    expertise = re.findall(r'-\s*([^\n]+)', exp_text)
+                    info['expertise_areas'] = expertise if expertise else default_info['expertise_areas']
+                else:
+                    info['expertise_areas'] = default_info['expertise_areas']
+                
+                queries_match = re.search(r'Common Queries I Handle:(.*?)(?=\n\n|\nBasic|\nTools|\nMUST|$)', content, re.DOTALL | re.IGNORECASE)
+                if queries_match:
+                    queries_text = queries_match.group(1)
+                    queries = re.findall(r'-\s*"([^"]+)"', queries_text)
+                    info['common_queries'] = queries if queries else default_info['common_queries']
+                else:
+                    info['common_queries'] = default_info['common_queries']
+                
+                logger.info(f"Successfully loaded KB info for {agent_name} from file fallback")
+                
+                # Cache the fallback result too
+                _agent_kb_cache[cache_key] = (info, current_time)
+                
+                return info
+                
+        except Exception as fallback_error:
+            logger.error(f"File fallback also failed for {agent_name}: {str(fallback_error)}")
+        
+        return default_info
+
+async def populate_agent_documents_table():
+    """Utility function to populate agent_documents table from KB files"""
+    import os
+    import json
+    from embedding_service import get_embedding
+    
+    agents_kb_dir = "/Users/somasekharaddakula/CascadeProjects/SquidgyBackend/n8n_worflows/Agents_KB"
+    
+    if not os.path.exists(agents_kb_dir):
+        logger.error(f"Agents KB directory not found: {agents_kb_dir}")
+        return False
+    
+    try:
+        for filename in os.listdir(agents_kb_dir):
+            if filename.endswith('.txt'):
+                agent_name = filename.replace('.txt', '')
+                file_path = os.path.join(agents_kb_dir, filename)
+                
+                logger.info(f"Processing {agent_name} KB file...")
+                
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                
+                # Check if this agent already exists in the table
+                existing_result = supabase.table('agent_documents')\
+                    .select('id')\
+                    .eq('agent_name', agent_name)\
+                    .limit(1)\
+                    .execute()
+                
+                if existing_result.data:
+                    logger.info(f"Agent {agent_name} already exists in agent_documents table, skipping...")
+                    continue
+                
+                # Generate embedding for the content
+                logger.info(f"Generating embedding for {agent_name}...")
+                embedding = get_embedding(content)
+                
+                if embedding is None:
+                    logger.error(f"Failed to generate embedding for {agent_name}")
+                    continue
+                
+                # Insert into agent_documents table
+                insert_data = {
+                    'agent_name': agent_name,
+                    'content': content,
+                    'embedding': embedding,
+                    'metadata': {
+                        'source': 'kb_file',
+                        'filename': filename,
+                        'content_length': len(content),
+                        'chunk_index': 0
+                    }
+                }
+                
+                result = supabase.table('agent_documents')\
+                    .insert(insert_data)\
+                    .execute()
+                
+                if result.data:
+                    logger.info(f"Successfully inserted {agent_name} into agent_documents table")
+                else:
+                    logger.error(f"Failed to insert {agent_name} into agent_documents table")
+        
+        logger.info("Finished populating agent_documents table")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error populating agent_documents table: {str(e)}")
+        return False
+
 async def generate_contextual_response_for_detected_url(user_message: str, url: str, agent_name: str) -> str:
     """Generate a contextual response when a URL is detected in the user's message"""
+    
+    # Dynamically load agent information from KB files
+    agent_info = await load_agent_kb_info(agent_name)
     
     # Analyze the user's intent based on their message
     user_message_lower = user_message.lower()
     
-    # Map agent types to their capabilities
-    agent_capabilities = {
-        'presaleskb': {
-            'name': 'Pre-Sales Consultant',
-            'capabilities': 'website analysis, service recommendations, pricing information, and business consultation'
-        },
-        'socialmediakb': {
-            'name': 'Social Media Specialist', 
-            'capabilities': 'social media strategy, content analysis, platform optimization, and engagement strategies'
-        },
-        'saleskb': {
-            'name': 'Sales Representative',
-            'capabilities': 'sales proposals, pricing quotes, service packages, and business development'
-        }
-    }
-    
-    agent_info = agent_capabilities.get(agent_name, {
-        'name': 'Assistant',
-        'capabilities': 'website analysis and recommendations'
-    })
+    # Create capabilities summary from agent's actual expertise
+    capabilities = ', '.join(agent_info['expertise_areas'][:3])  # Use first 3 expertise areas
+    if len(agent_info['expertise_areas']) > 3:
+        capabilities += ', and more'
     
     # Determine user intent
     intent_keywords = {
@@ -2943,33 +3158,68 @@ async def generate_contextual_response_for_detected_url(user_message: str, url: 
             detected_intent = intent
             break
     
-    # Generate contextual responses based on intent and agent
+    # Generate contextual responses based on intent and agent's actual KB
     responses = {
-        'analyze': f"I found your website {url}! As your {agent_info['name']}, I'll analyze it and provide insights on {agent_info['capabilities']}. Let me examine your site and give you actionable recommendations.",
+        'analyze': f"I found your website {url}! As your {agent_info['role']}, I'll analyze it and provide insights on {capabilities}. Let me examine your site and give you actionable recommendations.",
         
-        'pricing': f"I see you've shared {url} and want to know about pricing. As your {agent_info['name']}, I'll analyze your website to understand your business needs and provide you with relevant pricing information for our services.",
+        'pricing': f"I see you've shared {url} and want to know about pricing. As your {agent_info['role']}, I'll analyze your website to understand your business needs and provide you with relevant pricing information for our services.",
         
-        'services': f"Perfect! I found your website {url}. As your {agent_info['name']}, I can help you with {agent_info['capabilities']}. Let me analyze your site to better understand how I can assist you.",
+        'services': f"Perfect! I found your website {url}. As your {agent_info['role']}, I can help you with {capabilities}. Let me analyze your site to better understand how I can assist you.",
         
-        'improve': f"Great! I found {url} and I can see you want to improve it. As your {agent_info['name']}, I'll analyze your website and provide specific recommendations for {agent_info['capabilities']} to enhance your online presence.",
+        'improve': f"Great! I found {url} and I can see you want to improve it. As your {agent_info['role']}, I'll analyze your website and provide specific recommendations for {capabilities} to enhance your online presence.",
         
-        'compare': f"I found your website {url}. As your {agent_info['name']}, I can analyze your site and help you understand how our services compare to others in terms of {agent_info['capabilities']}.",
+        'compare': f"I found your website {url}. As your {agent_info['role']}, I can analyze your site and help you understand how our services compare to others in terms of {capabilities}.",
         
-        'general': f"Thanks for sharing {url}! As your {agent_info['name']}, I'll analyze your website to provide you with insights on {agent_info['capabilities']}. This will help me give you more targeted recommendations."
+        'general': f"Thanks for sharing {url}! As your {agent_info['role']}, I'll analyze your website to provide you with insights on {capabilities}. This will help me give you more targeted recommendations."
     }
     
     base_response = responses.get(detected_intent, responses['general'])
     
-    # Add a call-to-action based on the agent type
-    if agent_name == 'presaleskb':
-        cta = " I can provide you with a comprehensive analysis including service recommendations and pricing options."
-    elif agent_name == 'socialmediakb':
-        cta = " I'll focus on your social media integration and online engagement potential."
-    else:
-        cta = " I'll provide you with detailed insights and actionable recommendations."
+    # Add a call-to-action based on the agent's actual responsibilities
+    primary_responsibility = agent_info['responsibilities'][0] if agent_info['responsibilities'] else "provide recommendations"
+    cta = f" I specialize in {primary_responsibility.lower()} and can provide you with detailed insights."
     
     return f"{base_response}{cta}"
 
+
+@app.post("/admin/populate-agent-documents")
+async def populate_agent_documents_endpoint():
+    """Admin endpoint to populate agent_documents table from KB files"""
+    try:
+        success = await populate_agent_documents_table()
+        if success:
+            return {
+                "status": "success",
+                "message": "Agent documents table populated successfully"
+            }
+        else:
+            return {
+                "status": "error", 
+                "message": "Failed to populate agent documents table"
+            }
+    except Exception as e:
+        logger.error(f"Error in populate_agent_documents_endpoint: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.get("/admin/test-agent-kb/{agent_name}")
+async def test_agent_kb_loading(agent_name: str):
+    """Test endpoint to check dynamic agent KB loading"""
+    try:
+        info = await load_agent_kb_info(agent_name)
+        return {
+            "status": "success",
+            "agent_name": agent_name,
+            "agent_info": info
+        }
+    except Exception as e:
+        logger.error(f"Error testing agent KB loading for {agent_name}: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
 
 @app.post("/api/website/analyze-background")
 async def analyze_website_background(request: WebsiteAnalysisRequest, background_tasks: BackgroundTasks):
