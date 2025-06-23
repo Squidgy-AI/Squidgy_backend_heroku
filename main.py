@@ -27,6 +27,7 @@ from agent_config import get_agent_config, AGENTS
 from Website.web_scrape import capture_website_screenshot_async, get_website_favicon_async
 from embedding_service import get_embedding
 from tools_connector import tools
+from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
 
 # Handler classes
 
@@ -757,10 +758,14 @@ load_dotenv()
 # Initialize FastAPI app
 app = FastAPI()
 logger = logging.getLogger(__name__)
+import threading
+
+# Thread-safe global variables with locks
 active_connections: Dict[str, WebSocket] = {}
 streaming_sessions: Dict[str, Dict[str, Any]] = {}
-# Request deduplication cache
 request_cache: Dict[str, float] = {}
+_connections_lock = threading.Lock()
+_requests_lock = threading.Lock()
 
 # Environment variables
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -1141,8 +1146,9 @@ async def n8n_agent_matcher_health():
             "database": "connected",
             "endpoints": [
                 "/n8n/check_agent_match",
-                "/n8n/find_best_agents",
-                "/n8n/analyze_agent_query"
+                "/n8n/find_best_agents", 
+                "/n8n/analyze_agent_query",
+                "/n8n/safe_agent_select"
             ],
             "timestamp": datetime.now().isoformat()
         }
@@ -1152,6 +1158,21 @@ async def n8n_agent_matcher_health():
             "status": "unhealthy",
             "error": str(e),
             "timestamp": datetime.now().isoformat()
+        }
+
+@app.post("/n8n/safe_agent_select")
+async def n8n_safe_agent_select(request: Dict[str, Any]):
+    """Safe agent selection with loop prevention and comprehensive fallbacks"""
+    try:
+        return await safe_agent_selection_endpoint(request)
+    except Exception as e:
+        logger.error(f"❌ Safe agent selection endpoint error: {str(e)}")
+        return {
+            "selected_agent": "presaleskb",
+            "strategy_used": "error_fallback",
+            "confidence_score": 0.1,
+            "error": str(e),
+            "success": False
         }
 
 # Client KB endpoints
