@@ -1436,15 +1436,25 @@ async def n8n_check_client_kb(request: Dict[str, Any]):
                 if detected_urls:
                     logger.info(f"Detected website URLs in user message: {detected_urls}")
                     
-                    # Override response to indicate we found a URL in the current message
+                    # Create a contextual response based on the user's request and detected URL
+                    url = detected_urls[0]
+                    agent_name = request.get('agent_name', 'presaleskb')
+                    
+                    # Generate an appropriate response based on the user's message and agent
+                    contextual_response = await generate_contextual_response_for_detected_url(
+                        user_message, url, agent_name
+                    )
+                    
+                    # Override response to indicate we found a URL and provide initial context
                     n8n_response.update({
                         'has_website_info': True,
-                        'website_url': detected_urls[0],  # Use first detected URL
+                        'website_url': url,
                         'detected_urls': detected_urls,
                         'next_action': 'proceed_with_agent',
                         'routing': 'continue',
                         'url_source': 'current_message',
-                        'message': f"Found website URL in message: {detected_urls[0]}"
+                        'contextual_response': contextual_response,
+                        'message': contextual_response
                     })
                     
                     return n8n_response
@@ -2889,6 +2899,76 @@ def extract_website_urls(text: str) -> List[str]:
         cleaned_urls.append(url)
     
     return list(set(cleaned_urls))  # Remove duplicates
+
+async def generate_contextual_response_for_detected_url(user_message: str, url: str, agent_name: str) -> str:
+    """Generate a contextual response when a URL is detected in the user's message"""
+    
+    # Analyze the user's intent based on their message
+    user_message_lower = user_message.lower()
+    
+    # Map agent types to their capabilities
+    agent_capabilities = {
+        'presaleskb': {
+            'name': 'Pre-Sales Consultant',
+            'capabilities': 'website analysis, service recommendations, pricing information, and business consultation'
+        },
+        'socialmediakb': {
+            'name': 'Social Media Specialist', 
+            'capabilities': 'social media strategy, content analysis, platform optimization, and engagement strategies'
+        },
+        'saleskb': {
+            'name': 'Sales Representative',
+            'capabilities': 'sales proposals, pricing quotes, service packages, and business development'
+        }
+    }
+    
+    agent_info = agent_capabilities.get(agent_name, {
+        'name': 'Assistant',
+        'capabilities': 'website analysis and recommendations'
+    })
+    
+    # Determine user intent
+    intent_keywords = {
+        'analyze': ['analyze', 'analysis', 'review', 'check', 'examine', 'look at', 'evaluate'],
+        'pricing': ['price', 'cost', 'pricing', 'charges', 'fees', 'rates', 'quote'],
+        'services': ['services', 'help', 'offer', 'provide', 'do', 'capabilities'],
+        'improve': ['improve', 'optimize', 'enhance', 'better', 'fix', 'recommendations'],
+        'compare': ['compare', 'vs', 'versus', 'against', 'difference'],
+        'general': ['website', 'site', 'business', 'company']
+    }
+    
+    detected_intent = 'general'
+    for intent, keywords in intent_keywords.items():
+        if any(keyword in user_message_lower for keyword in keywords):
+            detected_intent = intent
+            break
+    
+    # Generate contextual responses based on intent and agent
+    responses = {
+        'analyze': f"I found your website {url}! As your {agent_info['name']}, I'll analyze it and provide insights on {agent_info['capabilities']}. Let me examine your site and give you actionable recommendations.",
+        
+        'pricing': f"I see you've shared {url} and want to know about pricing. As your {agent_info['name']}, I'll analyze your website to understand your business needs and provide you with relevant pricing information for our services.",
+        
+        'services': f"Perfect! I found your website {url}. As your {agent_info['name']}, I can help you with {agent_info['capabilities']}. Let me analyze your site to better understand how I can assist you.",
+        
+        'improve': f"Great! I found {url} and I can see you want to improve it. As your {agent_info['name']}, I'll analyze your website and provide specific recommendations for {agent_info['capabilities']} to enhance your online presence.",
+        
+        'compare': f"I found your website {url}. As your {agent_info['name']}, I can analyze your site and help you understand how our services compare to others in terms of {agent_info['capabilities']}.",
+        
+        'general': f"Thanks for sharing {url}! As your {agent_info['name']}, I'll analyze your website to provide you with insights on {agent_info['capabilities']}. This will help me give you more targeted recommendations."
+    }
+    
+    base_response = responses.get(detected_intent, responses['general'])
+    
+    # Add a call-to-action based on the agent type
+    if agent_name == 'presaleskb':
+        cta = " I can provide you with a comprehensive analysis including service recommendations and pricing options."
+    elif agent_name == 'socialmediakb':
+        cta = " I'll focus on your social media integration and online engagement potential."
+    else:
+        cta = " I'll provide you with detailed insights and actionable recommendations."
+    
+    return f"{base_response}{cta}"
 
 
 @app.post("/api/website/analyze-background")
