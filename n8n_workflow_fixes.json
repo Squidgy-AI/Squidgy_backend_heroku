@@ -1,0 +1,77 @@
+{
+  "workflow_improvements": {
+    "1_add_loop_prevention": {
+      "node_name": "Loop Prevention Check",
+      "type": "n8n-nodes-base.if",
+      "description": "Prevent infinite loops by tracking attempts",
+      "conditions": [
+        {
+          "leftValue": "{{ $json.attempt_count || 0 }}",
+          "rightValue": "3",
+          "operator": "smaller"
+        }
+      ],
+      "implementation": {
+        "before_finding_best_agent": "Add attempt counter",
+        "increment_counter": "{{ ($json.attempt_count || 0) + 1 }}",
+        "max_attempts": 3
+      }
+    },
+    
+    "2_add_fallback_mechanism": {
+      "node_name": "Fallback Agent Handler",
+      "type": "n8n-nodes-base.set",
+      "description": "Ensure there's always a fallback agent",
+      "fallback_logic": {
+        "primary_fallback": "presaleskb",
+        "secondary_fallback": "general_assistant",
+        "fallback_message": "I'll help you with general assistance. How can I help you today?"
+      },
+      "implementation": {
+        "when_no_agents_found": "Use presaleskb as default",
+        "when_all_attempts_failed": "Return generic helpful response"
+      }
+    },
+
+    "3_add_session_state_management": {
+      "node_name": "Session State Manager",
+      "type": "n8n-nodes-base.set",
+      "description": "Track session state to prevent race conditions",
+      "session_tracking": {
+        "current_agent": "{{ $json.agent_name }}",
+        "session_id": "{{ $json.session_id }}",
+        "request_timestamp": "{{ $now }}",
+        "conversation_context": "{{ $json.context || {} }}"
+      }
+    },
+
+    "4_add_timeout_handling": {
+      "node_name": "Timeout Guard",
+      "type": "n8n-nodes-base.wait",
+      "description": "Add timeouts to prevent hanging",
+      "timeout_settings": {
+        "max_wait_time": "30 seconds",
+        "retry_attempts": "2",
+        "fallback_action": "Return cached response or default message"
+      }
+    },
+
+    "5_improved_error_handling": {
+      "node_name": "Error Recovery Handler",
+      "type": "n8n-nodes-base.if",
+      "description": "Handle all error scenarios gracefully",
+      "error_scenarios": [
+        "API endpoint timeout",
+        "No agents found",
+        "Database connection error",
+        "Invalid response format",
+        "Rate limit exceeded"
+      ],
+      "recovery_actions": {
+        "log_error": "Log to monitoring system",
+        "return_fallback": "Return helpful fallback response",
+        "cache_failure": "Cache failure for retry logic"
+      }
+    }
+  }
+}
