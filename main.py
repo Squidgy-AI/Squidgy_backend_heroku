@@ -217,21 +217,44 @@ class ConversationalHandler:
         }
 
     async def save_to_history(self, session_id: str, user_id: str, user_message: str, agent_response: str):
-        """Save message to chat history"""
+        """Save message to chat history - saves user and agent messages separately"""
         try:
-            entry = {
+            # Save user message
+            user_entry = {
                 'session_id': session_id,
                 'user_id': user_id,
-                'user_message': user_message,
-                'agent_response': agent_response,
+                'sender': 'User',
+                'message': user_message,
                 'timestamp': datetime.now().isoformat()
             }
             
-            result = self.supabase.table('chat_history')\
-                .insert(entry)\
+            user_result = self.supabase.table('chat_history')\
+                .insert(user_entry)\
                 .execute()
             
-            return result.data[0] if result.data else None
+            # Save agent response if provided
+            if agent_response and agent_response.strip():
+                agent_entry = {
+                    'session_id': session_id,
+                    'user_id': user_id,
+                    'sender': 'Agent',
+                    'message': agent_response,
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+                agent_result = self.supabase.table('chat_history')\
+                    .insert(agent_entry)\
+                    .execute()
+                
+                return {
+                    'user_entry': user_result.data[0] if user_result.data else None,
+                    'agent_entry': agent_result.data[0] if agent_result.data else None
+                }
+            
+            return {
+                'user_entry': user_result.data[0] if user_result.data else None,
+                'agent_entry': None
+            }
             
         except Exception as e:
             logger.error(f"Error saving to history: {str(e)}")
@@ -376,6 +399,7 @@ class ConversationalHandler:
                 'agent_response': parsed_data.get('agent_response', ''),
                 'conversation_state': parsed_data.get('conversation_state', 'complete'),
                 'missing_info': parsed_data.get('missing_info', []),
+                'output_action': parsed_data.get('output_action'),  # Add output_action to response
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -1464,6 +1488,8 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
                 print(f"✅ Sent agent_response via WebSocket: {final_message[:100]}...")
             else:
                 print(f"⚠️ No agent_response found in n8n_response to send via WebSocket")
+                print(f"⚠️ n8n_response keys: {list(n8n_response.keys())}")
+                print(f"⚠️ n8n_response content: {json.dumps(n8n_response, indent=2)}")
             
             logger.info(f"📤 Response sent via WebSocket for request {request_id}")
             print(f"📤 Response sent via WebSocket for request {request_id}")
