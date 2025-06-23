@@ -297,7 +297,8 @@ async def safe_agent_selection_endpoint(request_data: Dict) -> Dict:
         )
         
         return {
-            "selected_agent": result.selected_agent,
+            "agent_name": result.selected_agent,  # Use agent_name for consistency
+            "selected_agent": result.selected_agent,  # Keep both for compatibility
             "strategy_used": result.strategy_used.value,
             "confidence_score": result.confidence_score,
             "attempt_count": result.attempt_count,
@@ -311,7 +312,8 @@ async def safe_agent_selection_endpoint(request_data: Dict) -> Dict:
     except Exception as e:
         logger.error(f"❌ Safe agent selection failed: {str(e)}")
         return {
-            "selected_agent": "presaleskb",
+            "agent_name": "presaleskb",  # Use agent_name for consistency
+            "selected_agent": "presaleskb",  # Keep both for compatibility
             "strategy_used": SelectionStrategy.ERROR_FALLBACK.value,
             "confidence_score": 0.1,
             "error": str(e),
