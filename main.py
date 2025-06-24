@@ -16,6 +16,7 @@ from typing import Dict, Any, Optional, List, Set
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
@@ -1786,16 +1787,19 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
                 # Send agent switch message
                 transition_message = f"Hey, I will be able to better answer your question. {n8n_response.get('agent_response', '')}"
                 
-                await websocket.send_json({
-                    "type": "agent_switch",
-                    "from_agent": current_agent,
-                    "to_agent": target_agent,
-                    "message": transition_message,
-                    "requestId": request_id,
-                    "session_id": request_data.get("session_id"),
-                    "maintain_history": True,
-                    "timestamp": int(time.time() * 1000)
-                })
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({
+                        "type": "agent_switch",
+                        "from_agent": current_agent,
+                        "to_agent": target_agent,
+                        "message": transition_message,
+                        "requestId": request_id,
+                        "session_id": request_data.get("session_id"),
+                        "maintain_history": True,
+                        "timestamp": int(time.time() * 1000)
+                    })
+                else:
+                    logger.warning(f"WebSocket connection closed, cannot send agent switch for {request_id}")
                 print(f"✅ Sent agent_switch message from {current_agent} to {target_agent}")
                 
             elif n8n_response.get("agent_response"):
@@ -1806,15 +1810,18 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
                 if output_action == "need_website_info" and target_agent == current_agent:
                     final_message = f"Let me help you with that. {final_message}"
                 
-                await websocket.send_json({
-                    "type": "agent_response",
-                    "agent": target_agent,
-                    "message": final_message,
-                    "requestId": request_id,
-                    "final": True,
-                    "output_action": output_action,
-                    "timestamp": int(time.time() * 1000)
-                })
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({
+                        "type": "agent_response",
+                        "agent": target_agent,
+                        "message": final_message,
+                        "requestId": request_id,
+                        "final": True,
+                        "output_action": output_action,
+                        "timestamp": int(time.time() * 1000)
+                    })
+                else:
+                    logger.warning(f"WebSocket connection closed, cannot send agent response for {request_id}")
                 print(f"✅ Sent agent_response via WebSocket: {final_message[:100]}...")
             else:
                 print(f"⚠️ No agent_response found in n8n_response to send via WebSocket")
@@ -1841,14 +1848,17 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
     except Exception as e:
         logger.error(f"❌ Error processing WebSocket message {request_id}: {str(e)}")
         
-        # Send error response
+        # Send error response with connection state check
         try:
-            await websocket.send_json({
-                "type": "error",
-                "requestId": request_id,
-                "error": str(e),
-                "timestamp": int(time.time() * 1000)
-            })
+            if websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.send_json({
+                    "type": "error",
+                    "requestId": request_id,
+                    "error": str(e),
+                    "timestamp": int(time.time() * 1000)
+                })
+            else:
+                logger.warning(f"WebSocket connection closed, cannot send error response for {request_id}")
         except Exception as send_error:
             logger.error(f"Failed to send error response: {send_error}")
 
