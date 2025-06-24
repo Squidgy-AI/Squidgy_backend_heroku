@@ -448,6 +448,77 @@ class ConversationalHandler:
                 'message': str(e)
             }
 
+    async def analyze_website_with_perplexity(self, website_url: str):
+        """Analyze website using Perplexity API and return structured data"""
+        try:
+            if not PERPLEXITY_API_KEY:
+                logger.error("PERPLEXITY_API_KEY not found in environment variables")
+                return {}
+                
+            headers = {
+                "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            prompt = f"""
+            Please analyze the website {website_url} and provide a summary in exactly this format:
+            --- *Company name*: [Extract company name]
+            --- *Website*: {website_url}
+            --- *Contact Information*: [Any available contact details]
+            --- *Description*: [2-3 sentence summary of what the company does]
+            --- *Tags*: [Main business categories, separated by periods]
+            --- *Takeaways*: [Key business value propositions]
+            --- *Niche*: [Specific market focus or specialty]
+            """
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    "https://api.perplexity.ai/chat/completions",
+                    headers=headers,
+                    json={
+                        "model": "sonar-reasoning-pro",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "max_tokens": 1000,
+                        "temperature": 0.2
+                    }
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    content = result['choices'][0]['message']['content']
+                    logger.info(f"Perplexity analysis for {website_url}: {content[:200]}...")
+                    
+                    # Parse the structured response
+                    parsed_analysis = {
+                        'raw_content': content,
+                        'url': website_url,
+                        'analyzed_at': datetime.now().isoformat()
+                    }
+                    
+                    # Extract structured data from response
+                    for line in content.split('\n'):
+                        if '---' in line and ':' in line:
+                            key = line.split(':', 1)[0].replace('---', '').replace('*', '').strip().lower().replace(' ', '_')
+                            value = line.split(':', 1)[1].strip()
+                            parsed_analysis[key] = value
+                    
+                    return parsed_analysis
+                else:
+                    logger.error(f"Perplexity API error: {response.status_code} - {response.text}")
+                    return {
+                        'error': f"API request failed with status {response.status_code}",
+                        'url': website_url,
+                        'analyzed_at': datetime.now().isoformat()
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Error analyzing website {website_url} with Perplexity: {str(e)}")
+            return {
+                'error': str(e),
+                'url': website_url,
+                'analyzed_at': datetime.now().isoformat()
+            }
+
 # Client KB Manager Class
 class ClientKBManager:
     def __init__(self, supabase_client):
