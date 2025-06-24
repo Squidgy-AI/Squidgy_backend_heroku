@@ -242,9 +242,17 @@ class ConversationalHandler:
                     'timestamp': datetime.now().isoformat()
                 }
                 
-                user_result = self.supabase.table('chat_history')\
-                    .insert(user_entry)\
-                    .execute()
+                try:
+                    user_result = self.supabase.table('chat_history')\
+                        .insert(user_entry)\
+                        .execute()
+                except Exception as insert_error:
+                    # Handle unique constraint violation gracefully
+                    if 'duplicate key value violates unique constraint' in str(insert_error):
+                        logger.debug(f"Duplicate message caught by database constraint for session {session_id}")
+                        user_result = None
+                    else:
+                        raise insert_error
             else:
                 logger.debug(f"Skipping duplicate user message for session {session_id}")
             
@@ -271,9 +279,17 @@ class ConversationalHandler:
                         'timestamp': datetime.now().isoformat()
                     }
                     
-                    agent_result = self.supabase.table('chat_history')\
-                        .insert(agent_entry)\
-                        .execute()
+                    try:
+                        agent_result = self.supabase.table('chat_history')\
+                            .insert(agent_entry)\
+                            .execute()
+                    except Exception as insert_error:
+                        # Handle unique constraint violation gracefully
+                        if 'duplicate key value violates unique constraint' in str(insert_error):
+                            logger.debug(f"Duplicate agent response caught by database constraint for session {session_id}")
+                            agent_result = None
+                        else:
+                            raise insert_error
                 else:
                     logger.debug(f"Skipping duplicate agent response for session {session_id}")
                 
