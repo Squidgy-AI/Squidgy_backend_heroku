@@ -8,7 +8,7 @@ import os
 import time
 import uuid
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Dict, Any, Optional, List, Set
 
@@ -220,13 +220,14 @@ class ConversationalHandler:
     async def save_to_history(self, session_id: str, user_id: str, user_message: str, agent_response: str):
         """Save message to chat history - saves user and agent messages separately with duplicate prevention"""
         try:
-            # Check for existing user message to prevent duplicates
+            # Check for existing user message to prevent duplicates (within last 10 seconds)
             existing_user = self.supabase.table('chat_history')\
-                .select('id')\
+                .select('id, timestamp')\
                 .eq('session_id', session_id)\
                 .eq('user_id', user_id)\
                 .eq('message', user_message)\
                 .eq('sender', 'User')\
+                .gte('timestamp', (datetime.now() - timedelta(seconds=10)).isoformat())\
                 .order('timestamp', desc=True)\
                 .limit(1)\
                 .execute()
@@ -259,13 +260,14 @@ class ConversationalHandler:
             # Save agent response if provided
             agent_result = None
             if agent_response and agent_response.strip():
-                # Check for existing agent response to prevent duplicates
+                # Check for existing agent response to prevent duplicates (within last 10 seconds)
                 existing_agent = self.supabase.table('chat_history')\
-                    .select('id')\
+                    .select('id, timestamp')\
                     .eq('session_id', session_id)\
                     .eq('user_id', user_id)\
                     .eq('message', agent_response)\
                     .eq('sender', 'Agent')\
+                    .gte('timestamp', (datetime.now() - timedelta(seconds=10)).isoformat())\
                     .order('timestamp', desc=True)\
                     .limit(1)\
                     .execute()
