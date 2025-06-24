@@ -344,13 +344,73 @@ class ConversationalHandler:
             raise
 
     async def process_message(self, user_mssg: str, session_id: str, user_id: str, agent_name: str, request_id: Optional[str] = None):
-        """Process the actual message and get response from n8n"""
+        """Process the actual message and get response from n8n with full conversation context"""
         try:
             # Generate request_id if not provided
             if not request_id:
                 request_id = str(uuid.uuid4())
+            
+            logger.info(f"🧠 Building conversation context for session {session_id}")
+            
+            # 1. Get conversation history for context
+            chat_history = []
+            try:
+                chat_result = self.supabase.table('chat_history')\
+                    .select('sender, message, timestamp')\
+                    .eq('session_id', session_id)\
+                    .order('timestamp', desc=False)\
+                    .limit(20)\
+                    .execute()
                 
-            # Prepare payload for n8n
+                if chat_result.data:
+                    chat_history = [
+                        {
+                            'sender': msg['sender'],
+                            'message': msg['message'],
+                            'timestamp': msg['timestamp']
+                        }
+                        for msg in chat_result.data
+                    ]
+                logger.info(f"📚 Retrieved {len(chat_history)} previous messages for context")
+            except Exception as e:
+                logger.warning(f"Could not retrieve chat history: {str(e)}")
+            
+            # 2. Get website data for context
+            website_context = []
+            try:
+                website_result = self.supabase.table('website_data')\
+                    .select('url, analysis, created_at')\
+                    .eq('user_id', user_id)\
+                    .order('created_at', desc=True)\
+                    .limit(5)\
+                    .execute()
+                
+                if website_result.data:
+                    website_context = website_result.data
+                logger.info(f"🌐 Retrieved {len(website_context)} website analyses for context")
+            except Exception as e:
+                logger.warning(f"Could not retrieve website data: {str(e)}")
+            
+            # 3. Get client KB for context
+            client_kb_context = {}
+            try:
+                kb_result = self.supabase.table('client_kb')\
+                    .select('kb_type, content')\
+                    .eq('client_id', user_id)\
+                    .execute()
+                
+                if kb_result.data:
+                    for entry in kb_result.data:
+                        client_kb_context[entry['kb_type']] = entry['content']
+                logger.info(f"📊 Retrieved {len(client_kb_context)} KB entries for context")
+            except Exception as e:
+                logger.warning(f"Could not retrieve client KB: {str(e)}")
+            
+            # 4. Extract contextual information from conversation
+            context_insights = self._extract_conversation_insights(chat_history, website_context)
+            logger.info(f"🔍 Extracted context insights: {list(context_insights.keys())}")
+                
+            # Prepare enhanced payload for n8n with full context
             payload = {
                 'user_id': user_id,
                 'user_mssg': user_mssg,
@@ -358,8 +418,21 @@ class ConversationalHandler:
                 'agent_name': agent_name,
                 'timestamp_of_call_made': datetime.now().isoformat(),
                 'request_id': request_id,
-                '_original_message': user_mssg  # Store original message for history
+                '_original_message': user_mssg,
+                # ENHANCED CONTEXT DATA
+                'conversation_history': chat_history,
+                'website_data': website_context,
+                'client_knowledge_base': client_kb_context,
+                'context_insights': context_insights,
+                'context_summary': {
+                    'total_messages': len(chat_history),
+                    'websites_analyzed': len(website_context),
+                    'kb_entries': len(client_kb_context),
+                    'extracted_insights': len(context_insights)
+                }
             }
+            
+            logger.info(f"🚀 Sending enhanced payload to n8n with {len(chat_history)} messages, {len(website_context)} websites, {len(client_kb_context)} KB entries")
 
             # Call n8n webhook
             async with httpx.AsyncClient(timeout=None) as client:
@@ -537,6 +610,61 @@ class ConversationalHandler:
                 'url': website_url,
                 'analyzed_at': datetime.now().isoformat()
             }
+
+    def _extract_conversation_insights(self, chat_history: List[Dict], website_context: List[Dict]) -> Dict[str, Any]:
+        """Extract key insights from conversation history and website context"""
+        insights = {
+            'mentioned_urls': [],
+            'user_requests': [],
+            'agent_commitments': [],
+            'pending_actions': [],
+            'user_confirmations': []
+        }
+        
+        try:
+            # Extract URLs mentioned in conversation
+            url_patterns = [
+                r'https?://[^\s]+',
+                r'www\.[^\s]+\.[a-zA-Z]{2,}',
+                r'[^\s]+\.[a-zA-Z]{2,}(?:/[^\s]*)?'
+            ]
+            
+            for msg in chat_history:
+                message_lower = msg['message'].lower()
+                
+                # Extract URLs
+                import re
+                for pattern in url_patterns:
+                    urls = re.findall(pattern, msg['message'])
+                    for url in urls:
+                        if url not in insights['mentioned_urls']:
+                            insights['mentioned_urls'].append(url)
+                
+                # Extract user requests and confirmations
+                if msg['sender'] == 'User':
+                    if any(word in message_lower for word in ['analyze', 'check', 'look at', 'review', 'examine']):
+                        insights['user_requests'].append(msg['message'])
+                    if any(phrase in message_lower for phrase in ['go ahead', 'please proceed', 'yes', 'continue', 'do it', 'sure']):
+                        insights['user_confirmations'].append(msg['message'])
+                
+                # Extract agent commitments
+                elif msg['sender'] == 'Agent':
+                    if any(phrase in message_lower for phrase in ['i will', "i'll", 'let me', 'i can', 'i am going to']):
+                        insights['agent_commitments'].append(msg['message'])
+            
+            # Check for pending actions (agent promised but user confirmed)
+            if insights['agent_commitments'] and insights['user_confirmations']:
+                insights['pending_actions'] = ['User has confirmed to proceed with agent analysis']
+            
+            # Add website analysis context
+            if website_context:
+                insights['analyzed_websites'] = [w['url'] for w in website_context]
+            
+            return insights
+            
+        except Exception as e:
+            logger.warning(f"Error extracting conversation insights: {str(e)}")
+            return insights
 
 # Client KB Manager Class
 class ClientKBManager:
