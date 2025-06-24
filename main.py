@@ -218,34 +218,64 @@ class ConversationalHandler:
         }
 
     async def save_to_history(self, session_id: str, user_id: str, user_message: str, agent_response: str):
-        """Save message to chat history - saves user and agent messages separately"""
+        """Save message to chat history - saves user and agent messages separately with duplicate prevention"""
         try:
-            # Save user message
-            user_entry = {
-                'session_id': session_id,
-                'user_id': user_id,
-                'sender': 'User',
-                'message': user_message,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            user_result = self.supabase.table('chat_history')\
-                .insert(user_entry)\
+            # Check for existing user message to prevent duplicates
+            existing_user = self.supabase.table('chat_history')\
+                .select('id')\
+                .eq('session_id', session_id)\
+                .eq('user_id', user_id)\
+                .eq('message', user_message)\
+                .eq('sender', 'User')\
+                .order('timestamp', desc=True)\
+                .limit(1)\
                 .execute()
             
-            # Save agent response if provided
-            if agent_response and agent_response.strip():
-                agent_entry = {
+            # Only save user message if not duplicate
+            user_result = None
+            if not existing_user.data:
+                user_entry = {
                     'session_id': session_id,
                     'user_id': user_id,
-                    'sender': 'Agent',
-                    'message': agent_response,
+                    'sender': 'User',
+                    'message': user_message,
                     'timestamp': datetime.now().isoformat()
                 }
                 
-                agent_result = self.supabase.table('chat_history')\
-                    .insert(agent_entry)\
+                user_result = self.supabase.table('chat_history')\
+                    .insert(user_entry)\
                     .execute()
+            else:
+                logger.debug(f"Skipping duplicate user message for session {session_id}")
+            
+            # Save agent response if provided
+            agent_result = None
+            if agent_response and agent_response.strip():
+                # Check for existing agent response to prevent duplicates
+                existing_agent = self.supabase.table('chat_history')\
+                    .select('id')\
+                    .eq('session_id', session_id)\
+                    .eq('user_id', user_id)\
+                    .eq('message', agent_response)\
+                    .eq('sender', 'Agent')\
+                    .order('timestamp', desc=True)\
+                    .limit(1)\
+                    .execute()
+                
+                if not existing_agent.data:
+                    agent_entry = {
+                        'session_id': session_id,
+                        'user_id': user_id,
+                        'sender': 'Agent',
+                        'message': agent_response,
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    
+                    agent_result = self.supabase.table('chat_history')\
+                        .insert(agent_entry)\
+                        .execute()
+                else:
+                    logger.debug(f"Skipping duplicate agent response for session {session_id}")
                 
                 return {
                     'user_entry': user_result.data[0] if user_result.data else None,
