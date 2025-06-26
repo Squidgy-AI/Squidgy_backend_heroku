@@ -1565,7 +1565,7 @@ async def n8n_agent_matcher_health():
 async def n8n_safe_agent_select(request: Dict[str, Any]):
     """Safe agent selection with loop prevention and comprehensive fallbacks"""
     try:
-        return await safe_agent_selection_endpoint(request)
+        return await safe_agent_selection_endpoint(request, supabase, agent_matcher)
     except Exception as e:
         logger.error(f"❌ Safe agent selection endpoint error: {str(e)}")
         return {

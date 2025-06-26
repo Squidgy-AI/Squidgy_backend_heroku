@@ -282,12 +282,16 @@ class SafeAgentSelector:
             del self.selection_cache[oldest_key]
 
 # Integration with main.py
-async def safe_agent_selection_endpoint(request_data: Dict) -> Dict:
+async def safe_agent_selection_endpoint(request_data: Dict, supabase_client=None, agent_matcher_instance=None) -> Dict:
     """
     Safe agent selection endpoint for n8n integration
     """
     try:
-        selector = SafeAgentSelector(supabase, agent_matcher)
+        # Use provided instances or raise error if not provided
+        if not supabase_client or not agent_matcher_instance:
+            raise ValueError("supabase_client and agent_matcher_instance must be provided")
+            
+        selector = SafeAgentSelector(supabase_client, agent_matcher_instance)
         
         result = await selector.select_optimal_agent(
             user_query=request_data.get('user_query', ''),
