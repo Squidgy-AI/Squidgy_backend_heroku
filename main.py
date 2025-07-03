@@ -3870,6 +3870,191 @@ async def get_contact_endpoint(contact_id: str, location_id: str = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
+# AGENT BUSINESS SETUP ENDPOINTS
+# =============================================================================
+
+class AgentSetupRequest(BaseModel):
+    user_id: str
+    agent_id: str
+    agent_name: str
+    setup_data: Dict[str, Any]
+    is_enabled: bool = True
+
+class AgentStatusRequest(BaseModel):
+    user_id: str
+    agent_id: str
+    is_enabled: bool
+
+@app.get("/api/agents/setup/{user_id}")
+async def get_user_agents(user_id: str):
+    """Get all agent setups for a user"""
+    try:
+        result = supabase.table('squidgy_agent_business_setup')\
+            .select('*')\
+            .eq('firm_user_id', user_id)\
+            .order('agent_id')\
+            .execute()
+        
+        if result.data:
+            return {
+                "status": "success",
+                "agents": result.data,
+                "count": len(result.data)
+            }
+        else:
+            return {
+                "status": "success", 
+                "agents": [],
+                "count": 0
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting user agents: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/agents/setup/{user_id}/{agent_id}")
+async def get_agent_setup(user_id: str, agent_id: str):
+    """Get specific agent setup for a user"""
+    try:
+        result = supabase.table('squidgy_agent_business_setup')\
+            .select('*')\
+            .eq('firm_user_id', user_id)\
+            .eq('agent_id', agent_id)\
+            .single()\
+            .execute()
+        
+        if result.data:
+            return {
+                "status": "success",
+                "agent": result.data,
+                "exists": True
+            }
+        else:
+            return {
+                "status": "success",
+                "agent": None,
+                "exists": False
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting agent setup: {str(e)}")
+        return {
+            "status": "success",
+            "agent": None,
+            "exists": False
+        }
+
+@app.post("/api/agents/setup")
+async def create_or_update_agent_setup(request: AgentSetupRequest):
+    """Create or update agent setup for a user"""
+    try:
+        # Try to update first
+        update_result = supabase.table('squidgy_agent_business_setup')\
+            .update({
+                'agent_name': request.agent_name,
+                'setup_json': request.setup_data,
+                'is_enabled': request.is_enabled,
+                'updated_at': datetime.now().isoformat()
+            })\
+            .eq('firm_user_id', request.user_id)\
+            .eq('agent_id', request.agent_id)\
+            .execute()
+        
+        # If no rows updated, insert new record
+        if not update_result.data or len(update_result.data) == 0:
+            insert_result = supabase.table('squidgy_agent_business_setup')\
+                .insert({
+                    'firm_user_id': request.user_id,
+                    'agent_id': request.agent_id,
+                    'agent_name': request.agent_name,
+                    'setup_json': request.setup_data,
+                    'is_enabled': request.is_enabled,
+                    'created_at': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat()
+                })\
+                .execute()
+            
+            return {
+                "status": "success",
+                "action": "created",
+                "agent": insert_result.data[0] if insert_result.data else None
+            }
+        else:
+            return {
+                "status": "success", 
+                "action": "updated",
+                "agent": update_result.data[0] if update_result.data else None
+            }
+            
+    except Exception as e:
+        logger.error(f"Error creating/updating agent setup: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/agents/status")
+async def update_agent_status(request: AgentStatusRequest):
+    """Update agent enabled/disabled status"""
+    try:
+        result = supabase.table('squidgy_agent_business_setup')\
+            .update({
+                'is_enabled': request.is_enabled,
+                'updated_at': datetime.now().isoformat()
+            })\
+            .eq('firm_user_id', request.user_id)\
+            .eq('agent_id', request.agent_id)\
+            .execute()
+        
+        if result.data and len(result.data) > 0:
+            return {
+                "status": "success",
+                "agent": result.data[0],
+                "enabled": request.is_enabled
+            }
+        else:
+            # If no record exists, create one
+            insert_result = supabase.table('squidgy_agent_business_setup')\
+                .insert({
+                    'firm_user_id': request.user_id,
+                    'agent_id': request.agent_id,
+                    'agent_name': request.agent_id,  # Default name
+                    'setup_json': {},
+                    'is_enabled': request.is_enabled,
+                    'created_at': datetime.now().isoformat(),
+                    'updated_at': datetime.now().isoformat()
+                })\
+                .execute()
+            
+            return {
+                "status": "success",
+                "action": "created",
+                "agent": insert_result.data[0] if insert_result.data else None,
+                "enabled": request.is_enabled
+            }
+            
+    except Exception as e:
+        logger.error(f"Error updating agent status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/agents/setup/{user_id}/{agent_id}")
+async def delete_agent_setup(user_id: str, agent_id: str):
+    """Delete agent setup for a user"""
+    try:
+        result = supabase.table('squidgy_agent_business_setup')\
+            .delete()\
+            .eq('firm_user_id', user_id)\
+            .eq('agent_id', agent_id)\
+            .execute()
+        
+        return {
+            "status": "success",
+            "deleted": True,
+            "count": len(result.data) if result.data else 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error deleting agent setup: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
 
 # CORS middleware
 app.add_middleware(
