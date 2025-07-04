@@ -3879,14 +3879,14 @@ class AgentSetupRequest(BaseModel):
     agent_name: str
     setup_data: Dict[str, Any]
     is_enabled: bool = True
-    setup_type: str = "agent_config"  # Default to agent_config for backwards compatibility
+    setup_type: str  # Required: SolarSetup, CalendarSetup, NotificationSetup
     session_id: Optional[str] = None
 
 class AgentStatusRequest(BaseModel):
     user_id: str
     agent_id: str
     is_enabled: bool
-    setup_type: str = "agent_config"  # Default to agent_config for backwards compatibility
+    setup_type: str  # Required: SolarSetup, CalendarSetup, NotificationSetup
 
 @app.get("/api/agents/setup/{user_id}")
 async def get_user_agents(user_id: str):
@@ -4025,25 +4025,11 @@ async def update_agent_status(request: AgentStatusRequest):
                 "enabled": request.is_enabled
             }
         else:
-            # If no record exists, create one
-            insert_result = supabase.table('squidgy_agent_business_setup')\
-                .insert({
-                    'firm_user_id': request.user_id,
-                    'agent_id': request.agent_id,
-                    'agent_name': request.agent_id,  # Default name
-                    'setup_json': {},
-                    'setup_type': request.setup_type,
-                    'is_enabled': request.is_enabled,
-                    'created_at': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                })\
-                .execute()
-            
+            # No record exists for this setup_type
             return {
-                "status": "success",
-                "action": "created",
-                "agent": insert_result.data[0] if insert_result.data else None,
-                "enabled": request.is_enabled
+                "status": "error",
+                "message": f"No {request.setup_type} configuration found for agent {request.agent_id}. Complete the progressive setup first.",
+                "enabled": False
             }
             
     except Exception as e:
