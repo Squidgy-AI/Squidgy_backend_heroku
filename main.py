@@ -3879,11 +3879,14 @@ class AgentSetupRequest(BaseModel):
     agent_name: str
     setup_data: Dict[str, Any]
     is_enabled: bool = True
+    setup_type: str = "agent_config"  # Default to agent_config for backwards compatibility
+    session_id: Optional[str] = None
 
 class AgentStatusRequest(BaseModel):
     user_id: str
     agent_id: str
     is_enabled: bool
+    setup_type: str = "agent_config"  # Default to agent_config for backwards compatibility
 
 @app.get("/api/agents/setup/{user_id}")
 async def get_user_agents(user_id: str):
@@ -3913,15 +3916,21 @@ async def get_user_agents(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/agents/setup/{user_id}/{agent_id}")
-async def get_agent_setup(user_id: str, agent_id: str):
-    """Get specific agent setup for a user"""
+async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
+    """Get specific agent setup for a user, optionally filtered by setup_type"""
     try:
-        result = supabase.table('squidgy_agent_business_setup')\
+        query = supabase.table('squidgy_agent_business_setup')\
             .select('*')\
             .eq('firm_user_id', user_id)\
-            .eq('agent_id', agent_id)\
-            .single()\
-            .execute()
+            .eq('agent_id', agent_id)
+        
+        # If setup_type is provided, filter by it
+        if setup_type:
+            query = query.eq('setup_type', setup_type)
+            result = query.single().execute()
+        else:
+            # If no setup_type specified, get all setups for this agent
+            result = query.execute()
         
         if result.data:
             return {
@@ -3948,16 +3957,19 @@ async def get_agent_setup(user_id: str, agent_id: str):
 async def create_or_update_agent_setup(request: AgentSetupRequest):
     """Create or update agent setup for a user"""
     try:
-        # Try to update first
+        # For setup_type specific updates, we need to consider the unique constraint
+        # Try to update first using firm_user_id, agent_id, and setup_type
         update_result = supabase.table('squidgy_agent_business_setup')\
             .update({
                 'agent_name': request.agent_name,
                 'setup_json': request.setup_data,
                 'is_enabled': request.is_enabled,
+                'session_id': request.session_id,
                 'updated_at': datetime.now().isoformat()
             })\
             .eq('firm_user_id', request.user_id)\
             .eq('agent_id', request.agent_id)\
+            .eq('setup_type', request.setup_type)\
             .execute()
         
         # If no rows updated, insert new record
@@ -3968,6 +3980,8 @@ async def create_or_update_agent_setup(request: AgentSetupRequest):
                     'agent_id': request.agent_id,
                     'agent_name': request.agent_name,
                     'setup_json': request.setup_data,
+                    'setup_type': request.setup_type,
+                    'session_id': request.session_id,
                     'is_enabled': request.is_enabled,
                     'created_at': datetime.now().isoformat(),
                     'updated_at': datetime.now().isoformat()
@@ -4001,6 +4015,7 @@ async def update_agent_status(request: AgentStatusRequest):
             })\
             .eq('firm_user_id', request.user_id)\
             .eq('agent_id', request.agent_id)\
+            .eq('setup_type', request.setup_type)\
             .execute()
         
         if result.data and len(result.data) > 0:
@@ -4017,6 +4032,7 @@ async def update_agent_status(request: AgentStatusRequest):
                     'agent_id': request.agent_id,
                     'agent_name': request.agent_id,  # Default name
                     'setup_json': {},
+                    'setup_type': request.setup_type,
                     'is_enabled': request.is_enabled,
                     'created_at': datetime.now().isoformat(),
                     'updated_at': datetime.now().isoformat()
@@ -4035,14 +4051,19 @@ async def update_agent_status(request: AgentStatusRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/agents/setup/{user_id}/{agent_id}")
-async def delete_agent_setup(user_id: str, agent_id: str):
-    """Delete agent setup for a user"""
+async def delete_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
+    """Delete agent setup for a user, optionally filtered by setup_type"""
     try:
-        result = supabase.table('squidgy_agent_business_setup')\
+        query = supabase.table('squidgy_agent_business_setup')\
             .delete()\
             .eq('firm_user_id', user_id)\
-            .eq('agent_id', agent_id)\
-            .execute()
+            .eq('agent_id', agent_id)
+        
+        # If setup_type is provided, filter by it
+        if setup_type:
+            query = query.eq('setup_type', setup_type)
+        
+        result = query.execute()
         
         return {
             "status": "success",
@@ -4052,6 +4073,50 @@ async def delete_agent_setup(user_id: str, agent_id: str):
         
     except Exception as e:
         logger.error(f"Error deleting agent setup: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Progressive Setup Convenience Endpoints
+@app.get("/api/agents/setup/{user_id}/{agent_id}/progress")
+async def get_agent_setup_progress(user_id: str, agent_id: str):
+    """Get setup progress for SOL Agent progressive setup"""
+    try:
+        # Get all setup types for this agent
+        result = supabase.table('squidgy_agent_business_setup')\
+            .select('setup_type, is_enabled, created_at, updated_at')\
+            .eq('firm_user_id', user_id)\
+            .eq('agent_id', agent_id)\
+            .in_('setup_type', ['SolarSetup', 'CalendarSetup', 'NotificationSetup'])\
+            .execute()
+        
+        setup_progress = {
+            'solar_completed': False,
+            'calendar_completed': False,
+            'notifications_completed': False,
+            'solar_completed_at': None,
+            'calendar_completed_at': None,
+            'notifications_completed_at': None
+        }
+        
+        if result.data:
+            for setup in result.data:
+                if setup['setup_type'] == 'SolarSetup' and setup['is_enabled']:
+                    setup_progress['solar_completed'] = True
+                    setup_progress['solar_completed_at'] = setup['created_at']
+                elif setup['setup_type'] == 'CalendarSetup' and setup['is_enabled']:
+                    setup_progress['calendar_completed'] = True
+                    setup_progress['calendar_completed_at'] = setup['created_at']
+                elif setup['setup_type'] == 'NotificationSetup' and setup['is_enabled']:
+                    setup_progress['notifications_completed'] = True
+                    setup_progress['notifications_completed_at'] = setup['created_at']
+        
+        return {
+            "status": "success",
+            "progress": setup_progress,
+            "setups_found": len(result.data) if result.data else 0
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting agent setup progress: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
