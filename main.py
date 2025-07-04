@@ -3879,14 +3879,14 @@ class AgentSetupRequest(BaseModel):
     agent_name: str
     setup_data: Dict[str, Any]
     is_enabled: bool = True
-    setup_type: str = "agent_config"  # Default for PersonalAssistant, or SolarSetup, CalendarSetup, NotificationSetup
+    setup_type: str = "agent_config"  # agent_config, SolarSetup, CalendarSetup, NotificationSetup, SOLAgent
     session_id: Optional[str] = None
 
 class AgentStatusRequest(BaseModel):
     user_id: str
     agent_id: str
     is_enabled: bool
-    setup_type: str = "agent_config"  # Default for PersonalAssistant, or SolarSetup, CalendarSetup, NotificationSetup
+    setup_type: str = "agent_config"  # agent_config, SolarSetup, CalendarSetup, NotificationSetup, SOLAgent
 
 @app.get("/api/agents/setup/{user_id}")
 async def get_user_agents(user_id: str):
