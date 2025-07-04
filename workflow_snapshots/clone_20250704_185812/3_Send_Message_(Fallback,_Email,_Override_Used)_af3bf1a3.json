@@ -1,0 +1,15 @@
+{
+  "workflow_id": "6ca0787a-a98e-434d-8e2a-4203af3bf1a3",
+  "workflow_name": "3: Send Message (Fallback, Email, Override Used)",
+  "snapshot_date": "2025-07-04T18:58:12.500729",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-08-29T07:14:46.413Z",
+    "Updated: 2024-08-29T07:14:48.823Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

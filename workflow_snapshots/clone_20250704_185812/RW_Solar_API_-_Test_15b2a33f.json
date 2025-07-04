@@ -1,0 +1,15 @@
+{
+  "workflow_id": "869355c8-92d1-460c-86ac-0a4b15b2a33f",
+  "workflow_name": "RW Solar API - Test",
+  "snapshot_date": "2025-07-04T18:58:12.543505",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: draft",
+    "Created: 2024-08-29T07:14:46.415Z",
+    "Updated: 2024-09-04T17:14:12.160Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

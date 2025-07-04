@@ -1,0 +1,65 @@
+{
+  "workflow_id": "943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+  "workflow_name": "Solar Lead Processing Workflow",
+  "snapshot_date": "2025-07-03T14:39:38.060550",
+  "triggers": [
+    {
+      "type": "form_submission",
+      "description": "Triggered when a lead submits the solar quote form",
+      "details": {
+        "form_name": "Solar Quote Request"
+      }
+    }
+  ],
+  "conditions": [
+    {
+      "type": "contact_field",
+      "description": "Check if contact has provided their address",
+      "details": {
+        "field": "address",
+        "operator": "is_not_empty"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "type": "send_email",
+      "description": "Send solar quote confirmation email",
+      "details": {
+        "template": "Solar Quote Confirmation",
+        "subject": "Your Solar Quote Request"
+      }
+    },
+    {
+      "type": "create_task",
+      "description": "Create follow-up task for sales team",
+      "details": {
+        "task_name": "Follow up with solar lead",
+        "due_days": 1
+      }
+    }
+  ],
+  "notes": [
+    "This workflow processes new solar leads when they request a quote",
+    "It sends a confirmation email and creates a follow-up task for the sales team",
+    "This workflow must be manually recreated in each new location"
+  ],
+  "screenshot_paths": [
+    {
+      "path": "workflow_screenshots/solar_workflow_overview.png",
+      "description": "Overview of the entire workflow"
+    },
+    {
+      "path": "workflow_screenshots/solar_workflow_trigger.png",
+      "description": "Trigger configuration"
+    },
+    {
+      "path": "workflow_screenshots/solar_workflow_conditions.png",
+      "description": "Conditions configuration"
+    },
+    {
+      "path": "workflow_screenshots/solar_workflow_actions.png",
+      "description": "Actions configuration"
+    }
+  ]
+}

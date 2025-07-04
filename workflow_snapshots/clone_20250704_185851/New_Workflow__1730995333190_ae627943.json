@@ -1,0 +1,15 @@
+{
+  "workflow_id": "9f8375fd-88d7-482b-beb9-b362ae627943",
+  "workflow_name": "New Workflow : 1730995333190",
+  "snapshot_date": "2025-07-04T18:58:51.330933",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: draft",
+    "Created: 2024-11-07T16:02:13.517Z",
+    "Updated: 2024-11-07T16:02:13.517Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

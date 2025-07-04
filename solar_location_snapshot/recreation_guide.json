@@ -1,0 +1,179 @@
+{
+  "location_id": "JUTFTny8EXQOSB5NcvAA",
+  "location_name": "The Ai Team - Solar",
+  "creation_date": "2025-07-03T14:12:47.510364",
+  "recreation_steps": [
+    "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+    "2. Create a new location or navigate to the target location",
+    "3. Follow the steps below to recreate the Solar sub-account configuration"
+  ],
+  "custom_fields": {
+    "steps": [
+      "1. Navigate to Settings > Custom Fields",
+      "2. Create the following custom fields:"
+    ],
+    "fields": []
+  },
+  "tags": {
+    "steps": [
+      "1. Navigate to Settings > Tags",
+      "2. Create the following tags:"
+    ],
+    "tag_list": []
+  },
+  "pipelines": {
+    "steps": [
+      "1. Navigate to Settings > Pipelines",
+      "2. Create the following pipelines:"
+    ],
+    "pipeline_list": []
+  },
+  "workflows": {
+    "steps": [
+      "1. Navigate to Automations > Workflows",
+      "2. Create the following workflows:"
+    ],
+    "workflow_list": [
+      {
+        "id": "943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+        "name": "1: Set Last Communication Type",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "476936d9-3de7-493f-93f0-907b485e7470",
+        "name": "2: Process Message",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "e20e9875-6419-4e9d-a817-72d94923c281",
+        "name": "2new: Process Message",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "daa90118-3c9a-4b88-9e3c-1871772bc07d",
+        "name": "2newsimple: Process Message",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "6ca0787a-a98e-434d-8e2a-4203af3bf1a3",
+        "name": "3: Send Message (Fallback, Email, Override Used)",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "1cea0384-1d3f-4684-9fa6-53d9cea61972",
+        "name": "Copy - 2: Process Message",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "76de7a43-506b-4215-bbf3-5ceb9ea20240",
+        "name": "Delete Phones",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "9f8375fd-88d7-482b-beb9-b362ae627943",
+        "name": "New Workflow : 1730995333190",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "b9a3854d-fa22-4ad0-aaaf-a1e227dd5b87",
+        "name": "Process Message Test",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "869355c8-92d1-460c-86ac-0a4b15b2a33f",
+        "name": "RW Solar API - Test",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "390c658f-314c-4bb3-a4a6-75720561cafd",
+        "name": "RW Solar Event :: Bill Data Ready",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "2605fed9-1082-4f6e-bcd3-76d0e22993e1",
+        "name": "RW Solar Event :: Property Address Provided",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "903deaa5-6ec1-4672-bf7b-12e21847b0d1",
+        "name": "RW Solar Tool :: Calculate kWh Price [Amount]",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "a793e4b1-476c-48f2-aa51-68574cfaedc8",
+        "name": "RW Solar Tool :: Calculate kWh Price [Usage]",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "b01a1b81-9984-4918-88db-cf3fa093cef0",
+        "name": "Solar Assistant - Onboarding Form Complete",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "ad09d9af-4657-4b96-a228-e44eeeb26fa3",
+        "name": "Start Solar Outreach",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "22c71b86-79b3-430e-86a5-12db17facf40",
+        "name": "TEST Process Message",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "c17cc264-644e-477a-870c-41f2e9ec898e",
+        "name": "Tool: Override Message",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "70eefdf3-a1e6-4112-a570-737e073a5d88",
+        "name": "Tool: Reset Contact",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "abf02aea-a77d-4e0c-9853-e9b3bd4a2c26",
+        "name": "Tool:\u00a0 Follow Up 1 Day",
+        "description": "",
+        "note": "Take screenshots of this workflow in the Solar account for detailed recreation"
+      },
+      {
+        "id": "943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+        "name": "Important Solar Workflow",
+        "description": "This specific workflow needs to be manually recreated",
+        "note": "This workflow requires special attention during recreation"
+      }
+    ]
+  },
+  "forms": {
+    "steps": [
+      "1. Navigate to Marketing > Forms",
+      "2. Create the following forms:"
+    ],
+    "form_list": []
+  },
+  "templates": {
+    "steps": [
+      "1. Navigate to Marketing > Email Templates",
+      "2. Create the following email templates:"
+    ],
+    "template_list": []
+  }
+}

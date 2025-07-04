@@ -1,0 +1,1221 @@
+Starting GoHighLevel Agency Locations Test...
+ℹ Fetching all agency locations...
+INFO: Fetching all agency locations...
+ℹ Response status code: 200
+INFO: Response status code: 200
+Response headers: {'Date': 'Thu, 03 Jul 2025 16:43:55 GMT', 'Content-Type': 'application/json; charset=utf-8', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'x-powered-by': 'Express', 'access-control-allow-origin': '*', 'ratelimit-limit': '200000', 'ratelimit-remaining': '199958', 'ratelimit-reset': '82152', 'etag': 'W/"15dd9-4M7s5a9F7DRRxsdbtrEsNubydpA"', 'x-envoy-upstream-service-time': '366', 'strict-transport-security': 'max-age=31536000', 'cf-cache-status': 'DYNAMIC', 'Server': 'cloudflare', 'CF-RAY': '9597d83519711208-LHR', 'Content-Encoding': 'gzip'}
+Response content: {"locations":[{"id":"l3G9lZWjEh8g5bM09fJy","name":"- Intern Farzin","address":"20 Wenlock Road","city":"Islington","state":"London","country":"GB","postalCode":"N17GU","timezone":"Europe/London","firstName":"Farzin","lastName":"HighLevel","email":"farzin@theai.team","phone":"+447740109690","business":{"name":"- Intern Farzin","address":"20 Wenlock Road","city":"Islington","state":"London","country":"GB","postalCode":"N17GU","timezone":"Europe/London"},"social":{"facebookUrl":"","googlePlus":"","linkedIn":"","foursquare":"","twitter":"","yelp":"","instagram":"","youtube":"","pinterest":"","blogRss":"","googlePlaceId":""},"settings":{"allowDuplicateContact":false,"allowDuplicateOpportunity":false,"allowFacebookNameMerge":false,"disableContactTimezone":false}},{"id":"yRNq6LWN19juC0PBv1H4","name":"- Intern Hud","address":"20 Wenlock Road","city":"Islington","state":"London","country":"GB","postalCode":"N17GU","timezone":"Europe/London","firstName":"Huddaifah","lastName":"Ali - Intern","ema
+✓ Found 96 locations
+SUCCESS: Found 96 locations
+Agency Locations
+
+========================================
+Agency Locations
+========================================
+Location #1
+ℹ ID: l3G9lZWjEh8g5bM09fJy
+INFO: ID: l3G9lZWjEh8g5bM09fJy
+ℹ Name: - Intern Farzin
+INFO: Name: - Intern Farzin
+ℹ Email: farzin@theai.team
+INFO: Email: farzin@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #2
+ℹ ID: yRNq6LWN19juC0PBv1H4
+INFO: ID: yRNq6LWN19juC0PBv1H4
+ℹ Name: - Intern Hud
+INFO: Name: - Intern Hud
+ℹ Email: hud@theai.team
+INFO: Email: hud@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #3
+ℹ ID: ZAOWJhjhojWcdHCfNa90
+INFO: ID: ZAOWJhjhojWcdHCfNa90
+ℹ Name: - Intern Malika
+INFO: Name: - Intern Malika
+ℹ Email: malika@theai.team
+INFO: Email: malika@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #4
+ℹ ID: VmeLPhKV3yuqNbJr3N4S
+INFO: ID: VmeLPhKV3yuqNbJr3N4S
+ℹ Name: - Intern Moksh
+INFO: Name: - Intern Moksh
+ℹ Email: moksh@theai.team
+INFO: Email: moksh@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #5
+ℹ ID: iMfF3gSNdXftdyBBDcsv
+INFO: ID: iMfF3gSNdXftdyBBDcsv
+ℹ Name: 12 (Dummy Account)
+INFO: Name: 12 (Dummy Account)
+ℹ Email: seth@onetoo.com
+INFO: Email: seth@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #6
+ℹ ID: Oq4VLzT7zBlGzLbmZOgm
+INFO: ID: Oq4VLzT7zBlGzLbmZOgm
+ℹ Name: 728 Marketing
+INFO: Name: 728 Marketing
+ℹ Email: seth@728.marketing
+INFO: Email: seth@728.marketing
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #7
+ℹ ID: kM7g8AjmY4cnNNRVzLQb
+INFO: ID: kM7g8AjmY4cnNNRVzLQb
+ℹ Name: Agencies.Marketing
+INFO: Name: Agencies.Marketing
+ℹ Email: seth@onetoo.com
+INFO: Email: seth@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #8
+ℹ ID: zzJ4uevn4UWZcbIWwr1c
+INFO: ID: zzJ4uevn4UWZcbIWwr1c
+ℹ Name: Ai will do that
+INFO: Name: Ai will do that
+ℹ Email: surefiredm@gmail.com
+INFO: Email: surefiredm@gmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #9
+ℹ ID: rYhUNesgY5eM7I8ZyLr5
+INFO: ID: rYhUNesgY5eM7I8ZyLr5
+ℹ Name: AiTeam - GHL Mastery
+INFO: Name: AiTeam - GHL Mastery
+ℹ Email: seth@onetoo.com
+INFO: Email: seth@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #10
+ℹ ID: 0ohl8FZk7AuFTjNUnPmw
+INFO: ID: 0ohl8FZk7AuFTjNUnPmw
+ℹ Name: Bansko Nomad Fest
+INFO: Name: Bansko Nomad Fest
+ℹ Email: seth+dnf@onetoo.com
+INFO: Email: seth+dnf@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #11
+ℹ ID: 17bHS58p0A49kiJoE9NI
+INFO: ID: 17bHS58p0A49kiJoE9NI
+ℹ Name: Biz Ai
+INFO: Name: Biz Ai
+ℹ Email: seth@theai.team
+INFO: Email: seth@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #12
+ℹ ID: Z2Td9lYx3X8K5YkL3jTo
+INFO: ID: Z2Td9lYx3X8K5YkL3jTo
+ℹ Name: Blade Insurance
+INFO: Name: Blade Insurance
+ℹ Email: patrick.oleary@hotmail.com
+INFO: Email: patrick.oleary@hotmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #13
+ℹ ID: gJlunV43EcYtDQzU4fJv
+INFO: ID: gJlunV43EcYtDQzU4fJv
+ℹ Name: Bots Demo
+INFO: Name: Bots Demo
+ℹ Email: info+botsdemo@onetoo.com
+INFO: Email: info+botsdemo@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #14
+ℹ ID: ArBAJ1vp2zEsj18Tm7oL
+INFO: ID: ArBAJ1vp2zEsj18Tm7oL
+ℹ Name: Brand Story Guide
+INFO: Name: Brand Story Guide
+ℹ Email: surefiredm@gmail.com
+INFO: Email: surefiredm@gmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #15
+ℹ ID: as3ZFI7L56EtqRI1kw1Z
+INFO: ID: as3ZFI7L56EtqRI1kw1Z
+ℹ Name: Butco - Ai Team
+INFO: Name: Butco - Ai Team
+ℹ Email: sara.shahnavaz@butco.com
+INFO: Email: sara.shahnavaz@butco.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #16
+ℹ ID: PP0tuUILuoZKtEEjH5is
+INFO: ID: PP0tuUILuoZKtEEjH5is
+ℹ Name: Capital 3PM
+INFO: Name: Capital 3PM
+ℹ Email: info+adam@onetoo.com
+INFO: Email: info+adam@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #17
+ℹ ID: LH2Y9IDfAb28UHqrPwpG
+INFO: ID: LH2Y9IDfAb28UHqrPwpG
+ℹ Name: Chester Corporation
+INFO: Name: Chester Corporation
+ℹ Email: chesterrocheallen2001@gmail.com
+INFO: Email: chesterrocheallen2001@gmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #18
+ℹ ID: 8whcNun1QFnFw7tZU1fx
+INFO: ID: 8whcNun1QFnFw7tZU1fx
+ℹ Name: CoachWith.Video
+INFO: Name: CoachWith.Video
+ℹ Email: seth@coachwith.video
+INFO: Email: seth@coachwith.video
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #19
+ℹ ID: sbqrNurmFUypPOHe7TrF
+INFO: ID: sbqrNurmFUypPOHe7TrF
+ℹ Name: Creaitor
+INFO: Name: Creaitor
+ℹ Email: player.one@tutanota.com
+INFO: Email: player.one@tutanota.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #20
+ℹ ID: gb6Qmh0QjUZ3VBj3PLGg
+INFO: ID: gb6Qmh0QjUZ3VBj3PLGg
+ℹ Name: CZ Handsaker Flowers
+INFO: Name: CZ Handsaker Flowers
+ℹ Email: clare@handsaker.co.uk
+INFO: Email: clare@handsaker.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #21
+ℹ ID: J4h1rtBP36hiRK8iOD10
+INFO: ID: J4h1rtBP36hiRK8iOD10
+ℹ Name: Dancing Latitudes
+INFO: Name: Dancing Latitudes
+ℹ Email: christoph@hhp.ee
+INFO: Email: christoph@hhp.ee
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #22
+ℹ ID: Mx2mf9VMNak1L9TNi92z
+INFO: ID: Mx2mf9VMNak1L9TNi92z
+ℹ Name: Danijela Maletic's Account
+INFO: Name: Danijela Maletic's Account
+ℹ Email: info.nomadeire@gmail.com
+INFO: Email: info.nomadeire@gmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #23
+ℹ ID: K5j5u8pWE8qaPzYCQcwc
+INFO: ID: K5j5u8pWE8qaPzYCQcwc
+ℹ Name: Digital Nomad Adventures
+INFO: Name: Digital Nomad Adventures
+ℹ Email: joe@digitalnomadadventures.com
+INFO: Email: joe@digitalnomadadventures.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #24
+ℹ ID: XL73aztTUOf7ymrM9Jfv
+INFO: ID: XL73aztTUOf7ymrM9Jfv
+ℹ Name: eLawyers - Porters - Injury Claims
+INFO: Name: eLawyers - Porters - Injury Claims
+ℹ Email: info@injuryclaimsgroup.co.uk
+INFO: Email: info@injuryclaimsgroup.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #25
+ℹ ID: q3fTfO4ay0geN6xwfzGB
+INFO: ID: q3fTfO4ay0geN6xwfzGB
+ℹ Name: Employ.Marketing
+INFO: Name: Employ.Marketing
+ℹ Email: seth@employ.video
+INFO: Email: seth@employ.video
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #26
+ℹ ID: R7aeVGK4gPOrypVRcSWf
+INFO: ID: R7aeVGK4gPOrypVRcSWf
+ℹ Name: Employ.Video
+INFO: Name: Employ.Video
+ℹ Email: seth@employ.video
+INFO: Email: seth@employ.video
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #27
+ℹ ID: XRIftpd2DyRtPzXb8n6y
+INFO: ID: XRIftpd2DyRtPzXb8n6y
+ℹ Name: Estate Agency AI
+INFO: Name: Estate Agency AI
+ℹ Email: info@estateagency.ai
+INFO: Email: info@estateagency.ai
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #28
+ℹ ID: Nx84Or1wHVrCXqdTPqvY
+INFO: ID: Nx84Or1wHVrCXqdTPqvY
+ℹ Name: examplebusiness
+INFO: Name: examplebusiness
+ℹ Email: ha.thenut+test@gmail.com
+INFO: Email: ha.thenut+test@gmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #29
+ℹ ID: Sxk96Q7xWH70NgpAB8sq
+INFO: ID: Sxk96Q7xWH70NgpAB8sq
+ℹ Name: friLingue
+INFO: Name: friLingue
+ℹ Email: info@frilingue.ch
+INFO: Email: info@frilingue.ch
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #30
+ℹ ID: VVfno7MHM9l7crC0Q8yE
+INFO: ID: VVfno7MHM9l7crC0Q8yE
+ℹ Name: Green & Company
+INFO: Name: Green & Company
+ℹ Email: paul@green-property.com
+INFO: Email: paul@green-property.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #31
+ℹ ID: cwxhnGTWZcN4v1uyWl8Y
+INFO: ID: cwxhnGTWZcN4v1uyWl8Y
+ℹ Name: GroBots
+INFO: Name: GroBots
+ℹ Email: seth@grobots.co
+INFO: Email: seth@grobots.co
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #32
+ℹ ID: nmbiuAiuzaC9ihrG0xh5
+INFO: ID: nmbiuAiuzaC9ihrG0xh5
+ℹ Name: IDXAddons Example
+INFO: Name: IDXAddons Example
+ℹ Email: seth@onetoo.co
+INFO: Email: seth@onetoo.co
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #33
+ℹ ID: uwbtAblUPB7bmOP4VU4L
+INFO: ID: uwbtAblUPB7bmOP4VU4L
+ℹ Name: Immy
+INFO: Name: Immy
+ℹ Email: immy@immy.me
+INFO: Email: immy@immy.me
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #34
+ℹ ID: IPYWEyF5VHgMOmhdwubV
+INFO: ID: IPYWEyF5VHgMOmhdwubV
+ℹ Name: Insight 7
+INFO: Name: Insight 7
+ℹ Email: lee.jamison@insight7.consulting
+INFO: Email: lee.jamison@insight7.consulting
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #35
+ℹ ID: vNgRLFWMG7Atr4wEUu3Q
+INFO: ID: vNgRLFWMG7Atr4wEUu3Q
+ℹ Name: John Howis
+INFO: Name: John Howis
+ℹ Email: john@johnhowis.com
+INFO: Email: john@johnhowis.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #36
+ℹ ID: JVlQ6fntWcxigOHJE2KC
+INFO: ID: JVlQ6fntWcxigOHJE2KC
+ℹ Name: Kumba Intern
+INFO: Name: Kumba Intern
+ℹ Email: kumba@theai.team
+INFO: Email: kumba@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #37
+ℹ ID: zPa3ddRrjsM6AP04rLM7
+INFO: ID: zPa3ddRrjsM6AP04rLM7
+ℹ Name: Love In The Moment
+INFO: Name: Love In The Moment
+ℹ Email: john@johnhowis.com
+INFO: Email: john@johnhowis.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #38
+ℹ ID: Nnyd0NBWK75GkJ9T5vps
+INFO: ID: Nnyd0NBWK75GkJ9T5vps
+ℹ Name: LYL Cards
+INFO: Name: LYL Cards
+ℹ Email: seth@lyl.cards
+INFO: Email: seth@lyl.cards
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #39
+ℹ ID: XZJRmWemw0pnsMSNXMwl
+INFO: ID: XZJRmWemw0pnsMSNXMwl
+ℹ Name: M3T4 Marketing
+INFO: Name: M3T4 Marketing
+ℹ Email: seth@m3t4.marketing
+INFO: Email: seth@m3t4.marketing
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #40
+ℹ ID: ZNIrubpMkq0sNknk2yN7
+INFO: ID: ZNIrubpMkq0sNknk2yN7
+ℹ Name: MAC & Facility Management Ltd
+INFO: Name: MAC & Facility Management Ltd
+ℹ Email: seth+mac@theai.team
+INFO: Email: seth+mac@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #41
+ℹ ID: D07tXRN9uv04gBE9jbbE
+INFO: ID: D07tXRN9uv04gBE9jbbE
+ℹ Name: Manilyn's Playground
+INFO: Name: Manilyn's Playground
+ℹ Email: manilyn@theai.team
+INFO: Email: manilyn@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #42
+ℹ ID: d6MZDrBmdwOTNWYcfmWY
+INFO: ID: d6MZDrBmdwOTNWYcfmWY
+ℹ Name: MapTalent Ltd
+INFO: Name: MapTalent Ltd
+ℹ Email: mpalmer@maptalent.com
+INFO: Email: mpalmer@maptalent.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #43
+ℹ ID: 3iWK2JyQlXQXSdkWPd5z
+INFO: ID: 3iWK2JyQlXQXSdkWPd5z
+ℹ Name: Mercia Movers
+INFO: Name: Mercia Movers
+ℹ Email: james@merciamovers.co.uk
+INFO: Email: james@merciamovers.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #44
+ℹ ID: fONQHJN3plFeMayjnHNg
+INFO: ID: fONQHJN3plFeMayjnHNg
+ℹ Name: Mickey Mouse Meme
+INFO: Name: Mickey Mouse Meme
+ℹ Email: seth+mickey@onetoo.com
+INFO: Email: seth+mickey@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #45
+ℹ ID: gVtK8pTHyT4yWV9dyFkX
+INFO: ID: gVtK8pTHyT4yWV9dyFkX
+ℹ Name: Mohn Intern
+INFO: Name: Mohn Intern
+ℹ Email: mohn@theai.team
+INFO: Email: mohn@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #46
+ℹ ID: wC4uJpPlNdxpWR8BzGUu
+INFO: ID: wC4uJpPlNdxpWR8BzGUu
+ℹ Name: Movable Marketing
+INFO: Name: Movable Marketing
+ℹ Email: seth@movable.marketing
+INFO: Email: seth@movable.marketing
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #47
+ℹ ID: DLAZ1B0lwIN7o4UH68Ni
+INFO: ID: DLAZ1B0lwIN7o4UH68Ni
+ℹ Name: NearMe.Town
+INFO: Name: NearMe.Town
+ℹ Email: seth@nearme.town
+INFO: Email: seth@nearme.town
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #48
+ℹ ID: rQAqRrplHUXbREF24Q2H
+INFO: ID: rQAqRrplHUXbREF24Q2H
+ℹ Name: Nestle LLC - MKR TEST
+INFO: Name: Nestle LLC - MKR TEST
+ℹ Email: john.doe@mail.com
+INFO: Email: john.doe@mail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #49
+ℹ ID: M7WwmvWXmI8nLfuS97qR
+INFO: ID: M7WwmvWXmI8nLfuS97qR
+ℹ Name: Nestle LLC - MOKSH TEST
+INFO: Name: Nestle LLC - MOKSH TEST
+ℹ Email: john.doe@mail.com
+INFO: Email: john.doe@mail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #50
+ℹ ID: WhYhKaRH4FApzExelYMZ
+INFO: ID: WhYhKaRH4FApzExelYMZ
+ℹ Name: Nestle LLC - SOMA TEST
+INFO: Name: Nestle LLC - SOMA TEST
+ℹ Email: john.doe@mail.com
+INFO: Email: john.doe@mail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #51
+ℹ ID: lBPqgBowX1CsjHay12LY
+INFO: ID: lBPqgBowX1CsjHay12LY
+ℹ Name: Nestle LLC - SOMA TEST
+INFO: Name: Nestle LLC - SOMA TEST
+ℹ Email: john.doe@mail.com
+INFO: Email: john.doe@mail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #52
+ℹ ID: ud5yA3V8Ht3CyX6oJvPa
+INFO: ID: ud5yA3V8Ht3CyX6oJvPa
+ℹ Name: Nomads Insure
+INFO: Name: Nomads Insure
+ℹ Email: seth.ward@mail.hhp.ee
+INFO: Email: seth.ward@mail.hhp.ee
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #53
+ℹ ID: kAW44EskLicA23tibwdc
+INFO: ID: kAW44EskLicA23tibwdc
+ℹ Name: Onetoo
+INFO: Name: Onetoo
+ℹ Email: seth@onetoo.com
+INFO: Email: seth@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #54
+ℹ ID: pmCUUdNALvtWQvQwinuQ
+INFO: ID: pmCUUdNALvtWQvQwinuQ
+ℹ Name: Oo.Marketing
+INFO: Name: Oo.Marketing
+ℹ Email: seth@oo.marketing
+INFO: Email: seth@oo.marketing
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #55
+ℹ ID: tTEefDlTUw9D6VIStkje
+INFO: ID: tTEefDlTUw9D6VIStkje
+ℹ Name: OTP Bank - AiT
+INFO: Name: OTP Bank - AiT
+ℹ Email: gbranston@sportaiconsultants.com
+INFO: Email: gbranston@sportaiconsultants.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #56
+ℹ ID: 0Q5P0BE4LyJpLk0LU1qT
+INFO: ID: 0Q5P0BE4LyJpLk0LU1qT
+ℹ Name: Peritus Learning
+INFO: Name: Peritus Learning
+ℹ Email: stevewalker@perituslearning.co.uk
+INFO: Email: stevewalker@perituslearning.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #57
+ℹ ID: W739xPAQxplNOpvbJ3Uw
+INFO: ID: W739xPAQxplNOpvbJ3Uw
+ℹ Name: Places People
+INFO: Name: Places People
+ℹ Email: mike@properative.co.uk
+INFO: Email: mike@properative.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #58
+ℹ ID: fMTFH488RMzsQ1ukuyeA
+INFO: ID: fMTFH488RMzsQ1ukuyeA
+ℹ Name: Precious' Playground
+INFO: Name: Precious' Playground
+ℹ Email: precious@theai.team
+INFO: Email: precious@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #59
+ℹ ID: 6t1aPygxljhhZT68IXXl
+INFO: ID: 6t1aPygxljhhZT68IXXl
+ℹ Name: Propa.Marketing
+INFO: Name: Propa.Marketing
+ℹ Email: seth@onetoo.com
+INFO: Email: seth@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #60
+ℹ ID: DeOf9BhInRTkIM6GGGGe
+INFO: ID: DeOf9BhInRTkIM6GGGGe
+ℹ Name: RARECask 
+INFO: Name: RARECask 
+ℹ Email: sw@houseofrare.io
+INFO: Email: sw@houseofrare.io
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #61
+ℹ ID: 2folDl615Pis3RA1NGUA
+INFO: ID: 2folDl615Pis3RA1NGUA
+ℹ Name: RMS ENERGY SOLUTIONS LIMITED
+INFO: Name: RMS ENERGY SOLUTIONS LIMITED
+ℹ Email: alex@rmsenergy.co.uk
+INFO: Email: alex@rmsenergy.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #62
+ℹ ID: 387S3wp0Fumx7YHFdzAn
+INFO: ID: 387S3wp0Fumx7YHFdzAn
+ℹ Name: Robbin L Seymour's Account
+INFO: Name: Robbin L Seymour's Account
+ℹ Email: sw@houseofrare.io
+INFO: Email: sw@houseofrare.io
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #63
+ℹ ID: 2bkuFKSVRGpbJXQVuvTM
+INFO: ID: 2bkuFKSVRGpbJXQVuvTM
+ℹ Name: Self Selling Live
+INFO: Name: Self Selling Live
+ℹ Email: seth+selfsell@onetoo.com
+INFO: Email: seth+selfsell@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #64
+ℹ ID: ii44PyTDZWQD57Xx1UGY
+INFO: ID: ii44PyTDZWQD57Xx1UGY
+ℹ Name: SethWard.com
+INFO: Name: SethWard.com
+ℹ Email: seth@sethward.com
+INFO: Email: seth@sethward.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #65
+ℹ ID: Tomy00KZ09hrQplaJmfr
+INFO: ID: Tomy00KZ09hrQplaJmfr
+ℹ Name: Shivali's Playground
+INFO: Name: Shivali's Playground
+ℹ Email: shivali@theai.team
+INFO: Email: shivali@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #66
+ℹ ID: 4GbQOuPcQS1QhxyaRCN6
+INFO: ID: 4GbQOuPcQS1QhxyaRCN6
+ℹ Name: Ski Hostel
+INFO: Name: Ski Hostel
+ℹ Email: seth@ski-hostel.com
+INFO: Email: seth@ski-hostel.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #67
+ℹ ID: 9URWCWYLkDsFrXB6jhPX
+INFO: ID: 9URWCWYLkDsFrXB6jhPX
+ℹ Name: Snapshot - Ai Social Keyword Replies
+INFO: Name: Snapshot - Ai Social Keyword Replies
+ℹ Email: seth+snapshots@onetoo.com
+INFO: Email: seth+snapshots@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #68
+ℹ ID: o3VZG4AaZUS5SOtTT6ic
+INFO: ID: o3VZG4AaZUS5SOtTT6ic
+ℹ Name: Snapshot - MISSY - Ai Missed Call Bot
+INFO: Name: Snapshot - MISSY - Ai Missed Call Bot
+ℹ Email: seth+missy@onetoo.com
+INFO: Email: seth+missy@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #69
+ℹ ID: iLXaCfmBW9MeKhOx0sRT
+INFO: ID: iLXaCfmBW9MeKhOx0sRT
+ℹ Name: Snapshot - Sleeping Beauty
+INFO: Name: Snapshot - Sleeping Beauty
+ℹ Email: Seth+sleepingbeauty@onetoo.com
+INFO: Email: Seth+sleepingbeauty@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #70
+ℹ ID: dgCfxFB8jcmHxLHvWAAU
+INFO: ID: dgCfxFB8jcmHxLHvWAAU
+ℹ Name: Snapshot - STS Reactivation
+INFO: Name: Snapshot - STS Reactivation
+ℹ Email: seth+react@onetoo.com
+INFO: Email: seth+react@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #71
+ℹ ID: a0DP9AlkkreShRQEelpt
+INFO: ID: a0DP9AlkkreShRQEelpt
+ℹ Name: Soma
+INFO: Name: Soma
+ℹ Email: somasekhar.addakula@gmail.com
+INFO: Email: somasekhar.addakula@gmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #72
+ℹ ID: yhPOwYFTUXrqoUAspemC
+INFO: ID: yhPOwYFTUXrqoUAspemC
+ℹ Name: Soma's New Solar Agency
+INFO: Name: Soma's New Solar Agency
+ℹ Email: seth+testclientusingsomasnapshot@onetoo.com
+INFO: Email: seth+testclientusingsomasnapshot@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #73
+ℹ ID: 5N0wt62Pwlot0eg8Ly67
+INFO: ID: 5N0wt62Pwlot0eg8Ly67
+ℹ Name: Sport Ai Consultants
+INFO: Name: Sport Ai Consultants
+ℹ Email: gbranston@sportaiconsultants.com
+INFO: Email: gbranston@sportaiconsultants.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #74
+ℹ ID: UUOATaC9SkwwDXTECEzk
+INFO: ID: UUOATaC9SkwwDXTECEzk
+ℹ Name: Squidgy
+INFO: Name: Squidgy
+ℹ Email: seth@squidgy.ai
+INFO: Email: seth@squidgy.ai
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #75
+ℹ ID: REPWBBqeSf5OpBmxy2IH
+INFO: ID: REPWBBqeSf5OpBmxy2IH
+ℹ Name: Sutton Roofing
+INFO: Name: Sutton Roofing
+ℹ Email: enquiries@suttonroofingltd.co.uk
+INFO: Email: enquiries@suttonroofingltd.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #76
+ℹ ID: CqmjaEUPp2onP0o1t9Sd
+INFO: ID: CqmjaEUPp2onP0o1t9Sd
+ℹ Name: Test Business Name
+INFO: Name: Test Business Name
+ℹ Email: test-direct@example.com
+INFO: Email: test-direct@example.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #77
+ℹ ID: zHYLYisoeRwNOM4QXRyj
+INFO: ID: zHYLYisoeRwNOM4QXRyj
+ℹ Name: Test Manual Clone (Clone)
+INFO: Name: Test Manual Clone (Clone)
+ℹ Email: test-manual-clone@example.com
+INFO: Email: test-manual-clone@example.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #78
+ℹ ID: oNyzuvcdCnQ2pQvA1WIF
+INFO: ID: oNyzuvcdCnQ2pQvA1WIF
+ℹ Name: Test Manual Clone Final (Clone)
+INFO: Name: Test Manual Clone Final (Clone)
+ℹ Email: test-final@example.com
+INFO: Email: test-final@example.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #79
+ℹ ID: VXJDt6FDcPQXNt0aYbqq
+INFO: ID: VXJDt6FDcPQXNt0aYbqq
+ℹ Name: Test Manual Clone Full (Clone)
+INFO: Name: Test Manual Clone Full (Clone)
+ℹ Email: test-manual-clone-full@example.com
+INFO: Email: test-manual-clone-full@example.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #80
+ℹ ID: vxQFsBkjTrIKUG9eHMUd
+INFO: ID: vxQFsBkjTrIKUG9eHMUd
+ℹ Name: Test Manual Clone Log (Clone)
+INFO: Name: Test Manual Clone Log (Clone)
+ℹ Email: test-manual-clone-log@example.com
+INFO: Email: test-manual-clone-log@example.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #81
+ℹ ID: 3lKsFtYq39OJ81PlpCUi
+INFO: ID: 3lKsFtYq39OJ81PlpCUi
+ℹ Name: The Ai Team
+INFO: Name: The Ai Team
+ℹ Email: moksh@theai.team
+INFO: Email: moksh@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #82
+ℹ ID: Sn4KGThqN0dtaQiAfpQW
+INFO: ID: Sn4KGThqN0dtaQiAfpQW
+ℹ Name: The Ai Team - AutoMKT
+INFO: Name: The Ai Team - AutoMKT
+ℹ Email: seth@theai.team
+INFO: Email: seth@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #83
+ℹ ID: 8PkkbVH5vlaXsxzSNcAT
+INFO: ID: 8PkkbVH5vlaXsxzSNcAT
+ℹ Name: The Ai Team - Partners
+INFO: Name: The Ai Team - Partners
+ℹ Email: seth@theai.team
+INFO: Email: seth@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #84
+ℹ ID: AcEsOuylUac6V5vOdUYI
+INFO: ID: AcEsOuylUac6V5vOdUYI
+ℹ Name: The AI Team - Setting up Snapshot for Soma
+INFO: Name: The AI Team - Setting up Snapshot for Soma
+ℹ Email: seth+somasnapshot@onetoo.com
+INFO: Email: seth+somasnapshot@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #85
+ℹ ID: JUTFTny8EXQOSB5NcvAA
+INFO: ID: JUTFTny8EXQOSB5NcvAA
+ℹ Name: The Ai Team - Solar
+INFO: Name: The Ai Team - Solar
+ℹ Email: seth+solar@theai.team
+INFO: Email: seth+solar@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #86
+ℹ ID: wgZX4vBDaS5hbD5Hcy5E
+INFO: ID: wgZX4vBDaS5hbD5Hcy5E
+ℹ Name: The Ai Team - Vision
+INFO: Name: The Ai Team - Vision
+ℹ Email: seth+vision@theai.team
+INFO: Email: seth+vision@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #87
+ℹ ID: It3DySZY02aBkIz01hD2
+INFO: ID: It3DySZY02aBkIz01hD2
+ℹ Name: The Ai Team - Warmup
+INFO: Name: The Ai Team - Warmup
+ℹ Email: seth@theai.team
+INFO: Email: seth@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #88
+ℹ ID: hmHD9FngGZmj5aeI4sEY
+INFO: ID: hmHD9FngGZmj5aeI4sEY
+ℹ Name: The Coin CreAitor
+INFO: Name: The Coin CreAitor
+ℹ Email: info@coinloser.com
+INFO: Email: info@coinloser.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #89
+ℹ ID: 3OqBq0G9Yfoj4xeZ0S3L
+INFO: ID: 3OqBq0G9Yfoj4xeZ0S3L
+ℹ Name: The Hedonist
+INFO: Name: The Hedonist
+ℹ Email: wmh@warrenmichaelholmes.com
+INFO: Email: wmh@warrenmichaelholmes.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #90
+ℹ ID: 9U9wNXb2nRyJBguu9K57
+INFO: ID: 9U9wNXb2nRyJBguu9K57
+ℹ Name: TheAi.Team Ltd
+INFO: Name: TheAi.Team Ltd
+ℹ Email: seth@theai.team
+INFO: Email: seth@theai.team
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #91
+ℹ ID: wWK68EN4Gfpq5InJ017N
+INFO: ID: wWK68EN4Gfpq5InJ017N
+ℹ Name: TheAi.Team Ltd - Solar Dev
+INFO: Name: TheAi.Team Ltd - Solar Dev
+ℹ Email: seth+solardev@onetoo.com
+INFO: Email: seth+solardev@onetoo.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #92
+ℹ ID: MgWm85SPAebURLCCIGd7
+INFO: ID: MgWm85SPAebURLCCIGd7
+ℹ Name: Tigris Associates
+INFO: Name: Tigris Associates
+ℹ Email: admin@tigrisassociates.com
+INFO: Email: admin@tigrisassociates.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #93
+ℹ ID: 9uhAQEak9zdzLGI9iTPk
+INFO: ID: 9uhAQEak9zdzLGI9iTPk
+ℹ Name: Tradies Marketing
+INFO: Name: Tradies Marketing
+ℹ Email: seth@tradies.marketing
+INFO: Email: seth@tradies.marketing
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #94
+ℹ ID: apJkXHkjyeaRZIzQtNgQ
+INFO: ID: apJkXHkjyeaRZIzQtNgQ
+ℹ Name: Wasteless
+INFO: Name: Wasteless
+ℹ Email: alesja.jagolnik@gmail.com
+INFO: Email: alesja.jagolnik@gmail.com
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #95
+ℹ ID: QfIvstGKFytWswfDLVxo
+INFO: ID: QfIvstGKFytWswfDLVxo
+ℹ Name: Webbers
+INFO: Name: Webbers
+ℹ Email: malcolm.prescott@webbers.co.uk
+INFO: Email: malcolm.prescott@webbers.co.uk
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+Location #96
+ℹ ID: sH80RcBvEIUz1pDJoqF1
+INFO: ID: sH80RcBvEIUz1pDJoqF1
+ℹ Name: YouNeed.Video
+INFO: Name: YouNeed.Video
+ℹ Email: seth@youneed.video
+INFO: Email: seth@youneed.video
+ℹ Business Name: N/A
+INFO: Business Name: N/A
+ℹ Status: N/A
+INFO: Status: N/A
+
+✓ Solar sub-account (ID: JUTFTny8EXQOSB5NcvAA) is accessible
+SUCCESS: Solar sub-account (ID: JUTFTny8EXQOSB5NcvAA) is accessible
+ℹ Solar sub-account name: The Ai Team - Solar
+INFO: Solar sub-account name: The Ai Team - Solar
+SOLAR DETAILS: {
+  "id": "JUTFTny8EXQOSB5NcvAA",
+  "name": "The Ai Team - Solar",
+  "address": "20 Wenlock Road",
+  "city": "Islington",
+  "state": "London",
+  "country": "GB",
+  "postalCode": "N17GU",
+  "website": "solar.theai.team",
+  "timezone": "Europe/London",
+  "firstName": "Seth",
+  "lastName": "Ward",
+  "email": "seth+solar@theai.team",
+  "phone": "+447740109690",
+  "business": {
+    "name": "The Ai Team - Solar",
+    "email": "info@theai.team",
+    "address": "20 Wenlock Road",
+    "city": "Islington",
+    "state": "London",
+    "country": "GB",
+    "postalCode": "N17GU",
+    "website": "solar.theai.team",
+    "timezone": "Europe/London"
+  },
+  "social": {
+    "facebookUrl": "https://www.facebook.com/352040528003235",
+    "googlePlus": "",
+    "linkedIn": "",
+    "foursquare": "",
+    "twitter": "",
+    "yelp": "",
+    "instagram": "",
+    "youtube": "",
+    "pinterest": "",
+    "blogRss": "",
+    "googlePlaceId": ""
+  },
+  "settings": {
+    "allowDuplicateContact": false,
+    "allowDuplicateOpportunity": false,
+    "allowFacebookNameMerge": false,
+    "disableContactTimezone": false
+  }
+}
+✓ Successfully retrieved agency locations
+SUCCESS: Successfully retrieved agency locations
+
+Test completed.
+
+Test completed.

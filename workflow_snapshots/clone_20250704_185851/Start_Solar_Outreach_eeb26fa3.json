@@ -1,0 +1,15 @@
+{
+  "workflow_id": "ad09d9af-4657-4b96-a228-e44eeeb26fa3",
+  "workflow_name": "Start Solar Outreach",
+  "snapshot_date": "2025-07-04T18:58:51.342603",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-11-07T16:02:37.024Z",
+    "Updated: 2024-11-07T17:13:21.663Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

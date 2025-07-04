@@ -1,0 +1,22 @@
+{
+  "workflow_id": "943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+  "workflow_name": "Solar Lead Processing Workflow",
+  "source_location": "Solar",
+  "source_location_id": "JUTFTny8EXQOSB5NcvAA",
+  "recreation_steps": [
+    "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+    "2. Navigate to the target location",
+    "3. Go to Workflows section",
+    "4. Click '+ Add Workflow' button",
+    "5. Enter the workflow name: Solar Lead Processing Workflow",
+    "6. Set up the trigger:Triggered when a lead submits the solar quote form",
+    "7. Add the following conditions:",
+    "   1. Check if contact has provided their address",
+    "9. Add the following actions:",
+    "   1. Send solar quote confirmation email",
+    "   2. Create follow-up task for sales team",
+    "8. Save the workflow",
+    "9. Test the workflow to ensure it functions correctly",
+    "10. Refer to the screenshots for detailed configuration"
+  ]
+}

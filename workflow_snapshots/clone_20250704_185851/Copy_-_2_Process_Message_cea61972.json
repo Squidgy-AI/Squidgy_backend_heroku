@@ -1,0 +1,15 @@
+{
+  "workflow_id": "1cea0384-1d3f-4684-9fa6-53d9cea61972",
+  "workflow_name": "Copy - 2: Process Message",
+  "snapshot_date": "2025-07-04T18:58:51.327936",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: draft",
+    "Created: 2024-08-29T07:14:46.407Z",
+    "Updated: 2024-08-29T07:14:48.762Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

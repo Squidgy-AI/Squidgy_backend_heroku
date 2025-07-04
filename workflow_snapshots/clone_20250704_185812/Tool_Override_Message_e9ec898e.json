@@ -1,0 +1,15 @@
+{
+  "workflow_id": "c17cc264-644e-477a-870c-41f2e9ec898e",
+  "workflow_name": "Tool: Override Message",
+  "snapshot_date": "2025-07-04T18:58:12.558421",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: draft",
+    "Created: 2024-08-29T07:14:46.425Z",
+    "Updated: 2024-08-29T07:14:48.447Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

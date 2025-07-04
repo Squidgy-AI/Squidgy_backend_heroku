@@ -1,0 +1,23 @@
+# Supabase Environment Variables Setup Instructions
+
+To fix the error with Supabase client initialization, please make sure your .env file 
+in the root directory (F:\project\Squidgy\Main_Files\Squidgy_backend_heroku\.env) 
+contains the following variables:
+
+```
+SUPABASE_URL=your_actual_supabase_url
+SUPABASE_KEY=your_actual_supabase_key
+```
+
+Replace 'your_actual_supabase_url' and 'your_actual_supabase_key' with your actual 
+Supabase credentials.
+
+If you don't have a Supabase account or don't need Supabase functionality right now, 
+you can use placeholder values:
+
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-key
+```
+
+After updating the .env file, restart your application.

@@ -1,0 +1,15 @@
+{
+  "workflow_id": "abf02aea-a77d-4e0c-9853-e9b3bd4a2c26",
+  "workflow_name": "Tool:\u00a0 Follow Up 1 Day",
+  "snapshot_date": "2025-07-04T18:58:51.348606",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-08-29T07:14:46.429Z",
+    "Updated: 2024-08-29T07:14:48.049Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

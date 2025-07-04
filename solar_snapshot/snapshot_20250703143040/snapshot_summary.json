@@ -1,0 +1,11 @@
+{
+  "location_id": "JUTFTny8EXQOSB5NcvAA",
+  "snapshot_date": "2025-07-03T14:30:53.850607",
+  "workflow_count": 20,
+  "snapshot_directory": "F:\\project\\Squidgy\\Main_Files\\Squidgy_backend_heroku\\solar_snapshot\\snapshot_20250703143040",
+  "notes": [
+    "This snapshot was created using the Solar-specific access token",
+    "Due to API limitations, workflows must be manually recreated",
+    "Use the recreation guide to manually recreate workflows in the target location"
+  ]
+}

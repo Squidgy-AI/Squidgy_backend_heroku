@@ -1,0 +1,15 @@
+{
+  "workflow_id": "903deaa5-6ec1-4672-bf7b-12e21847b0d1",
+  "workflow_name": "RW Solar Tool :: Calculate kWh Price [Amount]",
+  "snapshot_date": "2025-07-04T18:58:12.549421",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-08-29T07:14:46.489Z",
+    "Updated: 2024-09-04T19:10:01.596Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

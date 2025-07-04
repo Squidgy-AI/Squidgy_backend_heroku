@@ -16,9 +16,10 @@ from typing import Dict, Any, Optional, List, Set
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, Request, Depends, HTTPException, status, BackgroundTasks
 from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from openai import OpenAI
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -30,6 +31,8 @@ from embedding_service import get_embedding
 from tools_connector import tools
 from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
 from solar_api_connector import SolarApiConnector, SolarInsightsRequest as SolarInsightsReq, SolarDataLayersRequest as SolarDataLayersReq, get_solar_analysis_for_agent
+from GHL.Sub_Accounts.clone_sub_acc import clone_sub_account, get_custom_values
+from GHL.Sub_Accounts.solar_clone_router import router as solar_clone_router
 
 # Handler classes
 
@@ -1326,6 +1329,21 @@ class SolarDataLayersRequest(BaseModel):
     render_panels: Optional[bool] = True
     file_format: Optional[str] = "jpeg"
     demo: Optional[bool] = False
+
+# GHL Clone Sub-Account Models
+class GHLCloneSubAccountRequest(BaseModel):
+    source_location_id: str
+    new_location_name: str
+    new_location_email: str
+    custom_values: Optional[Dict[str, str]] = None
+    plan_id: Optional[str] = None
+    sub_account_type: Optional[str] = "location"
+    access_token: Optional[str] = None
+    wait_time: Optional[int] = 5
+
+class GHLGetCustomValuesRequest(BaseModel):
+    location_id: str
+    access_token: Optional[str] = None
 
 # Conversational Handler Class
 # API Endpoints
@@ -3782,6 +3800,64 @@ async def send_invitation_email(request: dict):
         }
 
 # =============================================================================
+# GHL Sub-Account Endpoints
+# =============================================================================
+
+@app.post("/api/ghl/clone-sub-account")
+async def clone_ghl_sub_account(request: GHLCloneSubAccountRequest):
+    """
+    Clone a GoHighLevel sub-account (location) and update custom values.
+    
+    Note: Workflows cannot be cloned via the API and must be manually recreated.
+    """
+    try:
+        result = clone_sub_account(
+            source_location_id=request.source_location_id,
+            new_location_name=request.new_location_name,
+            new_location_email=request.new_location_email,
+            custom_values=request.custom_values,
+            plan_id=request.plan_id,
+            sub_account_type=request.sub_account_type,
+            access_token=request.access_token,
+            wait_time=request.wait_time
+        )
+        
+        # Add workflow note to the result
+        if result.get("success"):
+            result["workflow_note"] = "Note: Workflows cannot be cloned via the API and must be manually recreated in the new location."
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error cloning GHL sub-account: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Error: {str(e)}",
+            "exception_type": type(e).__name__
+        }
+
+@app.post("/api/ghl/custom-values")
+async def get_ghl_custom_values(request: GHLGetCustomValuesRequest):
+    """
+    Get custom values for a GoHighLevel location.
+    """
+    try:
+        result = get_custom_values(
+            location_id=request.location_id,
+            access_token=request.access_token
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error getting GHL custom values: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Error: {str(e)}",
+            "exception_type": type(e).__name__
+        }
+
+# =============================================================================
 # TOOL ENDPOINTS - Organized Tools Integration
 # =============================================================================
 
@@ -3869,16 +3945,55 @@ async def get_contact_endpoint(contact_id: str, location_id: str = None):
         logger.error(f"Error in get contact endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# =============================================================================
+@app.post("/api/ghl/clone-sub-account")
+async def clone_sub_account_endpoint(request: GHLCloneSubAccountRequest):
+    """Clone an existing GoHighLevel sub-account with custom values using manual cloning"""
+    try:
+        # Import the manual_clone_location function
+        from GHL.Sub_Accounts.manual_clone import manual_clone_location
+        
+        result = manual_clone_location(
+            source_location_id=request.source_location_id,
+            new_location_name=request.new_location_name,
+            new_location_email=request.new_location_email,
+            custom_values=request.custom_values,
+            access_token=request.access_token,
+            wait_time=request.wait_time
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in clone sub-account endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# CORS middleware
+@app.post("/api/ghl/custom-values")
+async def get_custom_values_endpoint(request: GHLGetCustomValuesRequest):
+    """Get custom values for a GoHighLevel location"""
+    try:
+        result = get_custom_values(
+            location_id=request.location_id,
+            access_token=request.access_token
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in get custom values endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
+# Initialize FastAPI app
+app = FastAPI()
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # Adjust in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(ghl_router)
+app.include_router(solar_clone_router, tags=["solar"])
 
 if __name__ == "__main__":
     import uvicorn

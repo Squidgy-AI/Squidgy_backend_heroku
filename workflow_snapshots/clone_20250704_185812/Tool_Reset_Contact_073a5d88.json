@@ -1,0 +1,15 @@
+{
+  "workflow_id": "70eefdf3-a1e6-4112-a570-737e073a5d88",
+  "workflow_name": "Tool: Reset Contact",
+  "snapshot_date": "2025-07-04T18:58:12.561462",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-08-29T07:14:46.427Z",
+    "Updated: 2024-08-29T07:14:48.108Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

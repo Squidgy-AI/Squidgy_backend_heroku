@@ -1,0 +1,536 @@
+{
+  "location_id": "JUTFTny8EXQOSB5NcvAA",
+  "location_name": "The Ai Team - Solar",
+  "creation_date": "2025-07-03T14:30:53.848606",
+  "workflows": [
+    {
+      "workflow_id": "943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+      "workflow_name": "1: Set Last Communication Type",
+      "status": "published",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.419Z",
+      "updated_at": "2024-08-29T07:14:49.161Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:42.043887",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow '1: Set Last Communication Type'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "476936d9-3de7-493f-93f0-907b485e7470",
+      "workflow_name": "2: Process Message",
+      "status": "published",
+      "version": 8,
+      "created_at": "2024-08-29T07:14:46.417Z",
+      "updated_at": "2024-09-24T11:34:39.521Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:42.634490",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow '2: Process Message'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 476936d9-3de7-493f-93f0-907b485e7470",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "e20e9875-6419-4e9d-a817-72d94923c281",
+      "workflow_name": "2new: Process Message",
+      "status": "draft",
+      "version": 3,
+      "created_at": "2024-09-24T09:19:56.633Z",
+      "updated_at": "2024-09-24T11:25:51.031Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:43.236805",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow '2new: Process Message'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID e20e9875-6419-4e9d-a817-72d94923c281",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "daa90118-3c9a-4b88-9e3c-1871772bc07d",
+      "workflow_name": "2newsimple: Process Message",
+      "status": "draft",
+      "version": 4,
+      "created_at": "2024-09-24T11:26:03.291Z",
+      "updated_at": "2024-09-24T11:34:27.795Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:43.875214",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow '2newsimple: Process Message'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID daa90118-3c9a-4b88-9e3c-1871772bc07d",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "6ca0787a-a98e-434d-8e2a-4203af3bf1a3",
+      "workflow_name": "3: Send Message (Fallback, Email, Override Used)",
+      "status": "published",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.413Z",
+      "updated_at": "2024-08-29T07:14:48.823Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:44.719866",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow '3: Send Message (Fallback, Email, Override Used)'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 6ca0787a-a98e-434d-8e2a-4203af3bf1a3",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "1cea0384-1d3f-4684-9fa6-53d9cea61972",
+      "workflow_name": "Copy - 2: Process Message",
+      "status": "draft",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.407Z",
+      "updated_at": "2024-08-29T07:14:48.762Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:45.285809",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Copy - 2: Process Message'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 1cea0384-1d3f-4684-9fa6-53d9cea61972",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "76de7a43-506b-4215-bbf3-5ceb9ea20240",
+      "workflow_name": "Delete Phones",
+      "status": "published",
+      "version": 5,
+      "created_at": "2024-11-08T09:39:12.689Z",
+      "updated_at": "2024-11-08T09:45:10.348Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:45.898385",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Delete Phones'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 76de7a43-506b-4215-bbf3-5ceb9ea20240",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "9f8375fd-88d7-482b-beb9-b362ae627943",
+      "workflow_name": "New Workflow : 1730995333190",
+      "status": "draft",
+      "version": 1,
+      "created_at": "2024-11-07T16:02:13.517Z",
+      "updated_at": "2024-11-07T16:02:13.517Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:46.518028",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'New Workflow : 1730995333190'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 9f8375fd-88d7-482b-beb9-b362ae627943",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "b9a3854d-fa22-4ad0-aaaf-a1e227dd5b87",
+      "workflow_name": "Process Message Test",
+      "status": "draft",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.405Z",
+      "updated_at": "2024-08-29T07:14:48.392Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:47.111767",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Process Message Test'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID b9a3854d-fa22-4ad0-aaaf-a1e227dd5b87",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "869355c8-92d1-460c-86ac-0a4b15b2a33f",
+      "workflow_name": "RW Solar API - Test",
+      "status": "draft",
+      "version": 4,
+      "created_at": "2024-08-29T07:14:46.415Z",
+      "updated_at": "2024-09-04T17:14:12.160Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:47.703992",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'RW Solar API - Test'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 869355c8-92d1-460c-86ac-0a4b15b2a33f",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "390c658f-314c-4bb3-a4a6-75720561cafd",
+      "workflow_name": "RW Solar Event :: Bill Data Ready",
+      "status": "published",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.409Z",
+      "updated_at": "2024-08-29T07:14:49.718Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:48.287282",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'RW Solar Event :: Bill Data Ready'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 390c658f-314c-4bb3-a4a6-75720561cafd",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "2605fed9-1082-4f6e-bcd3-76d0e22993e1",
+      "workflow_name": "RW Solar Event :: Property Address Provided",
+      "status": "published",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.421Z",
+      "updated_at": "2024-08-29T07:14:49.622Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:48.874339",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'RW Solar Event :: Property Address Provided'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 2605fed9-1082-4f6e-bcd3-76d0e22993e1",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "903deaa5-6ec1-4672-bf7b-12e21847b0d1",
+      "workflow_name": "RW Solar Tool :: Calculate kWh Price [Amount]",
+      "status": "published",
+      "version": 3,
+      "created_at": "2024-08-29T07:14:46.489Z",
+      "updated_at": "2024-09-04T19:10:01.596Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:49.578454",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'RW Solar Tool :: Calculate kWh Price [Amount]'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 903deaa5-6ec1-4672-bf7b-12e21847b0d1",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "a793e4b1-476c-48f2-aa51-68574cfaedc8",
+      "workflow_name": "RW Solar Tool :: Calculate kWh Price [Usage]",
+      "status": "published",
+      "version": 3,
+      "created_at": "2024-08-29T07:14:46.498Z",
+      "updated_at": "2024-09-04T19:09:40.233Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:50.215257",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'RW Solar Tool :: Calculate kWh Price [Usage]'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID a793e4b1-476c-48f2-aa51-68574cfaedc8",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "b01a1b81-9984-4918-88db-cf3fa093cef0",
+      "workflow_name": "Solar Assistant - Onboarding Form Complete",
+      "status": "published",
+      "version": 8,
+      "created_at": "2024-10-10T09:12:28.081Z",
+      "updated_at": "2024-10-10T09:45:39.467Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:50.836281",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Solar Assistant - Onboarding Form Complete'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID b01a1b81-9984-4918-88db-cf3fa093cef0",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "ad09d9af-4657-4b96-a228-e44eeeb26fa3",
+      "workflow_name": "Start Solar Outreach",
+      "status": "published",
+      "version": 8,
+      "created_at": "2024-11-07T16:02:37.024Z",
+      "updated_at": "2024-11-07T17:13:21.663Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:51.413552",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Start Solar Outreach'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID ad09d9af-4657-4b96-a228-e44eeeb26fa3",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "22c71b86-79b3-430e-86a5-12db17facf40",
+      "workflow_name": "TEST Process Message",
+      "status": "draft",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.423Z",
+      "updated_at": "2024-08-29T07:14:49.213Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:51.990730",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'TEST Process Message'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 22c71b86-79b3-430e-86a5-12db17facf40",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "c17cc264-644e-477a-870c-41f2e9ec898e",
+      "workflow_name": "Tool: Override Message",
+      "status": "draft",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.425Z",
+      "updated_at": "2024-08-29T07:14:48.447Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:52.638536",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Tool: Override Message'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID c17cc264-644e-477a-870c-41f2e9ec898e",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "70eefdf3-a1e6-4112-a570-737e073a5d88",
+      "workflow_name": "Tool: Reset Contact",
+      "status": "published",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.427Z",
+      "updated_at": "2024-08-29T07:14:48.108Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:53.247876",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Tool: Reset Contact'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID 70eefdf3-a1e6-4112-a570-737e073a5d88",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    },
+    {
+      "workflow_id": "abf02aea-a77d-4e0c-9853-e9b3bd4a2c26",
+      "workflow_name": "Tool:\u00a0 Follow Up 1 Day",
+      "status": "published",
+      "version": 2,
+      "created_at": "2024-08-29T07:14:46.429Z",
+      "updated_at": "2024-08-29T07:14:48.049Z",
+      "location_id": "JUTFTny8EXQOSB5NcvAA",
+      "documentation_created": "2025-07-03T14:30:53.848606",
+      "recreation_steps": [
+        "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+        "2. Navigate to the target location",
+        "3. Go to Automations > Workflows",
+        "4. Click '+ New Workflow' to create a new workflow",
+        "5. Name the workflow 'Tool:\u00a0 Follow Up 1 Day'",
+        "6. Configure the workflow with the triggers and actions detailed below"
+      ],
+      "triggers": {},
+      "actions": {},
+      "notes": [
+        "This workflow documentation was automatically generated for workflow ID abf02aea-a77d-4e0c-9853-e9b3bd4a2c26",
+        "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+        "Take screenshots of the workflow configuration to assist with manual recreation"
+      ],
+      "screenshot_paths": []
+    }
+  ],
+  "general_steps": [
+    "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+    "2. Navigate to the target location",
+    "3. Follow the steps for each workflow below"
+  ],
+  "notes": [
+    "Due to GoHighLevel API limitations, these workflows must be manually recreated in the target location",
+    "Take screenshots of each workflow configuration to assist with manual recreation"
+  ]
+}

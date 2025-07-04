@@ -1,0 +1,15 @@
+{
+  "workflow_id": "76de7a43-506b-4215-bbf3-5ceb9ea20240",
+  "workflow_name": "Delete Phones",
+  "snapshot_date": "2025-07-04T18:58:51.329934",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-11-08T09:39:12.689Z",
+    "Updated: 2024-11-08T09:45:10.348Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

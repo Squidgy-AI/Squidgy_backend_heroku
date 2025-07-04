@@ -1,0 +1,15 @@
+{
+  "workflow_id": "943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+  "workflow_name": "1: Set Last Communication Type",
+  "snapshot_date": "2025-07-04T18:58:12.493730",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-08-29T07:14:46.419Z",
+    "Updated: 2024-08-29T07:14:49.161Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

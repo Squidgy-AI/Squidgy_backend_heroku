@@ -1,0 +1,15 @@
+{
+  "workflow_id": "b9a3854d-fa22-4ad0-aaaf-a1e227dd5b87",
+  "workflow_name": "Process Message Test",
+  "snapshot_date": "2025-07-04T18:58:12.541509",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: draft",
+    "Created: 2024-08-29T07:14:46.405Z",
+    "Updated: 2024-08-29T07:14:48.392Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

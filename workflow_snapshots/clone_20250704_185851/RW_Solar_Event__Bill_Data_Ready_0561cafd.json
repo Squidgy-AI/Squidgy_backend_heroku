@@ -1,0 +1,15 @@
+{
+  "workflow_id": "390c658f-314c-4bb3-a4a6-75720561cafd",
+  "workflow_name": "RW Solar Event :: Bill Data Ready",
+  "snapshot_date": "2025-07-04T18:58:51.334935",
+  "triggers": [],
+  "conditions": [],
+  "actions": [],
+  "notes": [
+    "Workflow Status: published",
+    "Created: 2024-08-29T07:14:46.409Z",
+    "Updated: 2024-08-29T07:14:49.718Z",
+    "This workflow was documented via the WorkflowSnapshot system due to GoHighLevel API restrictions on Solar sub-account workflow cloning."
+  ],
+  "screenshot_paths": []
+}

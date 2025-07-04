@@ -1,0 +1,26 @@
+{
+  "workflow_id": "943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+  "workflow_name": "1: Set Last Communication Type",
+  "status": "published",
+  "version": 2,
+  "created_at": "2024-08-29T07:14:46.419Z",
+  "updated_at": "2024-08-29T07:14:49.161Z",
+  "location_id": "JUTFTny8EXQOSB5NcvAA",
+  "documentation_created": "2025-07-03T14:23:01.851859",
+  "recreation_steps": [
+    "1. Log into GoHighLevel dashboard at https://app.gohighlevel.com/",
+    "2. Navigate to the target location",
+    "3. Go to Automations > Workflows",
+    "4. Click '+ New Workflow' to create a new workflow",
+    "5. Name the workflow '1: Set Last Communication Type'",
+    "6. Configure the workflow with the triggers and actions detailed below"
+  ],
+  "triggers": {},
+  "actions": {},
+  "notes": [
+    "This workflow documentation was automatically generated for workflow ID 943eafb8-04c4-4a96-89c5-c2d44f8b9278",
+    "Due to GoHighLevel API limitations, this workflow must be manually recreated in the target location",
+    "Take screenshots of the workflow configuration to assist with manual recreation"
+  ],
+  "screenshot_paths": []
+}
