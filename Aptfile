@@ -1,0 +1,4 @@
+# Heroku buildpack requirements for Playwright
+chromium-browser
+chromium-chromedriver
+xvfb
