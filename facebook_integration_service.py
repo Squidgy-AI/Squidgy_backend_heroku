@@ -19,6 +19,7 @@ import httpx
 from playwright.async_api import async_playwright
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
+from enhanced_2fa_service import Enhanced2FAService, OutlookEmailConfig
 
 # Request/Response Models
 class FacebookIntegrationRequest(BaseModel):
@@ -31,10 +32,10 @@ class FacebookIntegrationRequest(BaseModel):
 
 class EmailConfig(BaseModel):
     # Email configuration for 2FA code retrieval
-    imap_server: str = "imap.gmail.com"
+    imap_server: str = "outlook.office365.com"  # Microsoft Outlook
     imap_port: int = 993
-    email_address: str = "your-monitoring-email@gmail.com"  # Email that receives 2FA codes
-    email_password: str = "your-app-specific-password"
+    email_address: str = "sa+01@squidgy.ai"  # Your specific email
+    email_password: str = "your-outlook-app-password"  # App-specific password
 
 class FacebookIntegrationService:
     """Service to handle Facebook integration with GHL"""
@@ -43,6 +44,12 @@ class FacebookIntegrationService:
         self.email_config = email_config
         self.jwt_token = None
         self.facebook_pages = []
+        
+        # Initialize enhanced 2FA service
+        outlook_config = OutlookEmailConfig()
+        outlook_config.email_address = email_config.email_address
+        outlook_config.email_password = email_config.email_password
+        self.enhanced_2fa = Enhanced2FAService(outlook_config)
         
     async def integrate_facebook(self, request: FacebookIntegrationRequest) -> Dict:
         """
@@ -172,23 +179,22 @@ class FacebookIntegrationService:
                 # Wait for navigation or 2FA
                 await page.wait_for_timeout(3000)
                 
-                # Check if 2FA is required
-                current_url = page.url
-                if "2fa" in current_url or "verify" in current_url:
-                    print("📱 2FA detected, handling...")
-                    
-                    # Handle 2FA
-                    two_fa_result = await self._handle_2fa(page, request.email)
-                    
-                    if not two_fa_result["success"]:
-                        await browser.close()
-                        return {
-                            "success": False,
-                            "error": "2FA failed",
-                            "2fa_handled": "failed"
-                        }
-                    
-                    await page.wait_for_timeout(3000)
+                # Check if 2FA is required and handle with enhanced service
+                print("🔐 Checking for 2FA requirement...")
+                two_fa_result = await self.enhanced_2fa.handle_ghl_2fa_flow(page)
+                
+                if not two_fa_result["success"]:
+                    await browser.close()
+                    return {
+                        "success": False,
+                        "error": two_fa_result.get("error", "2FA failed"),
+                        "2fa_handled": "failed"
+                    }
+                
+                if two_fa_result.get("2fa_required"):
+                    print("✅ 2FA completed successfully!")
+                
+                await page.wait_for_timeout(3000)
                 
                 # Wait for dashboard
                 await page.wait_for_selector('[data-testid="dashboard"]', timeout=30000)
@@ -219,94 +225,7 @@ class FacebookIntegrationService:
                     "error": str(e)
                 }
     
-    async def _handle_2fa(self, page, user_email: str) -> Dict:
-        """Handle 2FA by listening for email code"""
-        
-        try:
-            # Check if it's email or SMS 2FA
-            if await page.locator('text="Email"').is_visible():
-                # Select email option
-                await page.click('text="Email"')
-                await page.wait_for_timeout(2000)
-            
-            # Start email listener
-            print("📧 Listening for 2FA code in email...")
-            
-            # Poll for 2FA code
-            max_attempts = 30  # 30 seconds timeout
-            for attempt in range(max_attempts):
-                code = await self._get_2fa_code_from_email()
-                
-                if code:
-                    print(f"✅ Got 2FA code: {code}")
-                    
-                    # Enter the code
-                    await page.fill('input[type="text"]', code)
-                    await page.click('button[type="submit"]')
-                    
-                    await page.wait_for_timeout(3000)
-                    
-                    return {"success": True, "code": code}
-                
-                await asyncio.sleep(1)  # Wait 1 second before next attempt
-            
-            return {"success": False, "error": "2FA code not received"}
-            
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-    
-    async def _get_2fa_code_from_email(self) -> Optional[str]:
-        """Retrieve 2FA code from email"""
-        
-        try:
-            # Connect to email
-            mail = imaplib.IMAP4_SSL(self.email_config.imap_server, self.email_config.imap_port)
-            mail.login(self.email_config.email_address, self.email_config.email_password)
-            mail.select('inbox')
-            
-            # Search for recent GHL emails
-            search_criteria = '(FROM "noreply@gohighlevel.com" UNSEEN)'
-            result, data = mail.search(None, search_criteria)
-            
-            if result == 'OK':
-                email_ids = data[0].split()
-                
-                for email_id in reversed(email_ids):  # Check newest first
-                    result, msg_data = mail.fetch(email_id, '(RFC822)')
-                    
-                    if result == 'OK':
-                        raw_email = msg_data[0][1]
-                        msg = email.message_from_bytes(raw_email)
-                        
-                        # Extract body
-                        body = ""
-                        if msg.is_multipart():
-                            for part in msg.walk():
-                                if part.get_content_type() == "text/plain":
-                                    body = part.get_payload(decode=True).decode()
-                                    break
-                        else:
-                            body = msg.get_payload(decode=True).decode()
-                        
-                        # Look for 6-digit code
-                        code_match = re.search(r'\b(\d{6})\b', body)
-                        if code_match:
-                            code = code_match.group(1)
-                            
-                            # Mark as read
-                            mail.store(email_id, '+FLAGS', '\\Seen')
-                            mail.close()
-                            mail.logout()
-                            
-                            return code
-            
-            mail.close()
-            mail.logout()
-            
-        except Exception as e:
-            print(f"Email error: {e}")
-        
-        return None
+    # Old 2FA methods removed - now using Enhanced2FAService
     
     async def _trigger_api_calls(self, page):
         """Trigger API calls to capture JWT token"""

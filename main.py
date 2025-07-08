@@ -4577,10 +4577,10 @@ async def run_facebook_integration(request: dict):
             
             from facebook_integration_service import FacebookIntegrationService, FacebookIntegrationRequest, EmailConfig
             
-            # Configure email for 2FA
+            # Configure email for 2FA - Microsoft Outlook
             email_config = EmailConfig(
-                email_address="squidgy.2fa.monitor@gmail.com",
-                email_password="your-app-specific-password"  # This should be in environment variables
+                email_address=os.environ.get("OUTLOOK_2FA_EMAIL", "sa+01@squidgy.ai"),
+                email_password=os.environ.get("OUTLOOK_2FA_PASSWORD", "your-outlook-app-password")
             )
             
             # Create service
