@@ -7,6 +7,7 @@ Alternative approach that works reliably on Heroku
 
 import asyncio
 import json
+import os
 import httpx
 from datetime import datetime, timedelta
 from typing import Dict, Optional, List
