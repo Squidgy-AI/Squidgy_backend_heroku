@@ -4531,6 +4531,9 @@ async def run_facebook_integration(request: dict):
     location_id = request.get('location_id')
     
     try:
+        # Import os here to avoid issues
+        import os
+        
         # Check if we're on Heroku
         is_heroku = os.environ.get('DYNO') is not None
         
