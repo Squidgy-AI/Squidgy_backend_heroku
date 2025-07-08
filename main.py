@@ -4369,6 +4369,129 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
+# Facebook OAuth Integration Endpoints
+# =============================================================================
+
+class FacebookOAuthRequest(BaseModel):
+    locationId: str
+    userId: str
+
+class FacebookOAuthExtractor:
+    """Facebook OAuth parameter extraction utility for GHL integration"""
+    
+    @staticmethod
+    async def extract_params(location_id: str, user_id: str) -> dict:
+        """Extract OAuth parameters from GHL Facebook service"""
+        try:
+            ghl_url = f"https://services.leadconnectorhq.com/social-media-posting/oauth/facebook/start?locationId={location_id}&userId={user_id}"
+            
+            async with httpx.AsyncClient(follow_redirects=False) as client:
+                response = await client.get(ghl_url)
+                
+                if response.status_code not in [301, 302]:
+                    raise ValueError(f"Expected redirect from GHL service, got {response.status_code}")
+                
+                redirect_url = response.headers.get('location', '')
+                if not redirect_url or 'facebook.com' not in redirect_url:
+                    raise ValueError(f"Invalid redirect URL: {redirect_url}")
+                
+                params = {}
+                
+                if 'facebook.com/privacy/consent/gdp' in redirect_url:
+                    # Extract from GDPR consent page (URL encoded)
+                    import re
+                    import urllib.parse
+                    patterns = {
+                        'app_id': r'params%5Bapp_id%5D=(\d+)',
+                        'redirect_uri': r'params%5Bredirect_uri%5D=%22([^%]+(?:%[^%]+)*)',
+                        'scope': r'params%5Bscope%5D=(%5B[^%]+(?:%[^%]+)*%5D)',
+                        'state': r'params%5Bstate%5D=%22([^%]+(?:%[^%]+)*)',
+                        'logger_id': r'params%5Blogger_id%5D=%22([^%]+)'
+                    }
+                    
+                    for param, pattern in patterns.items():
+                        match = re.search(pattern, redirect_url)
+                        if match:
+                            value = match.group(1)
+                            
+                            if param == 'app_id':
+                                params['app_id'] = value
+                                params['client_id'] = value
+                            elif param == 'redirect_uri':
+                                params['redirect_uri'] = urllib.parse.unquote(value.replace('\\%2F', '/').replace('\\', ''))
+                            elif param == 'scope':
+                                try:
+                                    scope_str = urllib.parse.unquote(value)
+                                    scope_array = json.loads(scope_str.replace('\\', ''))
+                                    params['scope'] = ','.join(scope_array)
+                                except:
+                                    params['scope'] = 'email,pages_show_list,pages_read_engagement'
+                            elif param == 'state':
+                                params['state'] = urllib.parse.unquote(value.replace('\\', ''))
+                            elif param == 'logger_id':
+                                params['logger_id'] = value
+                    
+                    params['response_type'] = 'code'
+                    
+                elif 'facebook.com/dialog/oauth' in redirect_url:
+                    # Extract from direct OAuth URL
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(redirect_url)
+                    query_params = parse_qs(parsed.query)
+                    
+                    for key, value in query_params.items():
+                        params[key] = value[0] if value else None
+                
+                return {
+                    'success': True,
+                    'params': params,
+                    'redirect_url': redirect_url,
+                    'extracted_at': datetime.now().isoformat()
+                }
+                
+        except Exception as e:
+            logger.error(f"Facebook OAuth extraction error: {str(e)}")
+            raise
+
+@app.post("/api/facebook/extract-oauth-params")
+async def extract_facebook_oauth_params(request: FacebookOAuthRequest):
+    """
+    Extract Facebook OAuth parameters from GHL service for Squidgy chat integration
+    
+    This endpoint is used by the chat window in the frontend to generate
+    Facebook OAuth URLs for solar sales specialists to connect their Facebook accounts.
+    """
+    try:
+        logger.info(f"🔍 Extracting Facebook OAuth params for location: {request.locationId}, user: {request.userId}")
+        
+        result = await FacebookOAuthExtractor.extract_params(request.locationId, request.userId)
+        
+        logger.info(f"✅ Successfully extracted Facebook OAuth parameters")
+        logger.info(f"   Client ID: {result['params'].get('client_id', 'NOT_FOUND')}")
+        logger.info(f"   Redirect URI: {result['params'].get('redirect_uri', 'NOT_FOUND')}")
+        
+        return result
+        
+    except ValueError as e:
+        logger.error(f"❌ Facebook OAuth extraction error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"💥 Unexpected error in Facebook OAuth extraction: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/facebook/oauth-health")
+async def facebook_oauth_health():
+    """Health check for Facebook OAuth service"""
+    return {
+        "service": "facebook_oauth",
+        "status": "healthy",
+        "endpoints": [
+            "/api/facebook/extract-oauth-params"
+        ],
+        "timestamp": datetime.now().isoformat()
+    }
+
+# =============================================================================
 
 # CORS middleware
 app.add_middleware(
