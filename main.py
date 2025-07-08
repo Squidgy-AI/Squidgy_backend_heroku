@@ -4107,6 +4107,269 @@ async def get_agent_setup_progress(user_id: str, agent_id: str):
 
 # =============================================================================
 
+# GHL Sub-account and User Creation Endpoints
+class GHLSubAccountRequest(BaseModel):
+    company_id: str
+    snapshot_id: str
+    agency_token: str
+    phone: str = "+17166044029"  # Default phone
+    address: str = "456 Solar Demo Avenue"
+    city: str = "Buffalo"
+    state: str = "NY"
+    country: str = "US"
+    postal_code: str = "14201"
+    timezone: str = "America/New_York"
+    
+class GHLUserCreationRequest(BaseModel):
+    company_id: str
+    location_id: str
+    agency_token: str
+    first_name: str = "Ovi"
+    last_name: str = "Colton"
+    email: str = "ovi.chand@gmail.com"
+    password: str = "Dummy@123"
+    phone: str = "+17166044029"
+
+# Global variable to store location_id after subaccount creation
+last_created_location_id = None
+
+@app.post("/api/ghl/create-subaccount")
+async def create_ghl_subaccount(request: GHLSubAccountRequest):
+    """Create a GoHighLevel sub-account with solar snapshot"""
+    global last_created_location_id
+    
+    try:
+        # Generate unique name with timestamp
+        timestamp = datetime.now().strftime("%H%M%S")
+        subaccount_name = f"SolarSetup_Clone_{timestamp}"
+        
+        # Prepare headers
+        headers = {
+            "Authorization": f"Bearer {request.agency_token}",
+            "Version": "2021-07-28",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        # Prepare payload
+        payload = {
+            "name": subaccount_name,
+            "phone": request.phone,
+            "companyId": request.company_id,
+            "address": request.address,
+            "city": request.city,
+            "state": request.state,
+            "country": request.country,
+            "postalCode": request.postal_code,
+            "website": f"https://solar-{timestamp}.com",
+            "timezone": request.timezone,
+            "prospectInfo": {
+                "firstName": "Solar",
+                "lastName": "Admin",
+                "email": f"admin+{timestamp}@solar-setup.com"
+            },
+            "settings": {
+                "allowDuplicateContact": False,
+                "allowDuplicateOpportunity": False,
+                "allowFacebookNameMerge": False,
+                "disableContactTimezone": False
+            },
+            "snapshotId": request.snapshot_id
+        }
+        
+        logger.info(f"Creating GHL sub-account: {subaccount_name}")
+        
+        # Make the API call
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://services.leadconnectorhq.com/locations/",
+                headers=headers,
+                json=payload
+            )
+        
+        if response.status_code in [200, 201]:
+            data = response.json()
+            location_id = data.get('id')
+            last_created_location_id = location_id  # Store for user creation
+            
+            logger.info(f"✅ Sub-account created successfully: {location_id}")
+            
+            return {
+                "status": "success",
+                "location_id": location_id,
+                "subaccount_name": subaccount_name,
+                "message": "GoHighLevel sub-account created successfully!",
+                "details": {
+                    "name": data.get('name'),
+                    "id": location_id,
+                    "created_at": datetime.now().isoformat(),
+                    "snapshot_loaded": request.snapshot_id
+                }
+            }
+        else:
+            logger.error(f"Failed to create sub-account: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Failed to create sub-account: {response.text}"
+            )
+            
+    except httpx.TimeoutException:
+        logger.error("Timeout while creating sub-account")
+        raise HTTPException(status_code=504, detail="Timeout while creating sub-account")
+    except Exception as e:
+        logger.error(f"Error creating sub-account: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ghl/create-user")
+async def create_ghl_user(request: GHLUserCreationRequest):
+    """Create a GoHighLevel user (OVI user only, not admin)"""
+    try:
+        # Full permissions for the user
+        permissions = {
+            "campaignsEnabled": True,
+            "campaignsReadOnly": False,
+            "contactsEnabled": True,
+            "workflowsEnabled": True,
+            "workflowsReadOnly": False,
+            "triggersEnabled": True,
+            "funnelsEnabled": True,
+            "websitesEnabled": True,
+            "opportunitiesEnabled": True,
+            "dashboardStatsEnabled": True,
+            "bulkRequestsEnabled": True,
+            "appointmentsEnabled": True,
+            "reviewsEnabled": True,
+            "onlineListingsEnabled": True,
+            "phoneCallEnabled": True,
+            "conversationsEnabled": True,
+            "assignedDataOnly": False,
+            "adwordsReportingEnabled": True,
+            "membershipEnabled": True,
+            "facebookAdsReportingEnabled": True,
+            "attributionsReportingEnabled": True,
+            "settingsEnabled": True,
+            "tagsEnabled": True,
+            "leadValueEnabled": True,
+            "marketingEnabled": True,
+            "agentReportingEnabled": True,
+            "botService": True,
+            "socialPlanner": True,
+            "bloggingEnabled": True,
+            "invoiceEnabled": True,
+            "affiliateManagerEnabled": True,
+            "contentAiEnabled": True,
+            "refundsEnabled": True,
+            "recordPaymentEnabled": True,
+            "cancelSubscriptionEnabled": True,
+            "paymentsEnabled": True,
+            "communitiesEnabled": True,
+            "exportPaymentsEnabled": True
+        }
+        
+        # Prepare headers
+        headers = {
+            "Authorization": f"Bearer {request.agency_token}",
+            "Version": "2021-07-28",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        # Generate unique email to avoid conflicts
+        timestamp = datetime.now().strftime("%H%M%S")
+        unique_email = f"ovi+{timestamp}@test-solar.com"
+        
+        # Prepare payload for OVI user
+        payload = {
+            "companyId": request.company_id,
+            "firstName": request.first_name,
+            "lastName": request.last_name,
+            "email": unique_email,
+            "password": request.password,
+            "phone": request.phone,
+            "type": "account",
+            "role": "user",  # Not admin, just user
+            "locationIds": [request.location_id],
+            "permissions": permissions
+        }
+        
+        logger.info(f"Creating GHL user: {request.first_name} {request.last_name}")
+        
+        # Make the API call
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://services.leadconnectorhq.com/users/",
+                headers=headers,
+                json=payload
+            )
+        
+        if response.status_code in [200, 201]:
+            data = response.json()
+            user_id = data.get('id')
+            
+            logger.info(f"✅ User created successfully: {user_id}")
+            
+            return {
+                "status": "success",
+                "user_id": user_id,
+                "message": "GoHighLevel user created successfully!",
+                "details": {
+                    "name": f"{request.first_name} {request.last_name}",
+                    "email": unique_email,
+                    "role": "user",
+                    "location_id": request.location_id,
+                    "created_at": datetime.now().isoformat()
+                }
+            }
+        else:
+            logger.error(f"Failed to create user: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Failed to create user: {response.text}"
+            )
+            
+    except httpx.TimeoutException:
+        logger.error("Timeout while creating user")
+        raise HTTPException(status_code=504, detail="Timeout while creating user")
+    except Exception as e:
+        logger.error(f"Error creating user: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ghl/create-subaccount-and-user")
+async def create_subaccount_and_user(request: GHLSubAccountRequest):
+    """Create both sub-account and user in one call - triggered after Solar setup completion"""
+    try:
+        # First create the sub-account
+        subaccount_response = await create_ghl_subaccount(request)
+        
+        if subaccount_response["status"] != "success":
+            return subaccount_response
+        
+        location_id = subaccount_response["location_id"]
+        
+        # Then create the user
+        user_request = GHLUserCreationRequest(
+            company_id=request.company_id,
+            location_id=location_id,
+            agency_token=request.agency_token
+        )
+        
+        user_response = await create_ghl_user(user_request)
+        
+        # Return combined response
+        return {
+            "status": "success",
+            "message": "Both GoHighLevel sub-account and user created successfully!",
+            "subaccount": subaccount_response,
+            "user": user_response,
+            "created_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in combined creation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
