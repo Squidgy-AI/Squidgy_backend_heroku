@@ -8,7 +8,7 @@ import os
 import time
 import uuid
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Dict, Any, Optional, List, Set
 
@@ -30,6 +30,7 @@ from embedding_service import get_embedding
 from tools_connector import tools
 from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
 from solar_api_connector import SolarApiConnector, SolarInsightsRequest as SolarInsightsReq, SolarDataLayersRequest as SolarDataLayersReq, get_solar_analysis_for_agent
+from facebook_pages_api_working import FacebookPagesRequest, FacebookPagesResponse, get_facebook_pages
 
 # Handler classes
 
@@ -4124,11 +4125,11 @@ class GHLUserCreationRequest(BaseModel):
     company_id: str
     location_id: str
     agency_token: str
-    first_name: str = "Ovi"
-    last_name: str = "Colton"
-    email: str = "ovi.chand@gmail.com"
-    password: str = "Dummy@123"
-    phone: str = "+17166044029"
+    first_name: str = os.getenv("GHL_DEFAULT_FIRST_NAME", "Solar")
+    last_name: str = os.getenv("GHL_DEFAULT_LAST_NAME", "Admin")
+    email: str = os.getenv("GHL_DEFAULT_EMAIL", "admin@example.com")
+    password: str = os.getenv("GHL_DEFAULT_PASSWORD", "DefaultPassword123")
+    phone: str = os.getenv("GHL_DEFAULT_PHONE", "+1234567890")
 
 # Global variable to store location_id after subaccount creation
 last_created_location_id = None
@@ -4151,6 +4152,27 @@ async def create_ghl_subaccount(request: GHLSubAccountRequest):
             "Accept": "application/json"
         }
         
+        # Validate country code - GHL expects 2-letter country codes
+        # Based on GHL API documentation - using common valid country codes
+        valid_country_codes = {
+            "AF", "AL", "DZ", "AD", "AO", "AG", "AR", "AM", "AU", "AT", "AZ", "BS", "BH", "BD", "BB", "BY", 
+            "BE", "BZ", "BJ", "BT", "BO", "BA", "BW", "BR", "BN", "BG", "BF", "BI", "KH", "CM", "CA", "CV", 
+            "CF", "TD", "CL", "CN", "CO", "KM", "CG", "CD", "CK", "CR", "CI", "HR", "CU", "CY", "CZ", "DK", 
+            "DJ", "DM", "DO", "EC", "EG", "SV", "GQ", "ER", "EE", "ET", "FJ", "FI", "FR", "GA", "GM", "GE", 
+            "DE", "GH", "GR", "GD", "GT", "GN", "GW", "GY", "HT", "HN", "HK", "HU", "IS", "IN", "ID", "IR", 
+            "IQ", "IE", "IL", "IT", "JM", "JP", "JO", "KZ", "KE", "KI", "KP", "KR", "XK", "KW", "KG", "LA", 
+            "LV", "LB", "LS", "LR", "LY", "LI", "LT", "LU", "MK", "MG", "MW", "MY", "MV", "ML", "MT", "MR", 
+            "MU", "MX", "FM", "MD", "MC", "MN", "ME", "MA", "MZ", "MM", "NA", "NR", "NP", "NL", "NZ", "NI", 
+            "NE", "NG", "NO", "OM", "PK", "PW", "PS", "PA", "PG", "PY", "PE", "PH", "PL", "PT", "QA", "RO", 
+            "RU", "RW", "KN", "LC", "VC", "WS", "SM", "ST", "SA", "SN", "RS", "SC", "SL", "SG", "SK", "SI", 
+            "SB", "SO", "ZA", "ES", "LK", "SD", "SR", "SZ", "SE", "CH", "SY", "TW", "TJ", "TZ", "TH", "TL", 
+            "TG", "TO", "TT", "TN", "TR", "TM", "TV", "UG", "GB", "UA", "AE", "US", "UY", "UZ", "VU", "VE", 
+            "VN", "YE", "ZM", "ZW"
+        }
+        
+        # Ensure country code is valid, default to "US" if not  
+        country_code = request.country.upper() if request.country and request.country.upper() in valid_country_codes else "US"
+        
         # Prepare payload
         payload = {
             "name": subaccount_name,
@@ -4159,7 +4181,7 @@ async def create_ghl_subaccount(request: GHLSubAccountRequest):
             "address": request.address,
             "city": request.city,
             "state": request.state,
-            "country": request.country,
+            "country": country_code,
             "postalCode": request.postal_code,
             "website": f"https://solar-{timestamp}.com",
             "timezone": request.timezone,
@@ -4177,7 +4199,7 @@ async def create_ghl_subaccount(request: GHLSubAccountRequest):
             "snapshotId": request.snapshot_id
         }
         
-        logger.info(f"Creating GHL sub-account: {subaccount_name}")
+        logger.info(f"Creating GHL sub-account: {subaccount_name} with country: {country_code}")
         
         # Make the API call
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -4274,18 +4296,17 @@ async def create_ghl_user(request: GHLUserCreationRequest):
             "Accept": "application/json"
         }
         
-        # Generate unique email to avoid conflicts
-        timestamp = datetime.now().strftime("%H%M%S")
-        unique_email = f"ovi+{timestamp}@test-solar.com"
+        # Use the actual user email for downstream Facebook integration
+        # This ensures the same credentials are used throughout the flow
         
-        # Prepare payload for OVI user
+        # Prepare payload for Soma's user account
         payload = {
             "companyId": request.company_id,
             "firstName": request.first_name,
             "lastName": request.last_name,
-            "email": unique_email,
-            "password": request.password,
-            "phone": request.phone,
+            "email": request.email,  # Using configured email from environment
+            "password": request.password,  # Using configured password from environment
+            "phone": request.phone,  # Using configured phone from environment
             "type": "account",
             "role": "user",  # Not admin, just user
             "locationIds": [request.location_id],
@@ -4314,7 +4335,7 @@ async def create_ghl_user(request: GHLUserCreationRequest):
                 "message": "GoHighLevel user created successfully!",
                 "details": {
                     "name": f"{request.first_name} {request.last_name}",
-                    "email": unique_email,
+                    "email": request.email,  # Use configured email from environment
                     "role": "user",
                     "location_id": request.location_id,
                     "created_at": datetime.now().isoformat()
@@ -4355,12 +4376,20 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         
         user_response = await create_ghl_user(user_request)
         
-        # Return combined response
+        # Return combined response with credentials for downstream Facebook integration
         return {
             "status": "success",
             "message": "Both GoHighLevel sub-account and user created successfully!",
             "subaccount": subaccount_response,
             "user": user_response,
+            "facebook_integration_credentials": {
+                "email": user_request.email,  # Using configured credentials
+                "password": user_request.password,  # Using configured credentials 
+                "phone": user_request.phone,  # Using configured credentials
+                "location_id": location_id,
+                "user_id": user_response.get("user_id") if user_response.get("status") == "success" else None,
+                "ready_for_facebook": True
+            },
             "created_at": datetime.now().isoformat()
         }
         
@@ -4637,20 +4666,122 @@ async def get_integration_status(location_id: str):
 
 @app.post("/api/facebook/connect-page")
 async def connect_facebook_page(request: dict):
-    """Connect a specific Facebook page to GHL"""
+    """Connect a specific Facebook page to GHL - REAL IMPLEMENTATION"""
     
     location_id = request.get('location_id')
     page_id = request.get('page_id')
+    jwt_token = request.get('jwt_token')
     
-    if not location_id or not page_id:
-        raise HTTPException(status_code=400, detail="location_id and page_id required")
+    print(f"🔍 Connection request received:")
+    print(f"   Location ID: {location_id}")
+    print(f"   Page ID: {page_id}")
+    print(f"   JWT Token: {jwt_token[:50] + '...' if jwt_token else 'None'}")
     
-    # This would use the same service to connect the page
-    # For now, return success
-    return {
-        "success": True,
-        "message": f"Page {page_id} connected to location {location_id}"
-    }
+    if not location_id or not page_id or not jwt_token:
+        missing_fields = []
+        if not location_id: missing_fields.append('location_id')
+        if not page_id: missing_fields.append('page_id')
+        if not jwt_token: missing_fields.append('jwt_token')
+        
+        error_msg = f"Missing required fields: {', '.join(missing_fields)}"
+        print(f"❌ {error_msg}")
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    try:
+        # Get page details from database first
+        supabase_url = "https://aoteeitreschwzkbpqyd.supabase.co"
+        supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvdGVlaXRyZXNjaHd6a2JwcXlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxMjAwMzQsImV4cCI6MjA1OTY5NjAzNH0.S7P9-G4CaSE6DWycNq0grv-x6UCIsfLvXooCtMwaKHM"
+        
+        supabase_client = create_client(supabase_url, supabase_key)
+        
+        # Get page details from database
+        page_response = supabase_client.table('squidgy_facebook_pages')\
+            .select("*")\
+            .eq('location_id', location_id)\
+            .eq('page_id', page_id)\
+            .execute()
+        
+        if not page_response.data:
+            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in database")
+        
+        page_data = page_response.data[0]
+        
+        # Prepare payload for GHL API (based on complete_facebook_viewer.py)
+        pages_to_attach = [{
+            "facebookPageId": page_data['page_id'],
+            "facebookPageName": page_data['page_name'],
+            "facebookIgnoreMessages": False,
+            "isInstagramAvailable": page_data.get('is_instagram_available', False)
+        }]
+        
+        attach_payload = {"pages": pages_to_attach}
+        
+        # Call the REAL GHL API to connect the page
+        headers = {
+            "token-id": jwt_token,
+            "channel": "APP",
+            "source": "WEB_USER",
+            "version": "2021-07-28",
+            "accept": "application/json",
+            "content-type": "application/json"
+        }
+        
+        attach_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{location_id}/pages"
+        
+        print(f"🔗 Connecting page {page_data['page_name']} to GHL...")
+        print(f"   URL: {attach_url}")
+        print(f"   Payload: {json.dumps(attach_payload, indent=2)}")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                attach_url,
+                headers=headers,
+                json=attach_payload
+            )
+        
+        print(f"   Status: {response.status_code}")
+        print(f"   Response: {response.text}")
+        
+        if response.status_code in [200, 201]:
+            # Update database to mark as connected
+            supabase_client.table('squidgy_facebook_pages')\
+                .update({
+                    'is_connected_to_ghl': True,
+                    'connected_at': datetime.now(timezone.utc).isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                })\
+                .eq('location_id', location_id)\
+                .eq('page_id', page_id)\
+                .execute()
+            
+            return {
+                "success": True,
+                "message": f"Page {page_data['page_name']} successfully connected to GHL",
+                "page_name": page_data['page_name'],
+                "page_id": page_id,
+                "ghl_response": response.json() if response.status_code == 200 else None
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to connect page to GHL: {response.status_code}",
+                "error": response.text
+            }
+    
+    except Exception as e:
+        print(f"💥 Error connecting page: {e}")
+        return {
+            "success": False,
+            "message": f"Error connecting page: {str(e)}"
+        }
+
+@app.post("/api/facebook/get-pages", response_model=FacebookPagesResponse)
+async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
+    """
+    Main Facebook integration endpoint with 2FA automation
+    Handles browser automation, JWT extraction, and Facebook pages retrieval
+    """
+    return await get_facebook_pages(request)
 
 # =============================================================================
 

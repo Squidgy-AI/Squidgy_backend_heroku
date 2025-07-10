@@ -11,11 +11,16 @@ from datetime import datetime
 # Backend URL - adjust this based on your setup
 BACKEND_URL = "http://localhost:8000"
 
-# Test data
+# Test data - using environment variables in production
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 test_data = {
-    "company_id": "lp2p1q27DrdGta1qGDJd",
-    "snapshot_id": "7oAH6Cmto5ZcWAaEsrrq",  # SOL - Solar Assistant
-    "agency_token": "pit-c4e9d6af-8956-4a84-9b83-554fb6801a69"
+    "company_id": os.getenv("GHL_COMPANY_ID", "lp2p1q27DrdGta1qGDJd"),
+    "snapshot_id": os.getenv("GHL_SNAPSHOT_ID", "7oAH6Cmto5ZcWAaEsrrq"),  # SOL - Solar Assistant
+    "agency_token": os.getenv("GHL_AGENCY_TOKEN", "pit-c4e9d6af-8956-4a84-9b83-554fb6801a69")
 }
 
 async def test_create_subaccount():

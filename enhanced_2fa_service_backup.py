@@ -10,7 +10,7 @@ import imaplib
 import email
 import re
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from typing import Optional
 from playwright.async_api import async_playwright, Page
 
@@ -60,7 +60,7 @@ class GmailEmailConfig:
             "noreply@gohighlevel.com",
             "no-reply@gohighlevel.com", 
             "support@gohighlevel.com",
-            "noreply@talk.onetoo.com",  # Specific GHL security code sender
+            "noreply",  # Sometimes shows just "noreply" in mobile
         ]
 
 class Enhanced2FAService:
@@ -240,7 +240,7 @@ class Enhanced2FAService:
         return False
     
     async def _get_otp_from_gmail(self) -> Optional[str]:
-        """Get OTP code from Gmail email - FOCUS ON FRESH UNSEEN EMAILS ONLY"""
+        """Get OTP code from Gmail email - ROBUST VERSION (always gets latest email)"""
         
         try:
             # Connect to Gmail (using same config as working test script)
@@ -254,26 +254,24 @@ class Enhanced2FAService:
             mail.login(email_address, email_password)
             mail.select('inbox')
             
-            print("🔍 FOCUSED SEARCH: Looking for FRESH UNSEEN security code emails...")
+            # Calculate time window - only look at emails from last 5 minutes
+            now = datetime.now()
+            five_minutes_ago = now - timedelta(minutes=5)
+            date_threshold = five_minutes_ago.strftime('%d-%b-%Y')
             
-            # Collect UNSEEN emails with specific criteria
+            print(f"📧 Searching for emails since: {date_threshold}")
+            
+            # Collect all potential emails with timestamps
             candidate_emails = []
             
-            # Focus on specific GHL security code sender
-            priority_senders = [
-                "noreply@talk.onetoo.com",  # Primary GHL security code sender
-                "noreply@gohighlevel.com",
-                "no-reply@gohighlevel.com"
-            ]
-            
-            for sender in priority_senders:
-                # Search for UNSEEN emails from this sender
-                search_criteria = f'(FROM "{sender}" UNSEEN)'
+            for sender in self.email_config.sender_patterns:
+                # Search for emails from today (both read and unread)
+                search_criteria = f'(FROM "{sender}" SINCE "{date_threshold}")'
                 result, data = mail.search(None, search_criteria)
                 
                 if result == 'OK' and data[0]:
                     email_ids = data[0].split()
-                    print(f"📨 Found {len(email_ids)} UNSEEN email(s) from {sender}")
+                    print(f"📨 Found {len(email_ids)} email(s) from {sender}")
                     
                     for email_id in email_ids:
                         try:
@@ -284,30 +282,20 @@ class Enhanced2FAService:
                                 raw_email = msg_data[0][1]
                                 msg = email.message_from_bytes(raw_email)
                                 
-                                # Parse email date and subject
+                                # Parse email date
                                 email_date_str = msg.get('Date', '')
                                 email_subject = msg.get('Subject', '')
                                 
-                                # Filter by subject - only security code emails
-                                security_keywords = [
-                                    "login security code",
-                                    "security code",
-                                    "verification code",
-                                    "2fa code",
-                                    "authentication code"
-                                ]
-                                
-                                subject_lower = email_subject.lower()
-                                is_security_email = any(keyword in subject_lower for keyword in security_keywords)
-                                
-                                if is_security_email:
-                                    try:
-                                        # Parse email date
-                                        from email.utils import parsedate_to_datetime
-                                        email_date = parsedate_to_datetime(email_date_str)
-                                        if email_date.tzinfo is None:
-                                            email_date = email_date.replace(tzinfo=timezone.utc)
-                                        
+                                try:
+                                    # Parse email date
+                                    from email.utils import parsedate_to_datetime
+                                    email_date = parsedate_to_datetime(email_date_str)
+                                    # Convert to local time if needed
+                                    if email_date.tzinfo is None:
+                                        email_date = email_date.replace(tzinfo=timezone.utc)
+                                    
+                                    # Only consider emails from last 5 minutes
+                                    if email_date >= five_minutes_ago.replace(tzinfo=timezone.utc):
                                         candidate_emails.append({
                                             'id': email_id,
                                             'date': email_date,
@@ -315,20 +303,20 @@ class Enhanced2FAService:
                                             'sender': sender,
                                             'msg': msg
                                         })
-                                        print(f"🎯 SECURITY EMAIL: {email_subject} ({email_date})")
-                                    
-                                    except Exception as date_error:
-                                        print(f"📅 Date parsing error: {date_error}")
-                                        # Include anyway as fallback
-                                        candidate_emails.append({
-                                            'id': email_id,
-                                            'date': datetime.now(timezone.utc),
-                                            'subject': email_subject,
-                                            'sender': sender,
-                                            'msg': msg
-                                        })
-                                else:
-                                    print(f"⏭️ Skipping non-security email: {email_subject}")
+                                        print(f"📅 Valid email: {email_subject} ({email_date})")
+                                    else:
+                                        print(f"⏰ Email too old: {email_subject} ({email_date})")
+                                
+                                except Exception as date_error:
+                                    print(f"📅 Date parsing error: {date_error}")
+                                    # If date parsing fails, include it anyway (fallback)
+                                    candidate_emails.append({
+                                        'id': email_id,
+                                        'date': now,  # Use current time as fallback
+                                        'subject': email_subject,
+                                        'sender': sender,
+                                        'msg': msg
+                                    })
                         
                         except Exception as email_error:
                             print(f"📧 Error processing email {email_id}: {email_error}")
@@ -337,11 +325,11 @@ class Enhanced2FAService:
             # Sort emails by date (newest first)
             candidate_emails.sort(key=lambda x: x['date'], reverse=True)
             
-            print(f"🔍 Processing {len(candidate_emails)} SECURITY email(s) (newest first)...")
+            print(f"🔍 Processing {len(candidate_emails)} candidate email(s) (newest first)...")
             
             # Process emails from newest to oldest
             for i, email_info in enumerate(candidate_emails, 1):
-                print(f"\n📨 Processing SECURITY email #{i}:")
+                print(f"\n📨 Processing email #{i}:")
                 print(f"   📧 Subject: {email_info['subject']}")
                 print(f"   📅 Date: {email_info['date']}")
                 print(f"   👤 Sender: {email_info['sender']}")
@@ -353,19 +341,19 @@ class Enhanced2FAService:
                 otp = self._extract_otp_from_body(body)
                 
                 if otp:
-                    print(f"   🎯 FRESH OTP FOUND: {otp}")
+                    print(f"   🎯 OTP FOUND: {otp}")
                     
                     # Mark as read
                     mail.store(email_info['id'], '+FLAGS', '\\Seen')
                     mail.close()
                     mail.logout()
                     
-                    print(f"✅ Using FRESH OTP from LATEST security email: {otp}")
+                    print(f"✅ Using OTP from LATEST email: {otp}")
                     return otp
                 else:
-                    print(f"   ❌ No OTP found in this security email")
+                    print(f"   ❌ No OTP found in this email")
             
-            print("📧 No FRESH OTP found in any security code emails")
+            print("📧 No OTP found in any recent emails")
             mail.close()
             mail.logout()
             
