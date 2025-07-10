@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tool Frames Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tool-frame { border-left: 4px solid; padding: 1rem; margin: 1rem 0; border-radius: 0.5rem; background: #1e293b; }
+        .animate-pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        
+        /* GHL Form Styling */
+        .ghl-form-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #3b82f6;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: #1f2937;
+        }
+        
+        .ghl-form {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-row .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #374151;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #d1d5db;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .form-group input[type="password"] {
+            font-family: monospace;
+        }
+        
+        .form-checkboxes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        .checkbox-label:hover {
+            background-color: #f3f4f6;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 25px;
+        }
+        
+        .submit-btn {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        
+        .reset-btn {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .reset-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(107, 114, 128, 0.3);
+        }
+        
+        .result-display {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        
+        .result-success {
+            background-color: #d1fae5;
+            border: 2px solid #10b981;
+            color: #065f46;
+        }
+        
+        .result-error {
+            background-color: #fee2e2;
+            border: 2px solid #ef4444;
+            color: #991b1b;
+        }
+        
+        .ghl-form-section h2, .ghl-form-section h3 {
+            color: #374151;
+            margin: 20px 0 10px 0;
+        }
+        
+        .ghl-form-section h3 {
+            padding-bottom: 5px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+            
+            .form-row .form-group {
+                margin-bottom: 15px;
+            }
+            
+            .form-checkboxes {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-white p-4">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-2xl font-bold mb-4">Tool Frames Test - All Question Fields & Frames</h1>
+        
+        <div class="mb-4">
+            <button onclick="showAll()" class="bg-blue-600 px-4 py-2 rounded mr-2">Show All Frames</button>
+            <button onclick="hideAll()" class="bg-red-600 px-4 py-2 rounded">Hide All</button>
+        </div>
+
+        <!-- GoHighLevel Subaccount Creation Form -->
+        <div class="ghl-form-section">
+            <h2>🏢 GoHighLevel Subaccount Creation Test</h2>
+            <p>Test form for creating GoHighLevel subaccounts with all required fields.</p>
+            
+            <form id="ghlForm" class="ghl-form">
+                <h3>🏢 Business Information</h3>
+                <div class="form-group">
+                    <label for="businessName">Business Name *</label>
+                    <input type="text" id="businessName" name="businessName" required placeholder="Enter business name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone">Phone *</label>
+                    <input type="tel" id="phone" name="phone" required placeholder="+1 (555) 123-4567">
+                </div>
+                
+                <div class="form-group">
+                    <label for="website">Website *</label>
+                    <input type="url" id="website" name="website" required placeholder="https://www.yourbusiness.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="businessEmail">Business Email *</label>
+                    <input type="email" id="businessEmail" name="businessEmail" required placeholder="contact@yourbusiness.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="address">Address *</label>
+                    <input type="text" id="address" name="address" required placeholder="4th fleet street">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="city">City *</label>
+                        <input type="text" id="city" name="city" required placeholder="New York">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="state">State *</label>
+                        <input type="text" id="state" name="state" required placeholder="Illinois">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="country">Country *</label>
+                        <select id="country" name="country" required style="width: 100%; padding: 10px; border: 2px solid #d1d5db; border-radius: 5px; font-size: 14px; transition: border-color 0.3s; background-color: white;">
+                            <option value="US" selected>United States (US)</option>
+                            <option value="CA">Canada (CA)</option>
+                            <option value="GB">United Kingdom (GB)</option>
+                            <option value="AU">Australia (AU)</option>
+                            <option value="DE">Germany (DE)</option>
+                            <option value="FR">France (FR)</option>
+                            <option value="IN">India (IN)</option>
+                            <option value="JP">Japan (JP)</option>
+                            <option value="BR">Brazil (BR)</option>
+                            <option value="MX">Mexico (MX)</option>
+                            <!-- Add more common countries at the top -->
+                            <option disabled>──────────</option>
+                            <option value="AF">Afghanistan (AF)</option>
+                            <option value="AX">Åland Islands (AX)</option>
+                            <option value="AL">Albania (AL)</option>
+                            <option value="DZ">Algeria (DZ)</option>
+                            <option value="AS">American Samoa (AS)</option>
+                            <option value="AD">Andorra (AD)</option>
+                            <option value="AO">Angola (AO)</option>
+                            <option value="AI">Anguilla (AI)</option>
+                            <option value="AQ">Antarctica (AQ)</option>
+                            <option value="AG">Antigua and Barbuda (AG)</option>
+                            <option value="AR">Argentina (AR)</option>
+                            <option value="AM">Armenia (AM)</option>
+                            <option value="AW">Aruba (AW)</option>
+                            <option value="AT">Austria (AT)</option>
+                            <option value="AZ">Azerbaijan (AZ)</option>
+                            <option value="BS">Bahamas (BS)</option>
+                            <option value="BH">Bahrain (BH)</option>
+                            <option value="BD">Bangladesh (BD)</option>
+                            <option value="BB">Barbados (BB)</option>
+                            <option value="BY">Belarus (BY)</option>
+                            <option value="BE">Belgium (BE)</option>
+                            <option value="BZ">Belize (BZ)</option>
+                            <option value="BJ">Benin (BJ)</option>
+                            <option value="BM">Bermuda (BM)</option>
+                            <option value="BT">Bhutan (BT)</option>
+                            <option value="BO">Bolivia (BO)</option>
+                            <option value="BA">Bosnia and Herzegovina (BA)</option>
+                            <option value="BW">Botswana (BW)</option>
+                            <option value="BV">Bouvet Island (BV)</option>
+                            <option value="IO">British Indian Ocean Territory (IO)</option>
+                            <option value="BN">Brunei Darussalam (BN)</option>
+                            <option value="BG">Bulgaria (BG)</option>
+                            <option value="BF">Burkina Faso (BF)</option>
+                            <option value="BI">Burundi (BI)</option>
+                            <option value="KH">Cambodia (KH)</option>
+                            <option value="CM">Cameroon (CM)</option>
+                            <option value="CV">Cape Verde (CV)</option>
+                            <option value="KY">Cayman Islands (KY)</option>
+                            <option value="CF">Central African Republic (CF)</option>
+                            <option value="TD">Chad (TD)</option>
+                            <option value="CL">Chile (CL)</option>
+                            <option value="CN">China (CN)</option>
+                            <option value="CX">Christmas Island (CX)</option>
+                            <option value="CC">Cocos (Keeling) Islands (CC)</option>
+                            <option value="CO">Colombia (CO)</option>
+                            <option value="KM">Comoros (KM)</option>
+                            <option value="CG">Congo (CG)</option>
+                            <option value="CD">Congo, The Democratic Republic of The (CD)</option>
+                            <option value="CK">Cook Islands (CK)</option>
+                            <option value="CR">Costa Rica (CR)</option>
+                            <option value="CI">Côte D'ivoire (CI)</option>
+                            <option value="HR">Croatia (HR)</option>
+                            <option value="CU">Cuba (CU)</option>
+                            <option value="CY">Cyprus (CY)</option>
+                            <option value="CZ">Czech Republic (CZ)</option>
+                            <option value="DK">Denmark (DK)</option>
+                            <option value="DJ">Djibouti (DJ)</option>
+                            <option value="DM">Dominica (DM)</option>
+                            <option value="DO">Dominican Republic (DO)</option>
+                            <option value="EC">Ecuador (EC)</option>
+                            <option value="EG">Egypt (EG)</option>
+                            <option value="SV">El Salvador (SV)</option>
+                            <option value="GQ">Equatorial Guinea (GQ)</option>
+                            <option value="ER">Eritrea (ER)</option>
+                            <option value="EE">Estonia (EE)</option>
+                            <option value="ET">Ethiopia (ET)</option>
+                            <option value="FK">Falkland Islands (Malvinas) (FK)</option>
+                            <option value="FO">Faroe Islands (FO)</option>
+                            <option value="FJ">Fiji (FJ)</option>
+                            <option value="FI">Finland (FI)</option>
+                            <option value="GF">French Guiana (GF)</option>
+                            <option value="PF">French Polynesia (PF)</option>
+                            <option value="TF">French Southern Territories (TF)</option>
+                            <option value="GA">Gabon (GA)</option>
+                            <option value="GM">Gambia (GM)</option>
+                            <option value="GE">Georgia (GE)</option>
+                            <option value="GH">Ghana (GH)</option>
+                            <option value="GI">Gibraltar (GI)</option>
+                            <option value="GR">Greece (GR)</option>
+                            <option value="GL">Greenland (GL)</option>
+                            <option value="GD">Grenada (GD)</option>
+                            <option value="GP">Guadeloupe (GP)</option>
+                            <option value="GU">Guam (GU)</option>
+                            <option value="GT">Guatemala (GT)</option>
+                            <option value="GG">Guernsey (GG)</option>
+                            <option value="GN">Guinea (GN)</option>
+                            <option value="GW">Guinea-bissau (GW)</option>
+                            <option value="GY">Guyana (GY)</option>
+                            <option value="HT">Haiti (HT)</option>
+                            <option value="HM">Heard Island and Mcdonald Islands (HM)</option>
+                            <option value="VA">Holy See (Vatican City State) (VA)</option>
+                            <option value="HN">Honduras (HN)</option>
+                            <option value="HK">Hong Kong (HK)</option>
+                            <option value="HU">Hungary (HU)</option>
+                            <option value="IS">Iceland (IS)</option>
+                            <option value="ID">Indonesia (ID)</option>
+                            <option value="IR">Iran, Islamic Republic of (IR)</option>
+                            <option value="IQ">Iraq (IQ)</option>
+                            <option value="IE">Ireland (IE)</option>
+                            <option value="IM">Isle of Man (IM)</option>
+                            <option value="IL">Israel (IL)</option>
+                            <option value="IT">Italy (IT)</option>
+                            <option value="JM">Jamaica (JM)</option>
+                            <option value="JE">Jersey (JE)</option>
+                            <option value="JO">Jordan (JO)</option>
+                            <option value="KZ">Kazakhstan (KZ)</option>
+                            <option value="KE">Kenya (KE)</option>
+                            <option value="KI">Kiribati (KI)</option>
+                            <option value="KP">Korea, Democratic People's Republic of (KP)</option>
+                            <option value="KR">Korea, Republic of (KR)</option>
+                            <option value="XK">Kosovo (XK)</option>
+                            <option value="KW">Kuwait (KW)</option>
+                            <option value="KG">Kyrgyzstan (KG)</option>
+                            <option value="LA">Lao People's Democratic Republic (LA)</option>
+                            <option value="LV">Latvia (LV)</option>
+                            <option value="LB">Lebanon (LB)</option>
+                            <option value="LS">Lesotho (LS)</option>
+                            <option value="LR">Liberia (LR)</option>
+                            <option value="LY">Libyan Arab Jamahiriya (LY)</option>
+                            <option value="LI">Liechtenstein (LI)</option>
+                            <option value="LT">Lithuania (LT)</option>
+                            <option value="LU">Luxembourg (LU)</option>
+                            <option value="MO">Macao (MO)</option>
+                            <option value="MK">Macedonia, The Former Yugoslav Republic of (MK)</option>
+                            <option value="MG">Madagascar (MG)</option>
+                            <option value="MW">Malawi (MW)</option>
+                            <option value="MY">Malaysia (MY)</option>
+                            <option value="MV">Maldives (MV)</option>
+                            <option value="ML">Mali (ML)</option>
+                            <option value="MT">Malta (MT)</option>
+                            <option value="MH">Marshall Islands (MH)</option>
+                            <option value="MQ">Martinique (MQ)</option>
+                            <option value="MR">Mauritania (MR)</option>
+                            <option value="MU">Mauritius (MU)</option>
+                            <option value="YT">Mayotte (YT)</option>
+                            <option value="FM">Micronesia, Federated States of (FM)</option>
+                            <option value="MD">Moldova, Republic of (MD)</option>
+                            <option value="MC">Monaco (MC)</option>
+                            <option value="MN">Mongolia (MN)</option>
+                            <option value="ME">Montenegro (ME)</option>
+                            <option value="MS">Montserrat (MS)</option>
+                            <option value="MA">Morocco (MA)</option>
+                            <option value="MZ">Mozambique (MZ)</option>
+                            <option value="MM">Myanmar (MM)</option>
+                            <option value="NA">Namibia (NA)</option>
+                            <option value="NR">Nauru (NR)</option>
+                            <option value="NP">Nepal (NP)</option>
+                            <option value="NL">Netherlands (NL)</option>
+                            <option value="AN">Netherlands Antilles (AN)</option>
+                            <option value="NC">New Caledonia (NC)</option>
+                            <option value="NZ">New Zealand (NZ)</option>
+                            <option value="NI">Nicaragua (NI)</option>
+                            <option value="NE">Niger (NE)</option>
+                            <option value="NG">Nigeria (NG)</option>
+                            <option value="NU">Niue (NU)</option>
+                            <option value="NF">Norfolk Island (NF)</option>
+                            <option value="MP">Northern Mariana Islands (MP)</option>
+                            <option value="NO">Norway (NO)</option>
+                            <option value="OM">Oman (OM)</option>
+                            <option value="PK">Pakistan (PK)</option>
+                            <option value="PW">Palau (PW)</option>
+                            <option value="PS">Palestinian Territory, Occupied (PS)</option>
+                            <option value="PA">Panama (PA)</option>
+                            <option value="PG">Papua New Guinea (PG)</option>
+                            <option value="PY">Paraguay (PY)</option>
+                            <option value="PE">Peru (PE)</option>
+                            <option value="PH">Philippines (PH)</option>
+                            <option value="PN">Pitcairn (PN)</option>
+                            <option value="PL">Poland (PL)</option>
+                            <option value="PT">Portugal (PT)</option>
+                            <option value="PR">Puerto Rico (PR)</option>
+                            <option value="QA">Qatar (QA)</option>
+                            <option value="RE">Reunion (RE)</option>
+                            <option value="RO">Romania (RO)</option>
+                            <option value="RU">Russian Federation (RU)</option>
+                            <option value="RW">Rwanda (RW)</option>
+                            <option value="SH">Saint Helena (SH)</option>
+                            <option value="KN">Saint Kitts and Nevis (KN)</option>
+                            <option value="LC">Saint Lucia (LC)</option>
+                            <option value="MF">Saint Martin (MF)</option>
+                            <option value="PM">Saint Pierre and Miquelon (PM)</option>
+                            <option value="VC">Saint Vincent and The Grenadines (VC)</option>
+                            <option value="WS">Samoa (WS)</option>
+                            <option value="SM">San Marino (SM)</option>
+                            <option value="ST">Sao Tome and Principe (ST)</option>
+                            <option value="SA">Saudi Arabia (SA)</option>
+                            <option value="SN">Senegal (SN)</option>
+                            <option value="RS">Serbia (RS)</option>
+                            <option value="SC">Seychelles (SC)</option>
+                            <option value="SL">Sierra Leone (SL)</option>
+                            <option value="SG">Singapore (SG)</option>
+                            <option value="SX">Sint Maarten (SX)</option>
+                            <option value="SK">Slovakia (SK)</option>
+                            <option value="SI">Slovenia (SI)</option>
+                            <option value="SB">Solomon Islands (SB)</option>
+                            <option value="SO">Somalia (SO)</option>
+                            <option value="ZA">South Africa (ZA)</option>
+                            <option value="GS">South Georgia and The South Sandwich Islands (GS)</option>
+                            <option value="ES">Spain (ES)</option>
+                            <option value="LK">Sri Lanka (LK)</option>
+                            <option value="SD">Sudan (SD)</option>
+                            <option value="SR">Suriname (SR)</option>
+                            <option value="SJ">Svalbard and Jan Mayen (SJ)</option>
+                            <option value="SZ">Swaziland (SZ)</option>
+                            <option value="SE">Sweden (SE)</option>
+                            <option value="CH">Switzerland (CH)</option>
+                            <option value="SY">Syrian Arab Republic (SY)</option>
+                            <option value="TW">Taiwan (TW)</option>
+                            <option value="TJ">Tajikistan (TJ)</option>
+                            <option value="TZ">Tanzania, United Republic of (TZ)</option>
+                            <option value="TH">Thailand (TH)</option>
+                            <option value="TL">Timor-leste (TL)</option>
+                            <option value="TG">Togo (TG)</option>
+                            <option value="TK">Tokelau (TK)</option>
+                            <option value="TO">Tonga (TO)</option>
+                            <option value="TT">Trinidad and Tobago (TT)</option>
+                            <option value="TN">Tunisia (TN)</option>
+                            <option value="TR">Turkey (TR)</option>
+                            <option value="TM">Turkmenistan (TM)</option>
+                            <option value="TC">Turks and Caicos Islands (TC)</option>
+                            <option value="TV">Tuvalu (TV)</option>
+                            <option value="UG">Uganda (UG)</option>
+                            <option value="UA">Ukraine (UA)</option>
+                            <option value="AE">United Arab Emirates (AE)</option>
+                            <option value="UM">United States Minor Outlying Islands (UM)</option>
+                            <option value="UY">Uruguay (UY)</option>
+                            <option value="UZ">Uzbekistan (UZ)</option>
+                            <option value="VU">Vanuatu (VU)</option>
+                            <option value="VE">Venezuela (VE)</option>
+                            <option value="VN">Viet Nam (VN)</option>
+                            <option value="VG">Virgin Islands, British (VG)</option>
+                            <option value="VI">Virgin Islands, U.S. (VI)</option>
+                            <option value="WF">Wallis and Futuna (WF)</option>
+                            <option value="EH">Western Sahara (EH)</option>
+                            <option value="YE">Yemen (YE)</option>
+                            <option value="ZM">Zambia (ZM)</option>
+                            <option value="ZW">Zimbabwe (ZW)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="postalCode">Postal Code *</label>
+                        <input type="text" id="postalCode" name="postalCode" required placeholder="567654">
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="submit-btn">Create Subaccount</button>
+                    <button type="button" onclick="resetGHLForm()" class="reset-btn">Reset Form</button>
+                </div>
+            </form>
+            
+            <div id="ghlResult" class="result-display" style="display: none;"></div>
+        </div>
+
+        <div id="frames" class="space-y-4">
+            <!-- Perplexity Analysis Frame -->
+            <div class="tool-frame border-blue-500 hidden" id="perplexity">
+                <div class="flex items-center mb-2">
+                    <svg class="mr-2 text-blue-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                    </svg>
+                    <h3 class="text-lg font-medium text-blue-400">Website Analysis</h3>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center text-gray-300">
+                        <div class="animate-pulse w-3 h-3 bg-blue-400 rounded-full mr-3"></div>
+                        <span>Analyzing website content...</span>
+                    </div>
+                    <div class="w-full h-2 bg-gray-700 rounded-full">
+                        <div class="h-full bg-blue-500 rounded-full" style="width: 60%"></div>
+                    </div>
+                    <div class="text-xs text-gray-500">URL: https://example.com</div>
+                </div>
+            </div>
+
+            <!-- Screenshot Frame -->
+            <div class="tool-frame border-green-500 hidden" id="screenshot">
+                <div class="flex items-center mb-2">
+                    <svg class="mr-2 text-green-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                    <h3 class="text-lg font-medium text-green-400">Website Screenshot</h3>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center text-gray-300">
+                        <div class="animate-pulse w-3 h-3 bg-green-400 rounded-full mr-3"></div>
+                        <span>Capturing screenshot...</span>
+                    </div>
+                    <div class="h-32 bg-gray-800 rounded-md flex items-center justify-center">
+                        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" class="text-gray-600">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                            <circle cx="12" cy="13" r="4"></circle>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Favicon Frame -->
+            <div class="tool-frame border-purple-500 hidden" id="favicon">
+                <div class="flex items-center mb-2">
+                    <svg class="mr-2 text-purple-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    </svg>
+                    <h3 class="text-lg font-medium text-purple-400">Website Favicon</h3>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center text-gray-300">
+                        <div class="animate-pulse w-3 h-3 bg-purple-400 rounded-full mr-3"></div>
+                        <span>Extracting favicon...</span>
+                    </div>
+                    <div class="flex justify-center py-4">
+                        <div class="w-16 h-16 bg-gray-800 rounded-md flex items-center justify-center">
+                            <div class="w-8 h-8 bg-purple-400 rounded"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Solar Insights Frame -->
+            <div class="tool-frame border-yellow-500 hidden" id="solar">
+                <div class="flex items-center mb-2">
+                    <svg class="mr-2 text-yellow-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                    </svg>
+                    <h3 class="text-lg font-medium text-yellow-400">Solar Insights</h3>
+                </div>
+                <div class="space-y-2">
+                    <div class="flex items-center text-gray-300">
+                        <div class="animate-pulse w-3 h-3 bg-yellow-400 rounded-full mr-3"></div>
+                        <span>Analyzing solar data...</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mt-3">
+                        <div class="bg-slate-800 p-2 rounded">
+                            <div class="text-xs text-gray-400">Daily Production</div>
+                            <div class="text-lg text-yellow-400">24.5 kWh</div>
+                        </div>
+                        <div class="bg-slate-800 p-2 rounded">
+                            <div class="text-xs text-gray-400">Peak Power</div>
+                            <div class="text-lg text-yellow-400">5.2 kW</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Question Input Frame -->
+            <div class="tool-frame border-indigo-500 hidden" id="question">
+                <div class="flex items-center mb-2">
+                    <svg class="mr-2 text-indigo-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    <h3 class="text-lg font-medium text-indigo-400">Question Field</h3>
+                </div>
+                <div class="space-y-3">
+                    <div class="text-gray-300">Please provide additional information:</div>
+                    <input type="text" placeholder="Enter your response..." 
+                           class="w-full p-2 bg-gray-800 border border-gray-600 rounded text-white">
+                    <div class="flex space-x-2">
+                        <button class="bg-indigo-600 px-3 py-1 rounded text-sm">Submit</button>
+                        <button class="bg-gray-600 px-3 py-1 rounded text-sm">Skip</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Frame -->
+            <div class="tool-frame border-orange-500 hidden" id="progress">
+                <div class="flex items-center mb-2">
+                    <svg class="mr-2 text-orange-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12,6 12,12 16,14"></polyline>
+                    </svg>
+                    <h3 class="text-lg font-medium text-orange-400">Processing</h3>
+                </div>
+                <div class="space-y-2">
+                    <div class="text-gray-300">Step 2 of 4: Analyzing data...</div>
+                    <div class="w-full h-2 bg-gray-700 rounded-full">
+                        <div class="h-full bg-orange-500 rounded-full" style="width: 50%"></div>
+                    </div>
+                    <div class="text-xs text-gray-500">Estimated time: 30 seconds</div>
+                </div>
+            </div>
+
+            <!-- Error Frame -->
+            <div class="tool-frame border-red-500 hidden" id="error">
+                <div class="flex items-center mb-2">
+                    <svg class="mr-2 text-red-400" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    <h3 class="text-lg font-medium text-red-400">Error</h3>
+                </div>
+                <div class="space-y-2">
+                    <div class="text-red-300">Failed to process request</div>
+                    <div class="text-xs text-gray-500">Error: Connection timeout</div>
+                    <button class="bg-red-600 px-3 py-1 rounded text-sm">Retry</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showAll() {
+            document.querySelectorAll('.tool-frame').forEach(frame => {
+                frame.classList.remove('hidden');
+            });
+        }
+        
+        function hideAll() {
+            document.querySelectorAll('.tool-frame').forEach(frame => {
+                frame.classList.add('hidden');
+            });
+        }
+        
+        // GHL Form Functions
+        function resetGHLForm() {
+            document.getElementById('ghlForm').reset();
+            const resultDiv = document.getElementById('ghlResult');
+            resultDiv.style.display = 'none';
+            resultDiv.className = 'result-display';
+            resultDiv.textContent = '';
+        }
+        
+        function showResult(message, isSuccess = true) {
+            const resultDiv = document.getElementById('ghlResult');
+            resultDiv.style.display = 'block';
+            resultDiv.className = `result-display ${isSuccess ? 'result-success' : 'result-error'}`;
+            resultDiv.textContent = message;
+        }
+        
+        // Handle GHL Form Submission
+        document.addEventListener('DOMContentLoaded', function() {
+            const ghlForm = document.getElementById('ghlForm');
+            
+            ghlForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Get form data
+                const formData = new FormData(ghlForm);
+                const data = {
+                    // Only send business information fields
+                    // API credentials will be handled securely by the backend
+                    subaccount_name: formData.get('businessName'),
+                    phone: formData.get('phone'),
+                    address: formData.get('address'),
+                    city: formData.get('city'),
+                    state: formData.get('state'),
+                    country: formData.get('country'),
+                    postal_code: formData.get('postalCode'),
+                    website: formData.get('website'),
+                    // Include business_email at the top level for GHL location email field
+                    business_email: formData.get('businessEmail'),
+                    // Also use businessEmail as prospect email
+                    prospect_email: formData.get('businessEmail')
+                };
+                
+                // Show loading state
+                const submitBtn = ghlForm.querySelector('.submit-btn');
+                const originalText = submitBtn.textContent;
+                submitBtn.textContent = 'Creating Subaccount...';
+                submitBtn.disabled = true;
+                
+                try {
+                    // Make API call to backend
+                    const response = await fetch('http://127.0.0.1:8010/api/ghl/create-subaccount', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(data)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        // Success
+                        const successMessage = `✅ SUCCESS!\n\nSubaccount Created:\n- Name: ${result.subaccount_name}\n- Location ID: ${result.location_id}\n- Message: ${result.message}\n\nDetails:\n${JSON.stringify(result.details, null, 2)}`;
+                        showResult(successMessage, true);
+                    } else {
+                        // Error from backend
+                        const errorMessage = `❌ ERROR!\n\nStatus: ${response.status}\nMessage: ${result.detail || result.message || 'Unknown error'}\n\nRequest Data:\n${JSON.stringify(data, null, 2)}`;
+                        showResult(errorMessage, false);
+                    }
+                } catch (error) {
+                    // Network or other error
+                    const errorMessage = `❌ NETWORK ERROR!\n\nError: ${error.message}\n\nThis could be due to:\n- Backend server not running\n- CORS issues\n- Network connectivity\n\nRequest Data:\n${JSON.stringify(data, null, 2)}`;
+                    showResult(errorMessage, false);
+                } finally {
+                    // Reset button state
+                    submitBtn.textContent = originalText;
+                    submitBtn.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
