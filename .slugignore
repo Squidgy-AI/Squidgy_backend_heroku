@@ -40,7 +40,6 @@ complete_facebook_viewer.py
 enhanced_2fa_service_backup.py
 facebook_integration_service.py
 enhanced_2fa_service.py
-facebook_pages_api_working.py
 
 # Remove heavy packages from site-packages
 *.whl
