@@ -35,11 +35,7 @@ __pycache__/
 temp/
 
 # Large development scripts that aren't needed in production
-heroku_playwright_setup.py
-complete_facebook_viewer.py
-enhanced_2fa_service_backup.py
-facebook_integration_service.py
-enhanced_2fa_service.py
+# (Files removed from repository)
 
 # Remove heavy packages from site-packages
 *.whl
