@@ -3282,20 +3282,24 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
                 
     except WebSocketDisconnect:
         logger.info(f"Client disconnected: {connection_id}")
+    
+    except ConnectionResetError as conn_err:
+        logger.warning(f"Connection reset for {connection_id}: {str(conn_err)}")
         
     except Exception as e:
-        logger.exception(f"WebSocket error: {str(e)}")
+        logger.error(f"WebSocket error for {connection_id}: {str(e)}")
         
     finally:
-        # Clean up
+        # Cancel ping task
         ping_task.cancel()
+        # Remove connection from active connections
         if connection_id in active_connections:
             del active_connections[connection_id]
-        logger.info(f"WebSocket connection closed: {connection_id}")
+        logger.info(f"WebSocket connection closed and cleaned up: {connection_id}")
 
 
 @app.get("/api/agents/config")
-async def get_agents_config():
+async def get_all_agent_configs():
     """Get all agent configurations"""
     return {
         "agents": [agent.model_dump() for agent in AGENTS.values()]
@@ -4113,44 +4117,126 @@ class GHLSubAccountRequest(BaseModel):
     company_id: str
     snapshot_id: str
     agency_token: str
-    phone: str = "+17166044029"  # Default phone
-    address: str = "456 Solar Demo Avenue"
-    city: str = "Buffalo"
-    state: str = "NY"
-    country: str = "US"
-    postal_code: str = "14201"
-    timezone: str = "America/New_York"
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    postal_code: Optional[str] = None
+    timezone: Optional[str] = None
+    website: Optional[str] = None
+    prospect_first_name: Optional[str] = None
+    prospect_last_name: Optional[str] = None
+    prospect_email: Optional[str] = None
+    allow_duplicate_contact: bool = False
+    allow_duplicate_opportunity: bool = False
+    allow_facebook_name_merge: bool = False
+    disable_contact_timezone: bool = False
+    subaccount_name: Optional[str] = None
+
+class SecureGHLSubAccountRequest(BaseModel):
+    subaccount_name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    country: Optional[str] = None
+    postal_code: Optional[str] = None
+    timezone: Optional[str] = None
+    website: Optional[str] = None
+    business_email: Optional[str] = None
+    prospect_email: Optional[str] = None
+    prospect_first_name: Optional[str] = None
+    prospect_last_name: Optional[str] = None
+    allow_duplicate_contact: Optional[bool] = False
+    allow_duplicate_opportunity: Optional[bool] = False
+    allow_facebook_name_merge: Optional[bool] = False
+    disable_contact_timezone: Optional[bool] = False
     
 class GHLUserCreationRequest(BaseModel):
     company_id: str
     location_id: str
     agency_token: str
-    first_name: str = os.getenv("GHL_DEFAULT_FIRST_NAME", "Solar")
-    last_name: str = os.getenv("GHL_DEFAULT_LAST_NAME", "Admin")
-    email: str = os.getenv("GHL_DEFAULT_EMAIL", "admin@example.com")
-    password: str = os.getenv("GHL_DEFAULT_PASSWORD", "DefaultPassword123")
-    phone: str = os.getenv("GHL_DEFAULT_PHONE", "+1234567890")
+    # All fields below are optional with defaults
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+    phone: Optional[str] = None
+    account_type: Optional[str] = "account"
+    role: Optional[str] = "user"
+    custom_permissions: Optional[Dict[str, Any]] = None
 
 # Global variable to store location_id after subaccount creation
 last_created_location_id = None
 
 @app.post("/api/ghl/create-subaccount")
-async def create_ghl_subaccount(request: GHLSubAccountRequest):
+async def create_ghl_subaccount(request: SecureGHLSubAccountRequest):
     """Create a GoHighLevel sub-account with solar snapshot"""
     global last_created_location_id
     
     try:
         # Generate unique name with timestamp
         timestamp = datetime.now().strftime("%H%M%S")
-        subaccount_name = f"SolarSetup_Clone_{timestamp}"
+        subaccount_name = request.subaccount_name or f"SolarSetup_Clone_{timestamp}"
+
+        # Import and use the working GoHighLevel API credentials from constants
+        try:
+            from GHL.environment.constant import Constant
+            constants = Constant()
+            company_id = constants.Company_Id
+            # Try Agency_Access_Key as it might be a non-expiring access key
+            agency_token = constants.Agency_Access_Key
+            snapshot_id = "7oAH6Cmto5ZcWAaEsrrq"  # Updated snapshot ID
+            logger.info(f"Using Agency_Access_Key for authentication")
+        except ImportError:
+            # Fallback to hardcoded values if import fails
+            company_id = "lp2p1q27DrdGta1qGDJd"
+            agency_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2NhdGlvbl9pZCI6ImxCUHFnQm93WDFDc2pIYXkxMkxZIiwidmVyc2lvbiI6MSwiaWF0IjoxNzMxOTkyNDg3MDU0LCJzdWIiOiJhWjBuNGV0ck5DRUIyOXNvbmE4TSJ9.czCh27fEwqxW4KzDx0gVbYcpdtcChy_31h9SoQuptAA"
+            snapshot_id = "7oAH6Cmto5ZcWAaEsrrq"
+            logger.info(f"Using fallback Nestle_Api_Key for authentication")
         
         # Prepare headers
         headers = {
-            "Authorization": f"Bearer {request.agency_token}",
+            "Authorization": f"Bearer {agency_token}",
             "Version": "2021-07-28",
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
+
+
+        # Set default values for missing fields
+        phone = request.phone or "+17166044029"
+        address = request.address or "456 Solar Demo Avenue"
+        city = request.city or "Buffalo"
+        state = request.state or "NY"
+        country = request.country or "US"
+        postal_code = request.postal_code or "14201"
+        website = request.website if hasattr(request, 'website') and request.website else f"https://solar-{timestamp}.com"
+
+        # Determine timezone based on country if not provided
+        if not request.timezone:
+            try:
+                # Import the consolidated timezone utility
+                from ghl_timezone_utils import get_timezone_for_ghl
+                country_code = country
+                # Get timezone based on country and validate it
+                timezone = get_timezone_for_ghl(country_code)
+                logger.info(f"Automatically selected timezone '{timezone}' based on country '{country_code}'")
+            except Exception as e:
+                # Fallback to default timezone if there's an error
+                timezone = "America/New_York"
+                logger.warning(f"Error selecting timezone by country: {str(e)}. Using default: {timezone}")
+        else:
+            timezone = request.timezone
+
+        # Set prospect info with defaults or provided values
+        prospect_first_name = request.prospect_first_name or "Solar"
+        prospect_last_name = request.prospect_last_name or "Customer"
+        prospect_email = request.prospect_email or f"admin+{timestamp}@solar-setup.com"
+
+        # Use business email if provided, otherwise use prospect email
+        business_email = request.business_email if hasattr(request, 'business_email') and request.business_email else prospect_email
         
         # Validate country code - GHL expects 2-letter country codes
         # Based on GHL API documentation - using common valid country codes
@@ -4175,29 +4261,35 @@ async def create_ghl_subaccount(request: GHLSubAccountRequest):
         
         # Prepare payload
         payload = {
-            "name": subaccount_name,
-            "phone": request.phone,
-            "companyId": request.company_id,
-            "address": request.address,
-            "city": request.city,
-            "state": request.state,
-            "country": country_code,
-            "postalCode": request.postal_code,
-            "website": f"https://solar-{timestamp}.com",
-            "timezone": request.timezone,
+            "name": subaccount_name,  # Use subaccount_name as the business name
+            "phone": phone,
+            "email": business_email,  # Include email at the top level for business email
+            "companyId": company_id,
+            "address": address,
+            "city": city,
+            "state": state,
+            "country": country,
+            "postalCode": postal_code,
+            "website": website,
+            "timezone": timezone,
             "prospectInfo": {
-                "firstName": "Solar",
-                "lastName": "Admin",
-                "email": f"admin+{timestamp}@solar-setup.com"
+                "firstName": prospect_first_name,
+                "lastName": prospect_last_name,
+                "email": prospect_email
             },
             "settings": {
-                "allowDuplicateContact": False,
-                "allowDuplicateOpportunity": False,
-                "allowFacebookNameMerge": False,
-                "disableContactTimezone": False
+                "allowDuplicateContact": request.allow_duplicate_contact,
+                "allowDuplicateOpportunity": request.allow_duplicate_opportunity,
+                "allowFacebookNameMerge": request.allow_facebook_name_merge,
+                "disableContactTimezone": request.disable_contact_timezone
             },
-            "snapshotId": request.snapshot_id
+            "snapshotId": snapshot_id
         }
+
+        logger.info(f"Creating GHL sub-account: {subaccount_name}")
+        logger.info(f"Using API credentials - Company ID: {company_id}, Snapshot ID: {snapshot_id}")
+        logger.info(f"API Token (first 20 chars): {agency_token[:20]}...")
+        logger.info(f"Payload: {payload}")
         
         logger.info(f"Creating GHL sub-account: {subaccount_name} with country: {country_code}")
         
@@ -4208,31 +4300,56 @@ async def create_ghl_subaccount(request: GHLSubAccountRequest):
                 headers=headers,
                 json=payload
             )
+
+            # Log response details for debugging
+            logger.info(f"GHL API Response Status: {response.status_code}")
+            logger.info(f"GHL API Response Headers: {dict(response.headers)}")
+            try:
+                response_json = response.json()
+                logger.info(f"GHL API Response Body: {response_json}")
+            except:
+                logger.info(f"GHL API Response Text: {response.text}")
         
         if response.status_code in [200, 201]:
             data = response.json()
             location_id = data.get('id')
             last_created_location_id = location_id  # Store for user creation
             
-            logger.info(f"✅ Sub-account created successfully: {location_id}")
+            logger.info(f"Successfully created sub-account with ID: {location_id}")
             
             return {
                 "status": "success",
+                "message": "Sub-account created successfully",
                 "location_id": location_id,
                 "subaccount_name": subaccount_name,
-                "message": "GoHighLevel sub-account created successfully!",
-                "details": {
-                    "name": data.get('name'),
-                    "id": location_id,
-                    "created_at": datetime.now().isoformat(),
-                    "snapshot_loaded": request.snapshot_id
-                }
+                "details": data
             }
         else:
-            logger.error(f"Failed to create sub-account: {response.status_code} - {response.text}")
+            # logger.error(f"Failed to create sub-account: {response.status_code} - {response.text}")
+            # Get detailed error information
+            error_detail = response.text
+            try:
+                error_json = response.json()
+                error_detail = error_json
+            except:
+                pass
+
+            logger.error(f"Failed to create sub-account: {response.status_code} - {error_detail}")
+
+            # Provide more helpful error messages based on status code
+            if response.status_code == 401:
+                error_msg = "Authentication failed - Invalid API token"
+            elif response.status_code == 403:
+                error_msg = "Access forbidden - Check API permissions"
+            elif response.status_code == 400:
+                error_msg = f"Bad request - Invalid payload: {error_detail}"
+            elif response.status_code == 500:
+                error_msg = f"GoHighLevel server error: {error_detail}"
+            else:
+                error_msg = f"Failed to create sub-account: {error_detail}"
             raise HTTPException(
                 status_code=response.status_code,
-                detail=f"Failed to create sub-account: {response.text}"
+                detail=error_msg
             )
             
     except httpx.TimeoutException:
@@ -4247,7 +4364,18 @@ async def create_ghl_user(request: GHLUserCreationRequest):
     """Create a GoHighLevel user (OVI user only, not admin)"""
     try:
         # Full permissions for the user
-        permissions = {
+         # Set default values for missing fields
+        timestamp = datetime.now().strftime("%H%M%S")
+        first_name = request.first_name or "Ovi"
+        last_name = request.last_name or "Colton"
+        password = request.password or "Dummy@123"
+        phone = request.phone or "+17166044029"
+
+        # Generate unique email to avoid conflicts if not provided
+        email = request.email or f"ovi+{timestamp}@test-solar.com"
+
+        # Use custom permissions if provided, otherwise use default permissions
+        permissions = request.custom_permissions if request.custom_permissions else {
             "campaignsEnabled": True,
             "campaignsReadOnly": False,
             "contactsEnabled": True,
@@ -4302,19 +4430,18 @@ async def create_ghl_user(request: GHLUserCreationRequest):
         # Prepare payload for Soma's user account
         payload = {
             "companyId": request.company_id,
-            "firstName": request.first_name,
-            "lastName": request.last_name,
-            "email": request.email,  # Using configured email from environment
-            "password": request.password,  # Using configured password from environment
-            "phone": request.phone,  # Using configured phone from environment
-            "type": "account",
-            "role": "user",  # Not admin, just user
+            "firstName": first_name,
+            "lastName": last_name,
+            "email": email,
+            "password": password,
+            "phone": phone,
+            "type": request.account_type,
+            "role": request.role,
             "locationIds": [request.location_id],
             "permissions": permissions
         }
         
-        logger.info(f"Creating GHL user: {request.first_name} {request.last_name}")
-        
+    
         # Make the API call
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -4335,7 +4462,7 @@ async def create_ghl_user(request: GHLUserCreationRequest):
                 "message": "GoHighLevel user created successfully!",
                 "details": {
                     "name": f"{request.first_name} {request.last_name}",
-                    "email": request.email,  # Use configured email from environment
+                    "email": email,
                     "role": "user",
                     "location_id": request.location_id,
                     "created_at": datetime.now().isoformat()
@@ -4360,7 +4487,26 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
     """Create both sub-account and user in one call - triggered after Solar setup completion"""
     try:
         # First create the sub-account
-        subaccount_response = await create_ghl_subaccount(request)
+        secure_request = SecureGHLSubAccountRequest(
+            subaccount_name=request.subaccount_name,
+            phone=request.phone,
+            address=request.address,
+            city=request.city,
+            state=request.state,
+            country=request.country,
+            postal_code=request.postal_code,
+            timezone=request.timezone,
+            website=request.website if hasattr(request, 'website') else None,
+            prospect_email=request.prospect_email,
+            prospect_first_name=request.prospect_first_name,
+            prospect_last_name=request.prospect_last_name,
+            allow_duplicate_contact=request.allow_duplicate_contact,
+            allow_duplicate_opportunity=request.allow_duplicate_opportunity,
+            allow_facebook_name_merge=request.allow_facebook_name_merge,
+            disable_contact_timezone=request.disable_contact_timezone
+        )
+
+        subaccount_response = await create_ghl_subaccount(secure_request)
         
         if subaccount_response["status"] != "success":
             return subaccount_response
@@ -4371,7 +4517,14 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         user_request = GHLUserCreationRequest(
             company_id=request.company_id,
             location_id=location_id,
-            agency_token=request.agency_token
+            agency_token=request.agency_token,
+            # Pass along any user-specific fields if they exist in the request
+            first_name=request.prospect_first_name,
+            last_name=request.prospect_last_name,
+            email=request.prospect_email,
+            # These fields don't have direct mappings, so they'll use defaults
+            # unless explicitly provided in a future enhanced request model
+            phone=request.phone
         )
         
         user_response = await create_ghl_user(user_request)
