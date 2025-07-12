@@ -4,9 +4,7 @@ import asyncio
 import aiohttp
 from supabase import create_client, Client
 from dotenv import load_dotenv
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+from playwright.async_api import async_playwright
 import time
 import traceback
 import tempfile
@@ -15,7 +13,6 @@ from PIL import Image
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 import threading
-import uuid
 
 load_dotenv()
 
@@ -27,15 +24,15 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Create a thread pool for blocking operations
 executor = ThreadPoolExecutor(max_workers=3)
 
-# Create a lock for Chrome instances to prevent concurrent usage
-chrome_lock = threading.Lock()
+# Create a lock for browser instances to prevent concurrent usage
+browser_lock = threading.Lock()
 
-def capture_website_screenshot(url: str, session_id: str = None) -> dict:
+async def capture_website_screenshot(url: str, session_id: str = None) -> dict:
     """
-    Captures a screenshot of the entire website using headless browser.
+    Captures a screenshot of the entire website using Playwright.
     Optimized for Heroku environment.
     """
-    driver = None
+    browser = None
     tmp_path = None
     
     try:
@@ -47,116 +44,97 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
         
         print(f"Attempting to capture screenshot for URL: {url}")
         
-        # Set up Chrome options for headless mode
-        chrome_options = Options()
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-extensions")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        # Set page load strategy to eager
-        chrome_options.page_load_strategy = 'eager'
-        
-        # IMPORTANT: Remove user-data-dir related arguments for Heroku
-        # Don't use these in Heroku:
-        # chrome_options.add_argument(f"--user-data-dir={unique_temp_dir}")
-        # chrome_options.add_argument(f"--data-path={unique_temp_dir}")
-        # chrome_options.add_argument(f"--disk-cache-dir={unique_temp_dir}/cache")
-        
-        # Additional options for Heroku environment
-        chrome_options.add_argument("--disable-setuid-sandbox")
-        chrome_options.add_argument("--remote-debugging-port=9222")
-        chrome_options.add_argument("--disable-dev-tools")
-        chrome_options.add_argument("--disable-software-rasterizer")
-        
-        # Memory optimization for container environments
-        chrome_options.add_argument("--memory-pressure-off")
-        chrome_options.add_argument("--disable-background-timer-throttling")
-        chrome_options.add_argument("--disable-renderer-backgrounding")
-        chrome_options.add_argument("--disable-features=TranslateUI")
-        chrome_options.add_argument("--disable-ipc-flooding-protection")
-        
-        # Heroku specific: Set Chrome binary location if available
-        chrome_bin = os.environ.get("GOOGLE_CHROME_BIN")
-        if chrome_bin:
-            chrome_options.binary_location = chrome_bin
-        
-        # Heroku specific: Set ChromeDriver path if available
-        chromedriver_path = os.environ.get("CHROMEDRIVER_PATH")
-        
-        try:
-            # Initialize driver
-            print("Initializing Chrome driver...")
-            if chromedriver_path:
-                service = Service(executable_path=chromedriver_path)
-                driver = webdriver.Chrome(service=service, options=chrome_options)
-            else:
-                driver = webdriver.Chrome(options=chrome_options)
+        async with async_playwright() as p:
+            # Launch browser with optimized settings for Heroku
+            browser_args = [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-accelerated-2d-canvas",
+                "--no-first-run",
+                "--no-zygote",
+                "--single-process",
+                "--disable-gpu",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-features=TranslateUI",
+                "--disable-ipc-flooding-protection",
+                "--disable-background-networking",
+                "--disable-client-side-phishing-detection",
+                "--disable-default-apps",
+                "--disable-extensions",
+                "--disable-sync",
+                "--disable-translate",
+                "--hide-scrollbars",
+                "--metrics-recording-only",
+                "--mute-audio",
+                "--no-default-browser-check",
+                "--safebrowsing-disable-auto-update",
+                "--disable-features=VizDisplayCompositor"
+            ]
             
-            # Set timeouts
-            driver.set_page_load_timeout(30)
-            driver.implicitly_wait(10)
+            # Check if we're on Heroku and use buildpack-installed chromium
+            executable_path = None
+            if os.environ.get('DYNO'):
+                executable_path = '/app/.apt/usr/bin/chromium-browser'
+            
+            browser = await p.chromium.launch(
+                headless=True,
+                args=browser_args,
+                executable_path=executable_path
+            )
+            
+            # Create page
+            page = await browser.new_page()
+            
+            # Set viewport size
+            await page.set_viewport_size({"width": 1920, "height": 1080})
             
             print(f"Navigating to URL: {url}")
             try:
-                driver.get(url)
+                await page.goto(url, timeout=30000, wait_until="domcontentloaded")
             except Exception as e:
                 print(f"Page load timeout/error, continuing anyway: {e}")
             
             # Wait for page to stabilize
-            time.sleep(3)
+            await page.wait_for_timeout(3000)
             
             # Take screenshot
+            print("Taking screenshot...")
+            screenshot_bytes = await page.screenshot(
+                type="jpeg",
+                quality=80,
+                full_page=True
+            )
+            
+            # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
                 tmp_path = tmp_file.name
-                print("Taking screenshot...")
-                
-                screenshot_success = driver.save_screenshot(tmp_path)
-                
-                if not screenshot_success:
-                    raise Exception("Failed to save screenshot")
-                
-                # Read the screenshot file
-                with open(tmp_path, 'rb') as f:
-                    file_content = f.read()
-                
-                storage_path = f"screenshots/{filename}"
-                
-                # TODO: Uncomment when ready to use Supabase
-                # # Remove existing file if present
-                try:
-                    supabase.storage.from_('static').remove([storage_path])
-                except:
-                    pass
-                
-                response = supabase.storage.from_('static').upload(
-                    storage_path,
-                    file_content,
-                    {
-                        "content-type": "image/jpeg",
-                        "upsert": "true"
-                    }
-                )
-                
-                # Handle the response
-                if hasattr(response, 'error') and response.error:
-                    if "already exists" in str(response.error):
-                        public_url = supabase.storage.from_('static').get_public_url(storage_path)
-                        return {
-                            "status": "success",
-                            "message": "Screenshot captured successfully",
-                            "path": storage_path,
-                            "public_url": public_url,
-                            "filename": filename
-                        }
-                    else:
-                        raise Exception(f"Failed to upload: {response.error}")
-                else:
+                tmp_file.write(screenshot_bytes)
+            
+            file_content = screenshot_bytes
+            
+            storage_path = f"screenshots/{filename}"
+            
+            # Remove existing file if present
+            try:
+                supabase.storage.from_('static').remove([storage_path])
+            except:
+                pass
+            
+            response = supabase.storage.from_('static').upload(
+                storage_path,
+                file_content,
+                {
+                    "content-type": "image/jpeg",
+                    "upsert": "true"
+                }
+            )
+            
+            # Handle the response
+            if hasattr(response, 'error') and response.error:
+                if "already exists" in str(response.error):
                     public_url = supabase.storage.from_('static').get_public_url(storage_path)
                     return {
                         "status": "success",
@@ -165,31 +143,18 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                         "public_url": public_url,
                         "filename": filename
                     }
-                
-                # Temporary return for testing without Supabase
-                # return {
-                #     "status": "success",
-                #     "message": "Screenshot captured successfully",
-                #     "path": storage_path,
-                #     "public_url": f"/temp/{filename}",  # Mock URL for testing
-                #     "filename": filename,
-                #     "file_size": len(file_content)
-                # }
-                    
-        finally:
-            # Cleanup
-            if driver:
-                try:
-                    driver.quit()
-                except Exception as e:
-                    print(f"Error closing driver: {e}")
-            
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.unlink(tmp_path)
-                except Exception as e:
-                    print(f"Error removing temp file: {e}")
-                    
+                else:
+                    raise Exception(f"Failed to upload: {response.error}")
+            else:
+                public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                return {
+                    "status": "success",
+                    "message": "Screenshot captured successfully",
+                    "path": storage_path,
+                    "public_url": public_url,
+                    "filename": filename
+                }
+        
     except Exception as e:
         error_traceback = traceback.format_exc()
         print(f"Error capturing screenshot: {e}")
@@ -201,16 +166,29 @@ def capture_website_screenshot(url: str, session_id: str = None) -> dict:
             "error_details": error_traceback,
             "path": None
         }
+    
+    finally:
+        # Cleanup
+        if browser:
+            try:
+                await browser.close()
+            except Exception as e:
+                print(f"Error closing browser: {e}")
+        
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception as e:
+                print(f"Error removing temp file: {e}")
 
-async def capture_website_screenshot_async(url: str, session_id: str = None) -> dict:
-    """Async wrapper for capturing website screenshot"""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        executor,
-        capture_website_screenshot,
-        url,
-        session_id
-    )
+def capture_website_screenshot_sync(url: str, session_id: str = None) -> dict:
+    """Sync wrapper for capturing website screenshot"""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(capture_website_screenshot(url, session_id))
+    finally:
+        loop.close()
 
 def get_website_favicon(url: str, session_id: str = None) -> dict:
     """

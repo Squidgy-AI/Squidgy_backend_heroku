@@ -25,7 +25,7 @@ from supabase import create_client, Client
 
 # Local imports
 from agent_config import get_agent_config, AGENTS
-from Website.web_scrape import capture_website_screenshot_async, get_website_favicon_async
+from Website.web_scrape import capture_website_screenshot, get_website_favicon_async
 from embedding_service import get_embedding
 from tools_connector import tools
 from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
@@ -2826,7 +2826,7 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
     """
     try:
         # Use the async version
-        result = await capture_website_screenshot_async(
+        result = await capture_website_screenshot(
             url=request.url,
             session_id=request.session_id
         )

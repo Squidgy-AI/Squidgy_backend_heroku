@@ -2,7 +2,6 @@ fastapi==0.115.8
 uvicorn==0.34.0
 python-dotenv==1.0.1
 websockets==14.2
-selenium==4.16.0
 beautifulsoup4==4.12.2
 requests==2.32.3
 pillow==11.1.0
