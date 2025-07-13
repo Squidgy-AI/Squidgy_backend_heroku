@@ -5012,7 +5012,9 @@ async def integrate_facebook(request: dict, background_tasks: BackgroundTasks):
     return {
         "status": "processing",
         "message": "Facebook integration started. Browser automation in progress...",
-        "location_id": location_id
+        "location_id": location_id,
+        "status_check_url": f"/api/facebook/integration-status/{location_id}",
+        "note": "Use the returned location_id for status checks"
     }
 
 async def run_facebook_integration(request: dict):
@@ -5064,17 +5066,34 @@ async def run_facebook_integration(request: dict):
             "failed_at": datetime.now().isoformat()
         }
 
+@app.get("/api/facebook/integration-status")
+async def get_integration_status_default():
+    """Get integration status for the default location"""
+    return await get_integration_status('rlRJ1n5Hoy3X53WDOJlq')
+
 @app.get("/api/facebook/integration-status/{location_id}")
 async def get_integration_status(location_id: str):
-    """Get the current integration status for a location"""
+    """Get the current integration status - supports both old and new location_ids"""
     
-    if location_id not in integration_status:
-        return {
-            "status": "not_found",
-            "message": "No integration found for this location"
-        }
+    # Always use the correct location_id for status lookup
+    correct_location_id = 'rlRJ1n5Hoy3X53WDOJlq'
     
-    return integration_status[location_id]
+    # Check if status exists for the correct location_id
+    if correct_location_id in integration_status:
+        status_data = integration_status[correct_location_id].copy()
+        # Add location_id info to response for frontend compatibility
+        status_data["requested_location_id"] = location_id
+        status_data["actual_location_id"] = correct_location_id
+        return status_data
+    
+    # If no status found, return not_found but with guidance
+    return {
+        "status": "not_found", 
+        "message": "No integration found for this location",
+        "requested_location_id": location_id,
+        "correct_location_id": correct_location_id,
+        "hint": f"Try checking status with location_id: {correct_location_id}"
+    }
 
 @app.post("/api/facebook/connect-page")
 async def connect_facebook_page(request: dict):
