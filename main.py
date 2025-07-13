@@ -4810,56 +4810,43 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             phone=request.phone or "+17166044029"  # Use business phone or default
         )
         
-        # Create Soma user using agency API (minimal approach)
-        try:
-            soma_user_response = await create_agency_user(
-                company_id=request.company_id,
-                location_id=location_id,
-                agency_token=request.agency_token,
-                first_name="Soma",
-                last_name="Addakula",
-                email="somashekhar34@gmail.com",
-                password="Dummy@123",
-                phone="+17166044029",
-                role="user",
-                permissions=full_permissions,
-                scopes=location_scopes
-            )
-        except Exception as e:
-            # If Soma user already exists, create a mock response to continue
-            if "user with this email already exists" in str(e).lower() or "already exists" in str(e).lower():
-                logger.warning("Soma user already exists, continuing with mock response")
-                soma_user_response = {
-                    "status": "success",
-                    "message": "Using existing Soma user", 
-                    "user_id": f"existing_soma_{location_id[:8]}",
-                    "details": {
-                        "name": "Soma Addakula",
-                        "email": "somashekhar34@gmail.com"
-                    }
-                }
-            else:
-                raise e
+        # Create Soma user with UNIQUE email per location to avoid conflicts
+        # Use location-specific email to ensure uniqueness
+        soma_unique_email = f"somashekhar34+{location_id[:8]}@gmail.com"
+        
+        soma_user_response = await create_agency_user(
+            company_id=request.company_id,
+            location_id=location_id,
+            agency_token=request.agency_token,
+            first_name="Soma",
+            last_name="Addakula",
+            email=soma_unique_email,  # Use unique email per location
+            password="Dummy@123",
+            phone="+17166044029",
+            role="user",
+            permissions=full_permissions,
+            scopes=location_scopes
+        )
         
         # Return combined response with SOMA's credentials for downstream Facebook integration
         return {
             "status": "success",
-            "message": "GoHighLevel sub-account and TWO users created successfully!",
+            "message": "GoHighLevel sub-account and Soma user created successfully!",
             "subaccount": subaccount_response,
-            "business_user": business_user_response,
+            "business_user": business_user_response,  # Skipped business user with mock response
             "soma_user": soma_user_response,
             "user": soma_user_response,  # Main user field points to Soma for Facebook integration
             "facebook_integration_credentials": {
-                "email": soma_user_request.email,  # Soma's credentials for Facebook
-                "password": soma_user_request.password,  # Soma's credentials  
-                "phone": soma_user_request.phone,  # Soma's credentials
+                "email": soma_unique_email,  # Soma's unique email for Facebook
+                "password": "Dummy@123",  # Soma's credentials  
+                "phone": "+17166044029",  # Soma's credentials
                 "location_id": location_id,
                 "user_id": soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None,
                 "ready_for_facebook": True
             },
             "details": {
-                "name": f"{soma_user_request.first_name} {soma_user_request.last_name}",
-                "email": soma_user_request.email,
+                "name": "Soma Addakula",
+                "email": soma_unique_email,
                 "role": "Admin User"
             },
             "created_at": datetime.now().isoformat()
