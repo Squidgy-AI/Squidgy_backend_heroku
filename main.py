@@ -5014,86 +5014,44 @@ async def integrate_facebook(request: dict, background_tasks: BackgroundTasks):
     }
 
 async def run_facebook_integration(request: dict):
-    """Run the actual Facebook integration with browser automation"""
+    """Run the actual Facebook integration with browser automation using working approach from commit c7935fc"""
     
     location_id = request.get('location_id')
     
     try:
-        # Import os here to avoid issues
-        import os
+        # Update status 
+        integration_status[location_id]["current_step"] = "Starting Facebook integration with Gmail 2FA..."
         
-        # Check if we're on Heroku
-        is_heroku = os.environ.get('DYNO') is not None
+        # Create request using the working approach
+        fb_request = FacebookPagesRequest(
+            location_id=request.get('location_id'),
+            user_id=request.get('user_id'), 
+            email=request.get('email'),
+            password=request.get('password'),
+            firm_user_id=request.get('firm_user_id'),
+            manual_jwt_token=None  # Let it auto-extract the JWT
+        )
         
-        if is_heroku:
-            # Use alternative approach for Heroku
-            integration_status[location_id]["current_step"] = "Using Heroku-compatible integration..."
-            
-            from facebook_integration_alternative import integrate_facebook_production
-            result = await integrate_facebook_production(request)
-            
-            if result["status"] == "success":
-                integration_status[location_id] = {
-                    "status": "success",
-                    "pages": result["data"].get("pages", []),
-                    "completed_at": datetime.now().isoformat(),
-                    "approach": "direct_api"
-                }
-            elif result["status"] == "oauth_required":
-                integration_status[location_id] = {
-                    "status": "oauth_required",
-                    "oauth_url": result["oauth_url"],
-                    "message": "Please complete OAuth manually",
-                    "approach": "manual_oauth"
-                }
-            else:
-                integration_status[location_id] = {
-                    "status": "failed",
-                    "error": result.get("error", "Unknown error"),
-                    "failed_at": datetime.now().isoformat()
-                }
+        # Update status
+        integration_status[location_id]["current_step"] = "Logging into GoHighLevel with Gmail 2FA..."
+        
+        # Run the working integration approach
+        result = await get_facebook_pages(fb_request)
+        
+        if result.success:
+            integration_status[location_id] = {
+                "status": "success",
+                "pages": [{"facebookPageId": page.page_id, "facebookPageName": page.page_name, "isInstagramAvailable": page.instagram_available} for page in result.pages],
+                "jwt_token": result.jwt_token,
+                "completed_at": datetime.now().isoformat(),
+                "approach": "working_commit_c7935fc"
+            }
         else:
-            # Use browser automation for local development
-            integration_status[location_id]["current_step"] = "Launching browser..."
-            
-            # Import the Facebook service (only when needed)
-            import sys
-            import os
-            
-            # Add the current directory to the Python path
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-            
-            # Use the existing working Facebook pages API
-            from facebook_pages_api_working import get_facebook_pages, FacebookPagesRequest
-            
-            # Update status
-            integration_status[location_id]["current_step"] = "Getting Facebook pages..."
-            
-            # Create request using working API
-            fb_request = FacebookPagesRequest(
-                location_id=request.get('location_id'),
-                user_id=request.get('user_id'),
-                email=request.get('email'),
-                password=request.get('password'),
-                firm_user_id=request.get('firm_user_id')
-            )
-            
-            # Get Facebook pages using the working API  
-            result = await get_facebook_pages(fb_request)
-            
-            if result.status == "success":
-                integration_status[location_id] = {
-                    "status": "success",
-                    "pages": result.facebook_pages or [],
-                    "completed_at": datetime.now().isoformat(),
-                    "approach": "api_direct"
-                }
-            else:
-                integration_status[location_id] = {
-                    "status": "failed",
-                    "error": result.message or "Failed to get Facebook pages",
-                    "failed_at": datetime.now().isoformat()
-                }
+            integration_status[location_id] = {
+                "status": "failed", 
+                "error": result.message,
+                "failed_at": datetime.now().isoformat()
+            }
             
     except Exception as e:
         integration_status[location_id] = {
