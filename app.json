@@ -5,10 +5,10 @@
     "keywords": ["python", "fastapi", "ai"],
     "buildpacks": [
       {
-        "url": "https://github.com/heroku/heroku-buildpack-apt"
+        "url": "heroku/python"
       },
       {
-        "url": "heroku/python"
+        "url": "https://github.com/Thomas-Boi/heroku-playwright-python-browsers"
       }
     ],
     "addons": [

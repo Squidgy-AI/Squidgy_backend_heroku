@@ -75,51 +75,12 @@ async def capture_website_screenshot(url: str, session_id: str = None) -> dict:
                 "--disable-features=VizDisplayCompositor"
             ]
             
-            # Launch browser with proper Heroku configuration
-            try:
-                # First try with Playwright's bundled Chromium
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=browser_args
-                )
-            except Exception as playwright_error:
-                print(f"Playwright bundled browser failed: {playwright_error}")
-                # Fallback: try common Heroku paths
-                heroku_paths = [
-                    '/app/.apt/usr/bin/chromium-browser',
-                    '/usr/bin/chromium-browser',
-                    '/usr/bin/google-chrome',
-                    '/usr/bin/google-chrome-stable'
-                ]
-                
-                browser_launched = False
-                for path in heroku_paths:
-                    if os.path.exists(path):
-                        try:
-                            browser = await p.chromium.launch(
-                                headless=True,
-                                args=browser_args,
-                                executable_path=path
-                            )
-                            browser_launched = True
-                            print(f"Successfully launched browser at: {path}")
-                            break
-                        except Exception as e:
-                            print(f"Failed to launch browser at {path}: {e}")
-                            continue
-                
-                if not browser_launched:
-                    # Ultimate fallback: return a simple webpage capture result
-                    print("Warning: Browser launch failed completely, returning fallback response")
-                    return {
-                        "status": "partial_success",
-                        "message": "Browser unavailable, webpage content captured via HTTP request",
-                        "screenshot_url": None,
-                        "storage_path": None,
-                        "filename": None,
-                        "timestamp": datetime.now().isoformat(),
-                        "fallback_used": True
-                    }
+            # Launch browser - Playwright buildpack should handle everything
+            print("Launching Playwright browser...")
+            browser = await p.chromium.launch(
+                headless=True,
+                args=browser_args
+            )
             
             # Create page
             page = await browser.new_page()
