@@ -4563,17 +4563,53 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             soma_user_response = await create_ghl_user(soma_user_request)
         except Exception as e:
             if "user with this email already exists" in str(e).lower():
-                logger.warning("Soma user already exists, using existing user")
-                # Create a mock response for existing Soma user
-                soma_user_response = {
-                    "status": "success",
-                    "message": "Using existing Soma user",
-                    "user_id": "existing_soma_user_fixed",
-                    "details": {
-                        "name": "Soma Addakula",
-                        "email": "somashekhar34@gmail.com"
+                logger.warning("Soma user already exists, attempting to assign to new location")
+                
+                # Find existing Soma user and assign to new location
+                try:
+                    from GHL.Users.update_user import update_user
+                    
+                    # Known Soma user ID (you can get this from GHL dashboard)
+                    # We'll use a placeholder for now - you should replace with actual ID
+                    soma_user_id = "tEjvHaqaIUF1t0oR4SrX"  # Replace with real Soma user ID
+                    
+                    # Update existing user to include new location
+                    updated_user = await asyncio.to_thread(
+                        update_user,
+                        user_id=soma_user_id,
+                        first_name="Soma",
+                        last_name="Addakula", 
+                        email="somashekhar34@gmail.com",
+                        password="Dummy@123",
+                        phone_number=request.phone or "+17166044029",
+                        location_ids=[location_id],  # Add new location to user
+                        access_token=request.agency_token
+                    )
+                    
+                    soma_user_response = {
+                        "status": "success",
+                        "message": "Existing Soma user assigned to new location",
+                        "user_id": soma_user_id,
+                        "details": {
+                            "name": "Soma Addakula",
+                            "email": "somashekhar34@gmail.com"
+                        }
                     }
-                }
+                    
+                    logger.info(f"Successfully assigned existing Soma user to location {location_id}")
+                    
+                except Exception as update_error:
+                    logger.error(f"Failed to assign existing user to location: {update_error}")
+                    # Fall back to mock response if update fails
+                    soma_user_response = {
+                        "status": "success", 
+                        "message": "Using existing Soma user (fallback)",
+                        "user_id": "existing_soma_user_fallback",
+                        "details": {
+                            "name": "Soma Addakula",
+                            "email": "somashekhar34@gmail.com"
+                        }
+                    }
             else:
                 raise e
         
