@@ -5071,6 +5071,62 @@ async def get_integration_status_default():
     """Get integration status for the default location"""
     return await get_integration_status('rlRJ1n5Hoy3X53WDOJlq')
 
+@app.post("/api/facebook/integration-status/reset")
+async def reset_integration_status():
+    """Reset/clear stuck integration status"""
+    correct_location_id = 'rlRJ1n5Hoy3X53WDOJlq'
+    if correct_location_id in integration_status:
+        del integration_status[correct_location_id]
+    return {"status": "reset", "message": "Integration status cleared"}
+
+@app.get("/api/facebook/pages/{location_id}")
+async def get_facebook_pages_from_db(location_id: str):
+    """Get Facebook pages directly from database (bypasses status check)"""
+    
+    try:
+        correct_location_id = 'rlRJ1n5Hoy3X53WDOJlq'  # Use correct location_id
+        
+        # Import here to avoid circular imports
+        import httpx
+        
+        # Query Supabase directly for Facebook pages
+        supabase_url = "https://aoteeitreschwzkbpqyd.supabase.co"
+        supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvdGVlaXRyZXNjaHd6a2JwcXlkIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMTQ5NjQ4NSwiZXhwIjoyMDQ3MDcyNDg1fQ.fBNQF2wQLMkqzJ1bBGBMlVjOCTJgOT7ByXg1mqXb9kI"
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{supabase_url}/rest/v1/squidgy_facebook_pages",
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                },
+                params={"location_id": f"eq.{correct_location_id}"}
+            )
+            
+            if response.status_code == 200:
+                pages = response.json()
+                return {
+                    "status": "success",
+                    "pages": pages,
+                    "source": "database",
+                    "requested_location_id": location_id,
+                    "actual_location_id": correct_location_id,
+                    "count": len(pages)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Database query failed: {response.status_code}",
+                    "requested_location_id": location_id
+                }
+                
+    except Exception as e:
+        return {
+            "status": "error", 
+            "error": str(e),
+            "requested_location_id": location_id
+        }
+
 @app.get("/api/facebook/integration-status/{location_id}")
 async def get_integration_status(location_id: str):
     """Get the current integration status - supports both old and new location_ids"""
