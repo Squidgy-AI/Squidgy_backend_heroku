@@ -4527,7 +4527,24 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             phone=request.phone
         )
         
-        business_user_response = await create_ghl_user(business_user_request)
+        # Try to create business user
+        try:
+            business_user_response = await create_ghl_user(business_user_request)
+        except Exception as e:
+            if "user with this email already exists" in str(e).lower():
+                logger.warning(f"Business user already exists: {request.prospect_email}")
+                # Create a mock response for existing user
+                business_user_response = {
+                    "status": "success",
+                    "message": "Using existing business user",
+                    "user_id": f"existing_business_user_{location_id[:8]}",
+                    "details": {
+                        "name": f"{request.prospect_first_name} {request.prospect_last_name}",
+                        "email": request.prospect_email
+                    }
+                }
+            else:
+                raise e
         
         # Second user: Soma Addakula with specific details
         soma_user_request = GHLUserCreationRequest(
@@ -4541,7 +4558,24 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             phone=request.phone or "+17166044029"  # Use business phone or default
         )
         
-        soma_user_response = await create_ghl_user(soma_user_request)
+        # Try to create Soma user
+        try:
+            soma_user_response = await create_ghl_user(soma_user_request)
+        except Exception as e:
+            if "user with this email already exists" in str(e).lower():
+                logger.warning("Soma user already exists, using existing user")
+                # Create a mock response for existing Soma user
+                soma_user_response = {
+                    "status": "success",
+                    "message": "Using existing Soma user",
+                    "user_id": "existing_soma_user_fixed",
+                    "details": {
+                        "name": "Soma Addakula",
+                        "email": "somashekhar34@gmail.com"
+                    }
+                }
+            else:
+                raise e
         
         # Return combined response with SOMA's credentials for downstream Facebook integration
         return {
