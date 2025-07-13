@@ -4520,6 +4520,10 @@ async def create_agency_user(
     }
     
     try:
+        # Log the exact payload being sent for debugging
+        logger.info(f"Creating user with payload: {json.dumps(payload, indent=2)}")
+        logger.info(f"Using agency token: {agency_token[:20]}...")
+        
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 "https://services.leadconnectorhq.com/users/",
@@ -4643,69 +4647,37 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             "exportPaymentsEnabled": True
         }
         
-        # Location-level scopes (from working Ovi Colton example)
+        # Use only officially documented scopes from GHL API
         location_scopes = [
             "contacts.write",
-            "contacts.readonly",
+            "contacts/bulkActions.write", 
             "opportunities.write",
-            "opportunities.readonly",
-            "calendars.write",
-            "calendars.readonly",
+            "opportunities/leadValue.readonly",
             "calendars/events.write",
-            "calendars/events.readonly",
+            "calendars/events.readonly", 
             "campaigns.readonly",
             "conversations.write",
             "conversations.readonly",
             "conversations/message.write",
             "conversations/message.readonly",
-            "forms.write",
-            "forms.readonly",
-            "surveys.readonly",
-            "triggers.readonly",
-            "funnels.readonly",
-            "websites.readonly",
-            "medias.readonly",
-            "medias.write",
             "workflows.readonly",
-            "links.write",
-            "links.readonly",
-            "snapshots.readonly",
-            "templates.readonly",
-            "payments/orders.readonly",
-            "payments/orders.write",
-            "payments/transactions.readonly",
-            "payments/subscriptions.readonly",
-            "payments/custom-providers.readonly",
-            "payments/custom-providers.write",
+            "triggers.write",
+            "funnels.write",
+            "websites.write",
+            "medias.write",
+            "medias.readonly",
             "invoices.write",
             "invoices.readonly",
             "invoices/schedule.readonly",
             "invoices/schedule.write",
             "invoices/template.readonly",
             "invoices/template.write",
-            "products.readonly",
-            "products/prices.readonly",
             "blogs.write",
-            "blogs.readonly",
-            "affiliate.write",
-            "affiliate.readonly",
-            "businesses.write",
-            "businesses.readonly",
-            "locations/customFields.readonly",
-            "locations/customValues.readonly",
-            "locations/tasks.readonly",
+            "locations/tags.write",
             "locations/tags.readonly",
-            "oauth.write",
-            "oauth.readonly",
-            "opportunities/leadValue.readonly",
             "reporting/phone.readonly",
             "reporting/adwords.readonly",
-            "reporting/funnels.readonly",
-            "reporting/revenues.readonly",
-            "reporting/appointments.readonly",
-            "reporting/reviews.readonly",
-            "reporting/attributions.readonly",
-            "marketing/agents.readonly"
+            "reporting/attributions.readonly"
         ]
         
         # Create business user using agency API
