@@ -4513,35 +4513,56 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         
         location_id = subaccount_response["location_id"]
         
-        # Then create the user
-        user_request = GHLUserCreationRequest(
+        # Create TWO users: 1) Business Owner 2) Soma Addakula
+        
+        # First user: Business Owner with form data
+        business_user_request = GHLUserCreationRequest(
             company_id=request.company_id,
             location_id=location_id,
             agency_token=request.agency_token,
-            # Pass along any user-specific fields if they exist in the request
             first_name=request.prospect_first_name,
             last_name=request.prospect_last_name,
             email=request.prospect_email,
-            # These fields don't have direct mappings, so they'll use defaults
-            # unless explicitly provided in a future enhanced request model
+            password="Dummy@123",  # Standard password as requested
             phone=request.phone
         )
         
-        user_response = await create_ghl_user(user_request)
+        business_user_response = await create_ghl_user(business_user_request)
         
-        # Return combined response with credentials for downstream Facebook integration
+        # Second user: Soma Addakula with specific details
+        soma_user_request = GHLUserCreationRequest(
+            company_id=request.company_id,
+            location_id=location_id,
+            agency_token=request.agency_token,
+            first_name="Soma",
+            last_name="Addakula",
+            email="somashekhar34@gmail.com",
+            password="Dummy@123",
+            phone=request.phone or "+17166044029"  # Use business phone or default
+        )
+        
+        soma_user_response = await create_ghl_user(soma_user_request)
+        
+        # Return combined response with SOMA's credentials for downstream Facebook integration
         return {
             "status": "success",
-            "message": "Both GoHighLevel sub-account and user created successfully!",
+            "message": "GoHighLevel sub-account and TWO users created successfully!",
             "subaccount": subaccount_response,
-            "user": user_response,
+            "business_user": business_user_response,
+            "soma_user": soma_user_response,
+            "user": soma_user_response,  # Main user field points to Soma for Facebook integration
             "facebook_integration_credentials": {
-                "email": user_request.email,  # Using configured credentials
-                "password": user_request.password,  # Using configured credentials 
-                "phone": user_request.phone,  # Using configured credentials
+                "email": soma_user_request.email,  # Soma's credentials for Facebook
+                "password": soma_user_request.password,  # Soma's credentials  
+                "phone": soma_user_request.phone,  # Soma's credentials
                 "location_id": location_id,
-                "user_id": user_response.get("user_id") if user_response.get("status") == "success" else None,
+                "user_id": soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None,
                 "ready_for_facebook": True
+            },
+            "details": {
+                "name": f"{soma_user_request.first_name} {soma_user_request.last_name}",
+                "email": soma_user_request.email,
+                "role": "Admin User"
             },
             "created_at": datetime.now().isoformat()
         }
