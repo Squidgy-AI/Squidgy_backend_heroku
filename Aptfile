@@ -1,5 +1,2 @@
-# Optimized Heroku buildpack requirements
-# Essential packages for Chrome + Playwright
-xvfb
-libgtk-3-0t64
-libxcursor1
+chromium-browser
+chromium-chromedriver
