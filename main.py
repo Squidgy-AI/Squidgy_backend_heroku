@@ -4610,18 +4610,114 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         
         # Create users using proper agency-level API with full permissions
         
-        # Use minimal permissions (or omit for defaults)
+        # Use full permissions from working Ovi Colton pattern
         full_permissions = {
+            "campaignsEnabled": True,
+            "campaignsReadOnly": False,
             "contactsEnabled": True,
+            "workflowsEnabled": True,
+            "workflowsReadOnly": False,
+            "triggersEnabled": True,
+            "funnelsEnabled": True,
+            "websitesEnabled": True,
             "opportunitiesEnabled": True,
+            "dashboardStatsEnabled": True,
+            "bulkRequestsEnabled": True,
+            "appointmentsEnabled": True,
+            "reviewsEnabled": True,
+            "onlineListingsEnabled": True,
+            "phoneCallEnabled": True,
             "conversationsEnabled": True,
-            "dashboardStatsEnabled": True
+            "assignedDataOnly": False,
+            "adwordsReportingEnabled": True,
+            "membershipEnabled": True,
+            "facebookAdsReportingEnabled": True,
+            "attributionsReportingEnabled": True,
+            "settingsEnabled": True,
+            "tagsEnabled": True,
+            "leadValueEnabled": True,
+            "marketingEnabled": True,
+            "agentReportingEnabled": True,
+            "botService": True,
+            "socialPlanner": True,
+            "bloggingEnabled": True,
+            "invoiceEnabled": True,
+            "affiliateManagerEnabled": True,
+            "contentAiEnabled": True,
+            "refundsEnabled": True,
+            "recordPaymentEnabled": True,
+            "cancelSubscriptionEnabled": True,
+            "paymentsEnabled": True,
+            "communitiesEnabled": True,
+            "exportPaymentsEnabled": True
         }
         
-        # Use minimal approach - no scopes (proven to work)
-        location_scopes = []
+        # Use full location-level scopes from working pattern
+        location_scopes = [
+            "contacts.write",
+            "contacts.readonly",
+            "opportunities.write",
+            "opportunities.readonly",
+            "calendars.write",
+            "calendars.readonly",
+            "calendars/events.write",
+            "calendars/events.readonly",
+            "campaigns.readonly",
+            "conversations.write",
+            "conversations.readonly",
+            "conversations/message.write",
+            "conversations/message.readonly",
+            "forms.write",
+            "forms.readonly",
+            "surveys.readonly",
+            "triggers.readonly",
+            "funnels.readonly",
+            "websites.readonly",
+            "medias.readonly",
+            "medias.write",
+            "workflows.readonly",
+            "links.write",
+            "links.readonly",
+            "snapshots.readonly",
+            "templates.readonly",
+            "payments/orders.readonly",
+            "payments/orders.write",
+            "payments/transactions.readonly",
+            "payments/subscriptions.readonly",
+            "payments/custom-providers.readonly",
+            "payments/custom-providers.write",
+            "invoices.write",
+            "invoices.readonly",
+            "invoices/schedule.readonly",
+            "invoices/schedule.write",
+            "invoices/template.readonly",
+            "invoices/template.write",
+            "products.readonly",
+            "products/prices.readonly",
+            "blogs.write",
+            "blogs.readonly",
+            "affiliate.write",
+            "affiliate.readonly",
+            "businesses.write",
+            "businesses.readonly",
+            "locations/customFields.readonly",
+            "locations/customValues.readonly",
+            "locations/tasks.readonly",
+            "locations/tags.readonly",
+            "oauth.write",
+            "oauth.readonly",
+            "opportunities/leadValue.readonly",
+            "reporting/phone.readonly",
+            "reporting/adwords.readonly",
+            "reporting/funnels.readonly",
+            "reporting/revenues.readonly",
+            "reporting/appointments.readonly",
+            "reporting/reviews.readonly",
+            "reporting/attributions.readonly",
+            "marketing/agents.readonly"
+        ]
         
-        # Create business user using agency API (minimal approach)
+        # Create business user using agency API with full permissions
         business_user_response = await create_agency_user(
             company_id=request.company_id,
             location_id=location_id,
@@ -4632,7 +4728,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             password="Dummy@123",
             phone=request.phone,
             role="user",
-            permissions=None,  # Let GHL use defaults
+            permissions=full_permissions,
             scopes=location_scopes
         )
         
@@ -4663,7 +4759,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
                 password="Dummy@123",
                 phone="+17166044029",
                 role="user",
-                permissions=None,  # Let GHL use defaults
+                permissions=full_permissions,
                 scopes=location_scopes
             )
         except Exception as e:
