@@ -170,28 +170,50 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
     try:
         async with async_playwright() as p:
             # EXACT SAME browser launch as working script
-            # Production-ready browser config
+            # Browser config with debug mode option
             import os
             is_production = os.environ.get('HEROKU_APP_NAME') or os.environ.get('DYNO')
+            debug_browser = os.environ.get('DEBUG_BROWSER', 'false').lower() == 'true'
             
-            browser = await p.chromium.launch(
-                headless=True if is_production else False,  # Headless in production
-                args=[
-                    '--no-sandbox',  # Required for Heroku
-                    '--disable-setuid-sandbox',  # Required for Heroku
-                    '--disable-dev-shm-usage',  # Prevents crash in production
-                    '--disable-extensions',
+            # Debug mode logging
+            if debug_browser:
+                print("🔍 DEBUG MODE: Browser will be VISIBLE for debugging")
+            elif is_production:
+                print("🚀 PRODUCTION MODE: Browser running headless")
+            else:
+                print("💻 LOCAL MODE: Browser will be visible")
+            
+            browser_args = [
+                '--no-sandbox',  # Required for Heroku
+                '--disable-setuid-sandbox',  # Required for Heroku
+                '--disable-dev-shm-usage',  # Prevents crash in production
+                '--disable-extensions',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--no-first-run',
+                '--disable-default-apps',
+                '--disable-sync',
+                '--incognito'
+            ]
+            
+            # Add debug-friendly args if debug mode
+            if debug_browser:
+                browser_args.extend([
+                    '--start-maximized',  # Make window large
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding'
+                ])
+            else:
+                browser_args.extend([
                     '--disable-gpu',
-                    '--disable-web-security',
-                    '--disable-features=VizDisplayCompositor',
-                    '--no-first-run',
-                    '--disable-default-apps',
-                    '--disable-sync',
                     '--disable-background-timer-throttling',
                     '--disable-backgrounding-occluded-windows',
-                    '--disable-renderer-backgrounding',
-                    '--incognito'
-                ]
+                    '--disable-renderer-backgrounding'
+                ])
+            
+            browser = await p.chromium.launch(
+                headless=False if debug_browser else (True if is_production else False),
+                args=browser_args
             )
             
             # EXACT SAME context as working script
@@ -231,6 +253,17 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
             
             current_url = page.url
             print(f"   📍 Current page: {current_url}")
+            print(f"   📄 Page title: {await page.title()}")
+            
+            # Enhanced debugging info
+            if debug_browser:
+                content = await page.content()
+                print(f"   📄 Page content length: {len(content)} characters")
+                if "login" in content.lower():
+                    print("   ✅ Login page content detected")
+                else:
+                    print("   ⚠️ Login page content not detected")
+                print(f"   🔍 Page loaded state: {await page.evaluate('document.readyState')}")
             
             # EXACT SAME wait as working script
             await page.wait_for_timeout(2000)
@@ -244,9 +277,16 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
                 print("   ✅ Login form detected")
             except:
                 print("   ⚠️ Login form not found, trying alternative approach...")
+                if debug_browser:
+                    print(f"   🔍 Current URL after form detection: {page.url}")
+                    print(f"   🔍 Available input fields: {len(await page.query_selector_all('input'))}")
+                
                 # Try going to main page and then login
                 await page.goto("https://app.gohighlevel.com/", wait_until='networkidle')
                 await page.wait_for_timeout(2000)
+                
+                if debug_browser:
+                    print(f"   🔍 After redirect to main page: {page.url}")
             
             # EXACT SAME login process as working script
             login_success = await _auto_login_working(page, email, password)
