@@ -1,1 +1,1 @@
-web: pip install -r requirements-prod.txt && WEB_CONCURRENCY=2 gunicorn main:app --config gunicorn_config.py --preload
+web: playwright install-deps chromium; pip install -r requirements-prod.txt && WEB_CONCURRENCY=2 gunicorn main:app --config gunicorn_config.py --preload
