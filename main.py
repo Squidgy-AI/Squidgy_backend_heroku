@@ -5063,44 +5063,35 @@ async def run_facebook_integration(request: dict):
             # Add the current directory to the Python path
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             
-            from facebook_integration_service import FacebookIntegrationService, FacebookIntegrationRequest, EmailConfig
+            # Use the existing working Facebook pages API
+            from facebook_pages_api_working import get_facebook_pages, FacebookPagesRequest
             
-            # Configure email for 2FA - Microsoft Outlook
-            email_config = EmailConfig(
-                email_address=os.environ.get("OUTLOOK_2FA_EMAIL", "sa+01@squidgy.ai"),
-                email_password=os.environ.get("OUTLOOK_2FA_PASSWORD", "your-outlook-app-password")
-            )
+            # Update status
+            integration_status[location_id]["current_step"] = "Getting Facebook pages..."
             
-            # Create service
-            service = FacebookIntegrationService(email_config)
-            
-            # Create request
-            fb_request = FacebookIntegrationRequest(
+            # Create request using working API
+            fb_request = FacebookPagesRequest(
                 location_id=request.get('location_id'),
                 user_id=request.get('user_id'),
                 email=request.get('email'),
                 password=request.get('password'),
-                firm_user_id=request.get('firm_user_id'),
-                enable_2fa_bypass=request.get('enable_2fa_bypass', False)
+                firm_user_id=request.get('firm_user_id')
             )
             
-            # Update status
-            integration_status[location_id]["current_step"] = "Logging into GoHighLevel..."
+            # Get Facebook pages using the working API  
+            result = await get_facebook_pages(fb_request)
             
-            # Run integration
-            result = await service.integrate_facebook(fb_request)
-            
-            if result["status"] == "success":
+            if result.status == "success":
                 integration_status[location_id] = {
                     "status": "success",
-                    "pages": result["data"].get("pages", []),
+                    "pages": result.facebook_pages or [],
                     "completed_at": datetime.now().isoformat(),
-                    "approach": "browser_automation"
+                    "approach": "api_direct"
                 }
             else:
                 integration_status[location_id] = {
                     "status": "failed",
-                    "error": result.get("error", "Unknown error"),
+                    "error": result.message or "Failed to get Facebook pages",
                     "failed_at": datetime.now().isoformat()
                 }
             
