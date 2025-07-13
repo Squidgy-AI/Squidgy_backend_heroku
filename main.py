@@ -4497,6 +4497,7 @@ async def create_agency_user(
 ):
     """Create user using agency-level API (like Ovi Colton pattern)"""
     
+    # Build minimal payload (like successful test)
     payload = {
         "companyId": company_id,
         "firstName": first_name,
@@ -4506,11 +4507,15 @@ async def create_agency_user(
         "phone": phone,
         "type": "account",
         "role": role,
-        "locationIds": [location_id],  # Assign to specific location
-        "permissions": permissions or {},
-        "scopes": scopes or [],
-        "scopesAssignedToOnly": []  # Empty for full access
+        "locationIds": [location_id]  # Assign to specific location
     }
+    
+    # Only add permissions and scopes if provided
+    if permissions:
+        payload["permissions"] = permissions
+    if scopes:
+        payload["scopes"] = scopes
+        payload["scopesAssignedToOnly"] = []
     
     headers = {
         "Authorization": f"Bearer {agency_token}",
@@ -4605,82 +4610,18 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         
         # Create users using proper agency-level API with full permissions
         
-        # Full permissions (same as Ovi Colton example)
+        # Use minimal permissions (or omit for defaults)
         full_permissions = {
-            "campaignsEnabled": True,
-            "campaignsReadOnly": False,
             "contactsEnabled": True,
-            "workflowsEnabled": True,
-            "workflowsReadOnly": False,
-            "triggersEnabled": True,
-            "funnelsEnabled": True,
-            "websitesEnabled": True,
             "opportunitiesEnabled": True,
-            "dashboardStatsEnabled": True,
-            "bulkRequestsEnabled": True,
-            "appointmentsEnabled": True,
-            "reviewsEnabled": True,
-            "onlineListingsEnabled": True,
-            "phoneCallEnabled": True,
             "conversationsEnabled": True,
-            "assignedDataOnly": False,
-            "adwordsReportingEnabled": True,
-            "membershipEnabled": True,
-            "facebookAdsReportingEnabled": True,
-            "attributionsReportingEnabled": True,
-            "settingsEnabled": True,
-            "tagsEnabled": True,
-            "leadValueEnabled": True,
-            "marketingEnabled": True,
-            "agentReportingEnabled": True,
-            "botService": True,
-            "socialPlanner": True,
-            "bloggingEnabled": True,
-            "invoiceEnabled": True,
-            "affiliateManagerEnabled": True,
-            "contentAiEnabled": True,
-            "refundsEnabled": True,
-            "recordPaymentEnabled": True,
-            "cancelSubscriptionEnabled": True,
-            "paymentsEnabled": True,
-            "communitiesEnabled": True,
-            "exportPaymentsEnabled": True
+            "dashboardStatsEnabled": True
         }
         
-        # Use only officially documented scopes from GHL API
-        location_scopes = [
-            "contacts.write",
-            "contacts/bulkActions.write", 
-            "opportunities.write",
-            "opportunities/leadValue.readonly",
-            "calendars/events.write",
-            "calendars/events.readonly", 
-            "campaigns.readonly",
-            "conversations.write",
-            "conversations.readonly",
-            "conversations/message.write",
-            "conversations/message.readonly",
-            "workflows.readonly",
-            "triggers.write",
-            "funnels.write",
-            "websites.write",
-            "medias.write",
-            "medias.readonly",
-            "invoices.write",
-            "invoices.readonly",
-            "invoices/schedule.readonly",
-            "invoices/schedule.write",
-            "invoices/template.readonly",
-            "invoices/template.write",
-            "blogs.write",
-            "locations/tags.write",
-            "locations/tags.readonly",
-            "reporting/phone.readonly",
-            "reporting/adwords.readonly",
-            "reporting/attributions.readonly"
-        ]
+        # Use minimal approach - no scopes (proven to work)
+        location_scopes = []
         
-        # Create business user using agency API
+        # Create business user using agency API (minimal approach)
         business_user_response = await create_agency_user(
             company_id=request.company_id,
             location_id=location_id,
@@ -4691,7 +4632,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             password="Dummy@123",
             phone=request.phone,
             role="user",
-            permissions=full_permissions,
+            permissions=None,  # Let GHL use defaults
             scopes=location_scopes
         )
         
@@ -4710,7 +4651,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             phone=request.phone or "+17166044029"  # Use business phone or default
         )
         
-        # Create Soma user using agency API
+        # Create Soma user using agency API (minimal approach)
         soma_user_response = await create_agency_user(
             company_id=request.company_id,
             location_id=location_id,
@@ -4721,7 +4662,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             password="Dummy@123",
             phone="+17166044029",
             role="user",
-            permissions=full_permissions,
+            permissions=None,  # Let GHL use defaults
             scopes=location_scopes
         )
         
