@@ -1,6 +1,10 @@
 # System dependencies for Playwright browsers
+# Try both versioned and unversioned package names
+libatk1.0-0
 libatk1.0-0t64
+libatk-bridge2.0-0
 libatk-bridge2.0-0t64
+libatspi2.0-0
 libatspi2.0-0t64
 libxcomposite1
 libxdamage1
@@ -8,4 +12,13 @@ libxfixes3
 libxrandr2
 libgbm1
 libxkbcommon0
+libasound2
 libasound2t64
+libdrm2
+libxss1
+libgconf-2-4
+libgtk-3-0
+libxtst6
+libxrandr2
+libnss3
+libgdk-pixbuf2.0-0
