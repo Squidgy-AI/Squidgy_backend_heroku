@@ -4482,6 +4482,78 @@ async def create_ghl_user(request: GHLUserCreationRequest):
         logger.error(f"Error creating user: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+async def create_agency_user(
+    company_id: str,
+    location_id: str,
+    agency_token: str,
+    first_name: str,
+    last_name: str,
+    email: str,
+    password: str,
+    phone: str,
+    role: str = "user",
+    permissions: dict = None,
+    scopes: list = None
+):
+    """Create user using agency-level API (like Ovi Colton pattern)"""
+    
+    payload = {
+        "companyId": company_id,
+        "firstName": first_name,
+        "lastName": last_name,
+        "email": email,
+        "password": password,
+        "phone": phone,
+        "type": "account",
+        "role": role,
+        "locationIds": [location_id],  # Assign to specific location
+        "permissions": permissions or {},
+        "scopes": scopes or [],
+        "scopesAssignedToOnly": []  # Empty for full access
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {agency_token}",
+        "Version": "2021-07-28",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://services.leadconnectorhq.com/users/",
+                json=payload,
+                headers=headers,
+                timeout=30.0
+            )
+            
+            if response.status_code == 201:
+                user_data = response.json()
+                return {
+                    "status": "success",
+                    "message": "User created successfully via agency API",
+                    "user_id": user_data.get("id"),
+                    "details": {
+                        "name": f"{first_name} {last_name}",
+                        "email": email,
+                        "role": role,
+                        "location_ids": [location_id]
+                    },
+                    "raw_response": user_data
+                }
+            else:
+                error_text = response.text
+                logger.error(f"Failed to create user via agency API: {response.status_code} - {error_text}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to create user: {response.status_code} - {error_text}"
+                )
+                
+    except Exception as e:
+        logger.error(f"Exception in agency user creation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"User creation failed: {str(e)}")
+
 @app.post("/api/ghl/create-subaccount-and-user")
 async def create_subaccount_and_user(request: GHLSubAccountRequest):
     """Create both sub-account and user in one call - triggered after Solar setup completion"""
@@ -4527,24 +4599,74 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             phone=request.phone
         )
         
-        # Try to create business user
-        try:
-            business_user_response = await create_ghl_user(business_user_request)
-        except Exception as e:
-            if "user with this email already exists" in str(e).lower():
-                logger.warning(f"Business user already exists: {request.prospect_email}")
-                # Create a mock response for existing user
-                business_user_response = {
-                    "status": "success",
-                    "message": "Using existing business user",
-                    "user_id": f"existing_business_user_{location_id[:8]}",
-                    "details": {
-                        "name": f"{request.prospect_first_name} {request.prospect_last_name}",
-                        "email": request.prospect_email
-                    }
-                }
-            else:
-                raise e
+        # Create users using proper agency-level API with full permissions
+        
+        # Full permissions (same as Ovi Colton example)
+        full_permissions = {
+            "campaignsEnabled": True,
+            "campaignsReadOnly": False,
+            "contactsEnabled": True,
+            "workflowsEnabled": True,
+            "workflowsReadOnly": False,
+            "triggersEnabled": True,
+            "funnelsEnabled": True,
+            "websitesEnabled": True,
+            "opportunitiesEnabled": True,
+            "dashboardStatsEnabled": True,
+            "bulkRequestsEnabled": True,
+            "appointmentsEnabled": True,
+            "reviewsEnabled": True,
+            "onlineListingsEnabled": True,
+            "phoneCallEnabled": True,
+            "conversationsEnabled": True,
+            "assignedDataOnly": False,
+            "adwordsReportingEnabled": True,
+            "membershipEnabled": True,
+            "facebookAdsReportingEnabled": True,
+            "attributionsReportingEnabled": True,
+            "settingsEnabled": True,
+            "tagsEnabled": True,
+            "leadValueEnabled": True,
+            "marketingEnabled": True,
+            "agentReportingEnabled": True,
+            "botService": True,
+            "socialPlanner": True,
+            "bloggingEnabled": True,
+            "invoiceEnabled": True,
+            "affiliateManagerEnabled": True,
+            "contentAiEnabled": True,
+            "refundsEnabled": True,
+            "recordPaymentEnabled": True,
+            "cancelSubscriptionEnabled": True,
+            "paymentsEnabled": True,
+            "communitiesEnabled": True,
+            "exportPaymentsEnabled": True
+        }
+        
+        # Location-level scopes
+        location_scopes = [
+            "contacts.write", "contacts.readonly", "opportunities.write", "opportunities.readonly",
+            "calendars.write", "calendars.readonly", "calendars/events.write", "calendars/events.readonly",
+            "campaigns.readonly", "conversations.write", "conversations.readonly",
+            "conversations/message.write", "conversations/message.readonly", "forms.write", "forms.readonly",
+            "surveys.readonly", "triggers.readonly", "funnels.readonly", "websites.readonly",
+            "medias.readonly", "medias.write", "workflows.readonly", "links.write", "links.readonly"
+        ]
+        
+        # Create business user using agency API
+        business_user_response = await create_agency_user(
+            company_id=request.company_id,
+            location_id=location_id,
+            agency_token=request.agency_token,
+            first_name=request.prospect_first_name,
+            last_name=request.prospect_last_name,
+            email=request.prospect_email,
+            password="Dummy@123",
+            phone=request.phone,
+            role="user",
+            permissions=full_permissions,
+            scopes=location_scopes
+        )
         
         # Second user: Soma Addakula with location-specific email
         # Use location-specific email to avoid conflicts
@@ -4561,29 +4683,20 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             phone=request.phone or "+17166044029"  # Use business phone or default
         )
         
-        # Try to create Soma user
-        try:
-            soma_user_response = await create_ghl_user(soma_user_request)
-        except Exception as e:
-            if "user with this email already exists" in str(e).lower():
-                logger.warning("Soma user already exists, need to assign to new location")
-                
-                # Since Soma user exists, we need to find their ID and assign to this location
-                # For now, we'll create a response indicating existing user
-                # In the future, implement proper user search and assignment
-                soma_user_response = {
-                    "status": "success",
-                    "message": "Existing Soma user - needs manual assignment to location",
-                    "user_id": "existing_soma_needs_assignment",
-                    "details": {
-                        "name": "Soma Addakula",
-                        "email": "somashekhar34@gmail.com",
-                        "note": "User exists but not assigned to this location"
-                    }
-                }
-                logger.warning(f"Soma user exists but not assigned to location {location_id}")
-            else:
-                raise e
+        # Create Soma user using agency API
+        soma_user_response = await create_agency_user(
+            company_id=request.company_id,
+            location_id=location_id,
+            agency_token=request.agency_token,
+            first_name="Soma",
+            last_name="Addakula",
+            email="somashekhar34@gmail.com",
+            password="Dummy@123",
+            phone="+17166044029",
+            role="user",
+            permissions=full_permissions,
+            scopes=location_scopes
+        )
         
         # Return combined response with SOMA's credentials for downstream Facebook integration
         return {
