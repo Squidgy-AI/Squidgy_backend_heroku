@@ -240,7 +240,7 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
             
             # Check if we can see login form
             try:
-                await page.wait_for_selector('input[type="email"], input[name="email"]', timeout=5000)
+                await page.wait_for_selector('input[type="email"], input[name="email"]', timeout=30000)  # 30 seconds
                 print("   ✅ Login form detected")
             except:
                 print("   ⚠️ Login form not found, trying alternative approach...")
@@ -406,12 +406,12 @@ async def _wait_for_dashboard_working(page):
     dashboard_indicators = ['text=Dashboard', 'text=Conversations', 'text=Opportunities']
     for indicator in dashboard_indicators:
         try:
-            await page.wait_for_selector(indicator, timeout=15000)  # Longer timeout for MFA
+            await page.wait_for_selector(indicator, timeout=120000)  # 2 minutes for MFA
             print("   ✅ Dashboard loaded")
             return
         except:
             continue
-    await page.wait_for_load_state('networkidle', timeout=15000)
+    await page.wait_for_load_state('networkidle', timeout=60000)  # 1 minute for network idle
 
 async def _trigger_requests_working(page):
     """EXACT SAME request triggers as working script"""
@@ -449,7 +449,7 @@ async def fetch_facebook_pages_api(jwt_token: str, location_id: str) -> Dict:
     }
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:  # Increased to 2 minutes
             pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{location_id}/allPages?limit=20"
             response = await client.get(pages_url, headers=headers)
             

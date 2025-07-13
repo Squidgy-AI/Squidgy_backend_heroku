@@ -134,8 +134,8 @@ class Enhanced2FAService:
             else:
                 self._log("❌ 2FA Failed", "2FA code input or verification failed")
                 self._log("💡 Manual Input", "Please manually enter the 2FA code in browser")
-                # Give user 60 seconds to manually input the code
-                await asyncio.sleep(60)
+                # Give user 3 minutes to manually input the code
+                await asyncio.sleep(180)
                 return {"success": True, "2fa_required": True, "manual_input": True}
                 
         except Exception as e:
@@ -208,8 +208,8 @@ class Enhanced2FAService:
         
         print("⚡ Starting FAST email monitoring for OTP...")
         
-        # Reduced timeout for faster response
-        max_attempts = 30  # 30 seconds total
+        # Extended timeout for production reliability
+        max_attempts = 120  # 2 minutes total
         
         for attempt in range(max_attempts):
             self._log("📧 Quick Check", f"Fast OTP check ({attempt + 1}/{max_attempts})...")
