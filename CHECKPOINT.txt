@@ -1,0 +1,33 @@
+========================================
+CHECKPOINT: GHL & FACEBOOK INTEGRATION
+Backend Status: WORKING ✅
+Date: 2025-01-13
+========================================
+
+GHL SETUP: ✅ WORKING
+- Sub-account creation: WORKING
+- Business user: SKIPPED (to avoid duplicates)
+- Soma user: CREATED with unique email per location
+- Email format: somashekhar34+{location_id}@gmail.com
+- Permissions: Full 94 validated scopes applied
+- User appears in GHL My Staff section
+
+FACEBOOK OAUTH: ✅ READY
+- Login endpoint: /api/facebook/login
+- Pages endpoint: /api/facebook/pages
+- Integration credentials passed to frontend
+
+KEY FIXES APPLIED:
+- Fixed scope validation errors (using only valid GHL scopes)
+- Fixed country code validation (US not USA)
+- Skip business user creation to avoid conflicts
+- Create unique Soma user per location
+- Real user IDs returned (no fake/mock IDs)
+
+ENDPOINTS:
+- POST /api/ghl/create-subaccount-and-user
+- POST /api/facebook/login
+- POST /api/facebook/pages
+
+STATUS: Production Ready ✅
+========================================
