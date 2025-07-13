@@ -4643,27 +4643,28 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             "exportPaymentsEnabled": True
         }
         
-        # Location-level scopes (from working Ovi Colton example)
+        # Official GHL API scopes (from documentation)
         location_scopes = [
             "campaigns.readonly", "campaigns.write", "calendars/events.write",
             "calendars/events.readonly", "contacts.write", "contacts/bulkActions.write",
             "workflows.readonly", "workflows.write", "triggers.write", "funnels.write",
-            "websites.write", "opportunities.write", "opportunities/leadValue.readonly",
+            "websites.write", "medias.write", "medias.readonly", "opportunities.write", 
+            "opportunities/leadValue.readonly", "opportunities/bulkActions.write",
             "reporting/phone.readonly", "reporting/adwords.readonly",
             "reporting/facebookAds.readonly", "reporting/attributions.readonly",
-            "reporting/agent.readonly", "payments.write", "payments/refunds.write",
-            "payments/records.write", "payments/exports.write",
-            "payments/subscriptionsCancel.write", "invoices.write", "invoices.readonly",
-            "invoices/schedule.readonly", "invoices/schedule.write",
-            "invoices/template.readonly", "invoices/template.write",
+            "reporting/agent.readonly", "reporting/reports.write", "reporting/reports.readonly",
+            "payments.write", "payments/refunds.write", "payments/records.write", 
+            "payments/exports.write", "payments/subscriptionsCancel.write", 
+            "invoices.write", "invoices.readonly", "invoices/schedule.readonly", 
+            "invoices/schedule.write", "invoices/template.readonly", "invoices/template.write",
             "reputation/review.write", "reputation/listing.write", "conversations.write",
             "conversations.readonly", "conversations/message.readonly",
             "conversations/message.write", "contentAI.write", "dashboard/stats.readonly",
             "locations/tags.write", "locations/tags.readonly", "marketing.write",
-            "eliza.write", "settings.write", "socialplanner/post.write",
-            "marketing/affiliate.write", "blogs.write", "membership.write",
-            "communities.write", "certificates.write", "certificates.readonly",
-            "adPublishing.write", "adPublishing.readonly"
+            "settings.write", "socialplanner/post.write", "socialplanner/account.readonly",
+            "socialplanner/account.write", "marketing/affiliate.write", "blogs.write", 
+            "membership.write", "communities.write", "certificates.write", 
+            "certificates.readonly", "adPublishing.write", "adPublishing.readonly"
         ]
         
         # Create business user using agency API
