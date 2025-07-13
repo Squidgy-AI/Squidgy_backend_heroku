@@ -170,16 +170,27 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
     try:
         async with async_playwright() as p:
             # EXACT SAME browser launch as working script
+            # Production-ready browser config
+            import os
+            is_production = os.environ.get('HEROKU_APP_NAME') or os.environ.get('DYNO')
+            
             browser = await p.chromium.launch(
-                headless=False,
+                headless=True if is_production else False,  # Headless in production
                 args=[
-                    '--start-maximized',
-                    '--incognito',  # Incognito mode
-                    '--disable-web-security',  # Allow cross-origin
-                    '--disable-features=VizDisplayCompositor',  # Better rendering
-                    '--no-first-run',  # Skip first run setup
-                    '--disable-default-apps',  # No default apps
-                    '--disable-sync'  # No sync with existing profile
+                    '--no-sandbox',  # Required for Heroku
+                    '--disable-setuid-sandbox',  # Required for Heroku
+                    '--disable-dev-shm-usage',  # Prevents crash in production
+                    '--disable-extensions',
+                    '--disable-gpu',
+                    '--disable-web-security',
+                    '--disable-features=VizDisplayCompositor',
+                    '--no-first-run',
+                    '--disable-default-apps',
+                    '--disable-sync',
+                    '--disable-background-timer-throttling',
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding',
+                    '--incognito'
                 ]
             )
             
