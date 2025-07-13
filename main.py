@@ -4643,13 +4643,8 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             "exportPaymentsEnabled": True
         }
         
-        # Use minimal basic scopes to avoid validation errors
-        location_scopes = [
-            "contacts.write",
-            "opportunities.write", 
-            "conversations.write",
-            "calendars/events.write"
-        ]
+        # Use empty scopes array (will disable all scopes but allow user creation)
+        location_scopes = []
         
         # Create business user using agency API
         business_user_response = await create_agency_user(
