@@ -147,7 +147,7 @@ def create_user(
         data=json.dumps(payload)
     )
     
-    if response.status_code == 200:
+    if response.status_code in [200, 201]:  # Accept both 200 and 201 as success
         return response.json()
     else:
         raise requests.exceptions.RequestException(
