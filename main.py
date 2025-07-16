@@ -28,6 +28,19 @@ from agent_config import get_agent_config, AGENTS
 from Website.web_scrape import capture_website_screenshot, get_website_favicon_async
 from embedding_service import get_embedding
 from tools_connector import tools
+from ghl_dynamic_integration import (
+    complete_ghl_facebook_setup_from_request,
+    GHLSubAccountRequest as DynamicGHLSubAccountRequest,
+    GHLSubAccountResponse,
+    GHLUserRequest as DynamicGHLUserRequest,
+    GHLUserResponse,
+    FacebookConnectionRequest as DynamicFacebookConnectionRequest,
+    FacebookConnectionResponse,
+    CompleteSetupRequest as DynamicCompleteSetupRequest,
+    create_ghl_subaccount,
+    create_ghl_user,
+    connect_facebook_with_dynamic_ids
+)
 from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
 from solar_api_connector import SolarApiConnector, SolarInsightsRequest as SolarInsightsReq, SolarDataLayersRequest as SolarDataLayersReq, get_solar_analysis_for_agent
 from facebook_pages_api_working import FacebookPagesRequest, FacebookPagesResponse, get_facebook_pages
@@ -4359,128 +4372,7 @@ async def create_ghl_subaccount(request: SecureGHLSubAccountRequest):
         logger.error(f"Error creating sub-account: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/ghl/create-user")
-async def create_ghl_user(request: GHLUserCreationRequest):
-    """Create a GoHighLevel user (OVI user only, not admin)"""
-    try:
-        # Full permissions for the user
-         # Set default values for missing fields
-        timestamp = datetime.now().strftime("%H%M%S")
-        first_name = request.first_name or "Ovi"
-        last_name = request.last_name or "Colton"
-        password = request.password or "Dummy@123"
-        phone = request.phone or "+17166044029"
-
-        # Generate unique email to avoid conflicts if not provided
-        email = request.email or f"ovi+{timestamp}@test-solar.com"
-
-        # Use custom permissions if provided, otherwise use default permissions
-        permissions = request.custom_permissions if request.custom_permissions else {
-            "campaignsEnabled": True,
-            "campaignsReadOnly": False,
-            "contactsEnabled": True,
-            "workflowsEnabled": True,
-            "workflowsReadOnly": False,
-            "triggersEnabled": True,
-            "funnelsEnabled": True,
-            "websitesEnabled": True,
-            "opportunitiesEnabled": True,
-            "dashboardStatsEnabled": True,
-            "bulkRequestsEnabled": True,
-            "appointmentsEnabled": True,
-            "reviewsEnabled": True,
-            "onlineListingsEnabled": True,
-            "phoneCallEnabled": True,
-            "conversationsEnabled": True,
-            "assignedDataOnly": False,
-            "adwordsReportingEnabled": True,
-            "membershipEnabled": True,
-            "facebookAdsReportingEnabled": True,
-            "attributionsReportingEnabled": True,
-            "settingsEnabled": True,
-            "tagsEnabled": True,
-            "leadValueEnabled": True,
-            "marketingEnabled": True,
-            "agentReportingEnabled": True,
-            "botService": True,
-            "socialPlanner": True,
-            "bloggingEnabled": True,
-            "invoiceEnabled": True,
-            "affiliateManagerEnabled": True,
-            "contentAiEnabled": True,
-            "refundsEnabled": True,
-            "recordPaymentEnabled": True,
-            "cancelSubscriptionEnabled": True,
-            "paymentsEnabled": True,
-            "communitiesEnabled": True,
-            "exportPaymentsEnabled": True
-        }
-        
-        # Prepare headers
-        headers = {
-            "Authorization": f"Bearer {request.agency_token}",
-            "Version": "2021-07-28",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        
-        # Use the actual user email for downstream Facebook integration
-        # This ensures the same credentials are used throughout the flow
-        
-        # Prepare payload for Soma's user account
-        payload = {
-            "companyId": request.company_id,
-            "firstName": first_name,
-            "lastName": last_name,
-            "email": email,
-            "password": password,
-            "phone": phone,
-            "type": request.account_type,
-            "role": request.role,
-            "locationIds": [request.location_id],
-            "permissions": permissions
-        }
-        
-    
-        # Make the API call
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                "https://services.leadconnectorhq.com/users/",
-                headers=headers,
-                json=payload
-            )
-        
-        if response.status_code in [200, 201]:
-            data = response.json()
-            user_id = data.get('id')
-            
-            logger.info(f"✅ User created successfully: {user_id}")
-            
-            return {
-                "status": "success",
-                "user_id": user_id,
-                "message": "GoHighLevel user created successfully!",
-                "details": {
-                    "name": f"{request.first_name} {request.last_name}",
-                    "email": email,
-                    "role": "user",
-                    "location_id": request.location_id,
-                    "created_at": datetime.now().isoformat()
-                }
-            }
-        else:
-            logger.error(f"Failed to create user: {response.status_code} - {response.text}")
-            raise HTTPException(
-                status_code=response.status_code,
-                detail=f"Failed to create user: {response.text}"
-            )
-            
-    except httpx.TimeoutException:
-        logger.error("Timeout while creating user")
-        raise HTTPException(status_code=504, detail="Timeout while creating user")
-    except Exception as e:
-        logger.error(f"Error creating user: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+# Old create_ghl_user function removed to avoid conflict with dynamic integration
 
 async def create_agency_user(
     company_id: str,
@@ -5262,11 +5154,108 @@ async def connect_facebook_page(request: dict):
             "message": f"Error connecting page: {str(e)}"
         }
 
+# =============================================================================
+# GHL DYNAMIC INTEGRATION ENDPOINTS
+# =============================================================================
+
+@app.post("/api/ghl/create-subaccount", response_model=GHLSubAccountResponse)
+async def create_ghl_subaccount_endpoint(request: DynamicGHLSubAccountRequest):
+    """
+    Create a new GHL sub-account and return dynamic location_id
+    This replaces the static location_id with a dynamic one
+    """
+    try:
+        logger.info(f"Creating GHL sub-account for: {request.client_name}")
+        response = await create_ghl_subaccount(request)
+        
+        if response.success:
+            logger.info(f"✅ Sub-account created successfully. Location ID: {response.location_id}")
+        else:
+            logger.error(f"❌ Sub-account creation failed: {response.message}")
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in create sub-account endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/ghl/create-user", response_model=GHLUserResponse)
+async def create_ghl_user_endpoint(request: DynamicGHLUserRequest):
+    """
+    Create a new GHL user in specified location and return dynamic user_id
+    This replaces the static user_id with a dynamic one
+    """
+    try:
+        logger.info(f"Creating GHL user: {request.email} in location: {request.location_id}")
+        response = await create_ghl_user(request)
+        
+        if response.success:
+            logger.info(f"✅ User created successfully. User ID: {response.user_id}")
+        else:
+            logger.error(f"❌ User creation failed: {response.message}")
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in create user endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/facebook/connect-dynamic", response_model=FacebookConnectionResponse)
+async def connect_facebook_dynamic_endpoint(request: DynamicFacebookConnectionRequest):
+    """
+    Connect Facebook pages using dynamic GHL location_id and user_id
+    This uses the dynamic IDs instead of static ones
+    """
+    try:
+        logger.info(f"Connecting Facebook with dynamic IDs - Location: {request.location_id}, User: {request.ghl_user_id}")
+        response = await connect_facebook_with_dynamic_ids(request)
+        
+        if response.success:
+            logger.info(f"✅ Facebook connected successfully with dynamic IDs")
+        else:
+            logger.error(f"❌ Facebook connection failed: {response.message}")
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in Facebook dynamic connection endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# CompleteSetupRequest model is now imported from ghl_dynamic_integration
+
+@app.post("/api/ghl/complete-setup")
+async def complete_ghl_facebook_setup_endpoint(request: DynamicCompleteSetupRequest):
+    """
+    Complete end-to-end setup: Create sub-account -> Create user -> Connect Facebook
+    This is the main endpoint that replaces static IDs with dynamic ones
+    """
+    try:
+        logger.info(f"🚀 Starting complete GHL + Facebook setup for: {request.client_name}")
+        
+        # Use the dynamic integration function that handles the complete flow
+        response = await complete_ghl_facebook_setup_from_request(request)
+        
+        if response['success']:
+            logger.info(f"🎉 Complete setup successful! Dynamic IDs: {response['dynamic_ids']}")
+        else:
+            logger.error(f"❌ Setup failed at step: {response.get('step_failed', 'unknown')}")
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in complete setup endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================================
+# FACEBOOK INTEGRATION ENDPOINTS (ORIGINAL)
+# =============================================================================
+
 @app.post("/api/facebook/get-pages", response_model=FacebookPagesResponse)
 async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
     """
     Main Facebook integration endpoint with 2FA automation
     Handles browser automation, JWT extraction, and Facebook pages retrieval
+    ⚠️  NOTE: This endpoint still uses static IDs. Use /api/facebook/connect-dynamic for dynamic IDs
     """
     return await get_facebook_pages(request)
 
