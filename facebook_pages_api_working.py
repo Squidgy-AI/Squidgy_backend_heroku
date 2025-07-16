@@ -172,8 +172,40 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
             # EXACT SAME browser launch as working script
             # Browser config with debug mode option
             import os
+            import subprocess
+            import sys
+            
+            # Check if browsers are installed and install if needed
+            # First, set up environment variables
             is_production = os.environ.get('HEROKU_APP_NAME') or os.environ.get('DYNO')
             debug_browser = os.environ.get('DEBUG_BROWSER', 'false').lower() == 'true'
+            
+            # Try to install browsers if missing
+            print("🔧 Checking if Playwright browsers are installed...")
+            try:
+                # Try to import the install module
+                from playwright.sync_api import sync_playwright
+                with sync_playwright() as p:
+                    # Just checking if browser exists
+                    try:
+                        p.chromium.executable_path
+                        print("✅ Playwright browsers already installed")
+                    except Exception:
+                        print("⚠️ Playwright browsers not found, installing now...")
+                        # Install browsers
+                        result = subprocess.run(
+                            [sys.executable, "-m", "playwright", "install", "chromium"],
+                            capture_output=True,
+                            text=True
+                        )
+                        if result.returncode == 0:
+                            print("✅ Successfully installed Playwright browsers")
+                        else:
+                            print(f"❌ Failed to install browsers: {result.stderr}")
+            except ImportError:
+                print("⚠️ Could not import Playwright sync API, skipping browser check")
+            except Exception as e:
+                print(f"⚠️ Error checking browser installation: {e}")
             
             # Debug mode logging
             if debug_browser:
@@ -211,10 +243,34 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
                     '--disable-renderer-backgrounding'
                 ])
             
-            browser = await p.chromium.launch(
-                headless=False if debug_browser else (True if is_production else False),
-                args=browser_args
-            )
+            try:
+                browser = await p.chromium.launch(
+                    headless=False if debug_browser else (True if is_production else False),
+                    args=browser_args
+                )
+            except Exception as e:
+                print(f"❌ Browser launch failed: {e}")
+                print("⚠️ Attempting to install browsers again...")
+                # Try installing browsers directly
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-m", "playwright", "install", "--with-deps", "chromium"],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode == 0:
+                        print("✅ Successfully installed Playwright browsers with dependencies")
+                        # Try launching again
+                        browser = await p.chromium.launch(
+                            headless=False if debug_browser else (True if is_production else False),
+                            args=browser_args
+                        )
+                    else:
+                        print(f"❌ Failed to install browsers: {result.stderr}")
+                        raise Exception("Failed to install Playwright browsers after retry")
+                except Exception as inner_e:
+                    print(f"❌ Browser installation failed: {inner_e}")
+                    raise Exception(f"Failed to install and launch browser: {e} -> {inner_e}")
             
             # EXACT SAME context as working script
             context = await browser.new_context(
@@ -342,13 +398,13 @@ async def auto_extract_jwt_token_working_approach(email: str, password: str, loc
             else:
                 print("   ❌ Could not extract access token")
                 return None
-                
     except ImportError:
         print("   ❌ Browser automation not available")
         print("   💡 Please install: pip install playwright")
         return None
     except Exception as e:
-        print(f"   ❌ Error: {e}")
+        print(f"   ❌ Error in browser automation: {e}")
+        print("   💡 Try installing manually with: pip install playwright && playwright install")
         return None
 
 async def _auto_login_working(page, email, password):

@@ -10,7 +10,7 @@ import os
 import random
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 
 # Import GHL functions
 from Tools.GHL.Sub_Accounts.create_sub_acc import create_sub_acc
@@ -57,13 +57,20 @@ class GHLUserRequest(BaseModel):
 
 class FacebookConnectionRequest(BaseModel):
     """Request model for connecting Facebook with dynamic GHL IDs"""
-    user_id: str
     location_id: str  # Dynamic location ID
     ghl_user_id: str  # Dynamic user ID
     email: str  # Required by FacebookPagesRequest
     password: str  # Required by FacebookPagesRequest
     jwt_token: Optional[str] = None
     manual_token: Optional[bool] = False
+    firm_user_id: Optional[str] = None  # Added for frontend compatibility
+    user_id: Optional[str] = None  # Made optional to use ghl_user_id as fallback
+    
+    @validator('user_id', pre=True, always=True)
+    def set_user_id(cls, v, values):
+        # Use ghl_user_id as fallback if user_id is not provided
+        return v or values.get('ghl_user_id')
+
     access_token: Optional[str] = None
 
 class CompleteSetupRequest(BaseModel):
@@ -360,9 +367,13 @@ async def connect_facebook_with_dynamic_ids(request: FacebookConnectionRequest) 
             location_id=request.location_id,  # Use dynamic location_id
             email=request.email,  # Add required email field
             password=request.password,  # Add required password field
-            firm_user_id=request.ghl_user_id,  # Use dynamic user_id as firm_user_id
+            firm_user_id=request.firm_user_id or request.ghl_user_id,  # Use provided firm_user_id or fall back to ghl_user_id
             manual_jwt_token=request.jwt_token  # Use manual_jwt_token field name
         )
+        
+        # Log the request parameters for debugging
+        logger.info(f"Facebook request parameters: user_id={request.user_id}, location_id={request.location_id}, firm_user_id={request.firm_user_id or request.ghl_user_id}")
+        
         
         # Call Facebook integration
         facebook_response = await get_facebook_pages(facebook_request)
