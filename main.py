@@ -4993,9 +4993,8 @@ integration_status = {}
 async def integrate_facebook(request: dict, background_tasks: BackgroundTasks):
     """Start Facebook integration with browser automation"""
     
-    # Get location_id from request then override with correct one
-    request_location_id = request.get('location_id')  # Get it but don't use it
-    location_id = 'rlRJ1n5Hoy3X53WDOJlq'  # Always use the correct one
+    # Use dynamic location_id from request
+    location_id = request.get('location_id')
     if not location_id:
         raise HTTPException(status_code=400, detail="location_id required")
     
@@ -5018,22 +5017,23 @@ async def integrate_facebook(request: dict, background_tasks: BackgroundTasks):
     }
 
 async def run_facebook_integration(request: dict):
-    """Run the actual Facebook integration with browser automation using working approach from commit c7935fc"""
+    """Run the actual Facebook integration with browser automation using dynamic credentials"""
     
-    # Get request location_id then override with correct one
-    request_location_id = request.get('location_id')  # Get it but don't use it
-    location_id = 'rlRJ1n5Hoy3X53WDOJlq'  # Always use the correct one
+    # Use dynamic values from request
+    location_id = request.get('location_id')
+    if not location_id:
+        raise HTTPException(status_code=400, detail="location_id required")
     
     try:
         # Update status 
         integration_status[location_id]["current_step"] = "Starting Facebook integration with Gmail 2FA..."
         
-        # Get request values then override with correct working credentials
+        # Use dynamic credentials from request
         fb_request = FacebookPagesRequest(
-            location_id='rlRJ1n5Hoy3X53WDOJlq',  # Override: Force correct location_id
-            user_id='MHwz5yMaG0JrTfGXjvxB',     # Override: Force correct user_id
-            email='somashekhar34+rlRJ1n5H@gmail.com',  # Override: Force correct email
-            password='Dummy@123',               # Override: Force correct password
+            location_id=request.get('location_id'),
+            user_id=request.get('user_id'),
+            email=request.get('email'),
+            password=request.get('password'),
             firm_user_id=request.get('firm_user_id', '80b957fc-de1d-4f28-920c-41e0e2e28e5e'),
             manual_jwt_token=None  # Let it auto-extract the JWT
         )
@@ -5068,23 +5068,21 @@ async def run_facebook_integration(request: dict):
 
 @app.get("/api/facebook/integration-status")
 async def get_integration_status_default():
-    """Get integration status for the default location"""
-    return await get_integration_status('rlRJ1n5Hoy3X53WDOJlq')
+    """Get integration status - requires location_id parameter"""
+    raise HTTPException(status_code=400, detail="location_id parameter required. Use /api/facebook/integration-status/{location_id}")
 
-@app.post("/api/facebook/integration-status/reset")
-async def reset_integration_status():
-    """Reset/clear stuck integration status"""
-    correct_location_id = 'rlRJ1n5Hoy3X53WDOJlq'
-    if correct_location_id in integration_status:
-        del integration_status[correct_location_id]
-    return {"status": "reset", "message": "Integration status cleared"}
+@app.post("/api/facebook/integration-status/reset/{location_id}")
+async def reset_integration_status(location_id: str):
+    """Reset/clear stuck integration status for specific location"""
+    if location_id in integration_status:
+        del integration_status[location_id]
+    return {"status": "reset", "message": f"Integration status cleared for location {location_id}"}
 
 @app.get("/api/facebook/pages/{location_id}")
 async def get_facebook_pages_from_db(location_id: str):
     """Get Facebook pages directly from database (bypasses status check)"""
     
     try:
-        correct_location_id = 'rlRJ1n5Hoy3X53WDOJlq'  # Use correct location_id
         
         # Import here to avoid circular imports
         import httpx
@@ -5129,26 +5127,19 @@ async def get_facebook_pages_from_db(location_id: str):
 
 @app.get("/api/facebook/integration-status/{location_id}")
 async def get_integration_status(location_id: str):
-    """Get the current integration status - supports both old and new location_ids"""
+    """Get the current integration status for the specified location_id"""
     
-    # Always use the correct location_id for status lookup
-    correct_location_id = 'rlRJ1n5Hoy3X53WDOJlq'
-    
-    # Check if status exists for the correct location_id
-    if correct_location_id in integration_status:
-        status_data = integration_status[correct_location_id].copy()
-        # Add location_id info to response for frontend compatibility
-        status_data["requested_location_id"] = location_id
-        status_data["actual_location_id"] = correct_location_id
+    # Check if status exists for the requested location_id
+    if location_id in integration_status:
+        status_data = integration_status[location_id].copy()
+        status_data["location_id"] = location_id
         return status_data
     
-    # If no status found, return not_found but with guidance
+    # If no status found, return not_found
     return {
         "status": "not_found", 
         "message": "No integration found for this location",
-        "requested_location_id": location_id,
-        "correct_location_id": correct_location_id,
-        "hint": f"Try checking status with location_id: {correct_location_id}"
+        "location_id": location_id
     }
 
 @app.post("/api/facebook/connect-page")

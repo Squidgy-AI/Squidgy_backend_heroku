@@ -14,6 +14,12 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from playwright.async_api import async_playwright, Page
 
+def get_base_2fa_email():
+    """Get the base email for 2FA access (without +extension)"""
+    import os
+    base_email = os.environ.get("GHL_AUTOMATION_2FA_EMAIL", "somashekhar34@gmail.com")
+    return base_email
+
 class GmailEmailConfig:
     """Configuration for Gmail email monitoring"""
     
@@ -22,9 +28,9 @@ class GmailEmailConfig:
         self.imap_server = "imap.gmail.com"
         self.imap_port = 993
         
-        # Simple Gmail configuration
+        # Dynamic Gmail configuration - use base email for 2FA access
         import os
-        self.email_address = os.environ.get("GMAIL_2FA_EMAIL", "somashekhar34+rlRJ1n5H@gmail.com")
+        self.email_address = get_base_2fa_email()  # Use base email for 2FA access
         self.email_password = os.environ.get("GMAIL_2FA_APP_PASSWORD", "ytmfxlelgyojxjmf")
         self.account_id = "gmail"
         
@@ -250,7 +256,7 @@ class Enhanced2FAService:
             import os
             from datetime import datetime, timedelta
             
-            email_address = os.environ.get("GMAIL_2FA_EMAIL", "somashekhar34+rlRJ1n5H@gmail.com")
+            email_address = get_base_2fa_email()  # Use base email for 2FA access
             email_password = os.environ.get("GMAIL_2FA_APP_PASSWORD", "ytmfxlelgyojxjmf")
             
             # Check if we have valid Gmail credentials  
