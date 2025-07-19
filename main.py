@@ -3962,48 +3962,25 @@ async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str]
 async def create_or_update_agent_setup(request: AgentSetupRequest):
     """Create or update agent setup for a user"""
     try:
-        # For setup_type specific updates, we need to consider the unique constraint
-        # Try to update first using firm_user_id, agent_id, and setup_type
-        update_result = supabase.table('squidgy_agent_business_setup')\
-            .update({
+        # Use proper upsert with correct conflict resolution to prevent race conditions
+        result = supabase.table('squidgy_agent_business_setup')\
+            .upsert({
+                'firm_user_id': request.user_id,
+                'agent_id': request.agent_id,
                 'agent_name': request.agent_name,
                 'setup_json': request.setup_data,
-                'is_enabled': request.is_enabled,
+                'setup_type': request.setup_type,
                 'session_id': request.session_id,
+                'is_enabled': request.is_enabled,
                 'updated_at': datetime.now().isoformat()
-            })\
-            .eq('firm_user_id', request.user_id)\
-            .eq('agent_id', request.agent_id)\
-            .eq('setup_type', request.setup_type)\
+            }, on_conflict='firm_user_id,agent_id,setup_type')\
             .execute()
         
-        # If no rows updated, insert new record
-        if not update_result.data or len(update_result.data) == 0:
-            insert_result = supabase.table('squidgy_agent_business_setup')\
-                .insert({
-                    'firm_user_id': request.user_id,
-                    'agent_id': request.agent_id,
-                    'agent_name': request.agent_name,
-                    'setup_json': request.setup_data,
-                    'setup_type': request.setup_type,
-                    'session_id': request.session_id,
-                    'is_enabled': request.is_enabled,
-                    'created_at': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                })\
-                .execute()
-            
-            return {
-                "status": "success",
-                "action": "created",
-                "agent": insert_result.data[0] if insert_result.data else None
-            }
-        else:
-            return {
-                "status": "success", 
-                "action": "updated",
-                "agent": update_result.data[0] if update_result.data else None
-            }
+        return {
+            "status": "success",
+            "action": "upserted",
+            "agent": result.data[0] if result.data else None
+        }
             
     except Exception as e:
         logger.error(f"Error creating/updating agent setup: {str(e)}")
