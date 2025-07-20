@@ -2833,31 +2833,16 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
             session_id=request.session_id
         )
         
-        # If successful and user_id provided, save metadata to database
+        # If successful and user_id provided, update business profile
         if result['status'] == 'success' and request.user_id:
             try:
-                # Save to website_screenshots table
-                supabase.table('website_screenshots').upsert({
-                    'user_id': request.user_id,
-                    'session_id': request.session_id or str(uuid.uuid4()),
-                    'url': request.url,
-                    'screenshot_path': result['path'],
-                    'public_url': result.get('public_url'),
-                    'created_at': datetime.now().isoformat()
-                }).execute()
-                
-                # Update business_profiles table with screenshot
-                try:
-                    supabase.table('business_profiles').update({
-                        'screenshot_url': result.get('public_url'),
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).eq('firm_user_id', request.user_id).execute()
-                    logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
-                except Exception as profile_error:
-                    logger.error(f"Error updating business profile with screenshot: {profile_error}")
-                    
-            except Exception as db_error:
-                logger.error(f"Error saving screenshot metadata: {db_error}")
+                supabase.table('business_profiles').update({
+                    'screenshot_url': result.get('public_url'),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).eq('firm_user_id', request.user_id).execute()
+                logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
+            except Exception as profile_error:
+                logger.error(f"Error updating business profile with screenshot: {profile_error}")
         
         return {
             "status": result['status'],
@@ -2889,31 +2874,16 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
             session_id=request.session_id
         )
         
-        # If successful and user_id provided, save metadata to database
+        # If successful and user_id provided, update business profile
         if result['status'] == 'success' and request.user_id:
             try:
-                # Save to website_favicons table
-                supabase.table('website_favicons').upsert({
-                    'user_id': request.user_id,
-                    'session_id': request.session_id or str(uuid.uuid4()),
-                    'url': request.url,
-                    'favicon_path': result['path'],
-                    'public_url': result.get('public_url'),
-                    'created_at': datetime.now().isoformat()
-                }).execute()
-                
-                # Update business_profiles table with favicon
-                try:
-                    supabase.table('business_profiles').update({
-                        'favicon_url': result.get('public_url'),
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).eq('firm_user_id', request.user_id).execute()
-                    logger.info(f"Business profile updated with favicon for user: {request.user_id}")
-                except Exception as profile_error:
-                    logger.error(f"Error updating business profile with favicon: {profile_error}")
-                    
-            except Exception as db_error:
-                logger.error(f"Error saving favicon metadata: {db_error}")
+                supabase.table('business_profiles').update({
+                    'favicon_url': result.get('public_url'),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).eq('firm_user_id', request.user_id).execute()
+                logger.info(f"Business profile updated with favicon for user: {request.user_id}")
+            except Exception as profile_error:
+                logger.error(f"Error updating business profile with favicon: {profile_error}")
         
         return {
             "status": result['status'],
