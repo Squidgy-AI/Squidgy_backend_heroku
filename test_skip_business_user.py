@@ -19,7 +19,7 @@ def generate_test_data_with_existing_email():
     
     return {
         "company_id": "lp2p1q27DrdGta1qGDJd",
-        "snapshot_id": "7oAH6Cmto5ZcWAaEsrrq",
+        "snapshot_id": "bInwX5BtZM6oEepAsUwo",
         "agency_token": "pit-c4e9d6af-8956-4a84-9b83-554fb6801a69",
         "subaccount_name": f"TestExistingUser_{timestamp}",
         "prospect_email": "dmacproject123@gmail.com",  # This might already exist

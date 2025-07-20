@@ -15,7 +15,7 @@ async def test_frontend_call():
     # This is the exact payload the frontend will send
     frontend_payload = {
         "company_id": "lp2p1q27DrdGta1qGDJd",
-        "snapshot_id": "7oAH6Cmto5ZcWAaEsrrq",  # SOL - Solar Assistant snapshot
+        "snapshot_id": "bInwX5BtZM6oEepAsUwo",  # SOL - Solar Assistant snapshot
         "agency_token": "pit-c4e9d6af-8956-4a84-9b83-554fb6801a69"
     }
     

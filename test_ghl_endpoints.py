@@ -19,7 +19,7 @@ load_dotenv()
 
 test_data = {
     "company_id": os.getenv("GHL_COMPANY_ID", "lp2p1q27DrdGta1qGDJd"),
-    "snapshot_id": os.getenv("GHL_SNAPSHOT_ID", "7oAH6Cmto5ZcWAaEsrrq"),  # SOL - Solar Assistant
+    "snapshot_id": os.getenv("GHL_SNAPSHOT_ID", "bInwX5BtZM6oEepAsUwo"),  # SOL - Solar Assistant
     "agency_token": os.getenv("GHL_AGENCY_TOKEN", "pit-c4e9d6af-8956-4a84-9b83-554fb6801a69")
 }
 
