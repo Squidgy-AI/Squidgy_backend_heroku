@@ -2836,6 +2836,7 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
         # If successful and user_id provided, save metadata to database
         if result['status'] == 'success' and request.user_id:
             try:
+                # Save to website_screenshots table
                 supabase.table('website_screenshots').upsert({
                     'user_id': request.user_id,
                     'session_id': request.session_id or str(uuid.uuid4()),
@@ -2844,6 +2845,16 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
                     'public_url': result.get('public_url'),
                     'created_at': datetime.now().isoformat()
                 }).execute()
+                
+                # Also update business_profiles table if profile exists
+                try:
+                    supabase.table('business_profiles').update({
+                        'screenshot_url': result.get('public_url'),
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }).eq('firm_user_id', request.user_id).execute()
+                except Exception as profile_error:
+                    logger.info(f"Business profile not found for screenshot update: {profile_error}")
+                    
             except Exception as db_error:
                 logger.error(f"Error saving screenshot metadata: {db_error}")
         
@@ -2880,6 +2891,7 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
         # If successful and user_id provided, save metadata to database
         if result['status'] == 'success' and request.user_id:
             try:
+                # Save to website_favicons table
                 supabase.table('website_favicons').upsert({
                     'user_id': request.user_id,
                     'session_id': request.session_id or str(uuid.uuid4()),
@@ -2888,6 +2900,16 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
                     'public_url': result.get('public_url'),
                     'created_at': datetime.now().isoformat()
                 }).execute()
+                
+                # Also update business_profiles table if profile exists
+                try:
+                    supabase.table('business_profiles').update({
+                        'favicon_url': result.get('public_url'),
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }).eq('firm_user_id', request.user_id).execute()
+                except Exception as profile_error:
+                    logger.info(f"Business profile not found for favicon update: {profile_error}")
+                    
             except Exception as db_error:
                 logger.error(f"Error saving favicon metadata: {db_error}")
         
