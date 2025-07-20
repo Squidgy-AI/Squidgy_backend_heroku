@@ -4164,13 +4164,15 @@ async def create_ghl_subaccount(request: SecureGHLSubAccountRequest):
             company_id = constants.Company_Id
             # Try Agency_Access_Key as it might be a non-expiring access key
             agency_token = constants.Agency_Access_Key
-            snapshot_id = "7oAH6Cmto5ZcWAaEsrrq"  # Updated snapshot ID
+            # OLD: snapshot_id = "7oAH6Cmto5ZcWAaEsrrq"  # Updated snapshot ID (2024-11-04)
+            snapshot_id = "bInwX5BtZM6oEepAsUwo"  # SOL - Solar Assistant (2025-07-06) - UPDATED
             logger.info(f"Using Agency_Access_Key for authentication")
         except ImportError:
             # Fallback to hardcoded values if import fails
             company_id = "lp2p1q27DrdGta1qGDJd"
             agency_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2NhdGlvbl9pZCI6ImxCUHFnQm93WDFDc2pIYXkxMkxZIiwidmVyc2lvbiI6MSwiaWF0IjoxNzMxOTkyNDg3MDU0LCJzdWIiOiJhWjBuNGV0ck5DRUIyOXNvbmE4TSJ9.czCh27fEwqxW4KzDx0gVbYcpdtcChy_31h9SoQuptAA"
-            snapshot_id = "7oAH6Cmto5ZcWAaEsrrq"
+            # OLD: snapshot_id = "7oAH6Cmto5ZcWAaEsrrq" (2024-11-04)
+            snapshot_id = "bInwX5BtZM6oEepAsUwo"  # SOL - Solar Assistant (2025-07-06) - UPDATED
             logger.info(f"Using fallback Nestle_Api_Key for authentication")
         
         # Prepare headers

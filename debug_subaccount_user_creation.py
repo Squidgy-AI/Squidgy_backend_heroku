@@ -22,7 +22,7 @@ def generate_unique_test_data():
     return {
         "company_id": "lp2p1q27DrdGta1qGDJd",
         "snapshot_id": "bInwX5BtZM6oEepAsUwo",
-        "agency_token": "pit-c4e9d6af-8956-4a84-9b83-554fb6801a69",
+        "agency_token": "pit-e3d8d384-00cb-4744-8213-b1ab06ae71fe",
         "subaccount_name": f"TestBusiness_{random_suffix}",
         "prospect_email": f"testbusiness+{random_suffix}@testdomain.com",
         "prospect_first_name": "Test",
