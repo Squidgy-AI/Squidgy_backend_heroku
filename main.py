@@ -7,6 +7,7 @@ import logging
 import os
 import time
 import uuid
+import tempfile
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -15,13 +16,14 @@ from typing import Dict, Any, Optional, List, Set
 # Third-party imports
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, UploadFile, File, Form
 from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from pydantic import BaseModel
 from supabase import create_client, Client
+from PIL import Image
 
 # Local imports
 from agent_config import get_agent_config, AGENTS
@@ -5239,6 +5241,215 @@ async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
     Handles browser automation, JWT extraction, and Facebook pages retrieval
     """
     return await get_facebook_pages(request)
+
+# =============================================================================
+# BUSINESS PROFILE ENDPOINTS
+# =============================================================================
+
+class BusinessProfileRequest(BaseModel):
+    firm_user_id: str
+    business_name: str
+    business_email: str
+    phone: str = None
+    website: str = None
+    address: str = None
+    city: str = None
+    state: str = None
+    country: str = "US"
+    postal_code: str = None
+    logo_url: str = None
+    screenshot_url: str = None
+    favicon_url: str = None
+
+@app.post("/api/business/upload-logo")
+async def upload_business_logo(
+    logo: UploadFile = File(...),
+    session_id: str = Form(default="")
+):
+    """
+    Upload business logo to Supabase Storage
+    """
+    try:
+        # Validate file type
+        if not logo.content_type or not logo.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        # Validate file size (max 5MB)
+        content = await logo.read()
+        if len(content) > 5 * 1024 * 1024:  # 5MB
+            raise HTTPException(status_code=400, detail="File size must be less than 5MB")
+        
+        # Generate filename
+        file_extension = logo.filename.split('.')[-1] if '.' in logo.filename else 'jpg'
+        if session_id:
+            filename = f"{session_id}_business_logo.{file_extension}"
+        else:
+            filename = f"business_logo_{int(time.time())}.{file_extension}"
+        
+        # Process image with PIL to ensure it's valid and convert to JPG
+        try:
+            # Save uploaded content to temp file
+            with tempfile.NamedTemporaryFile(delete=False) as tmp_input:
+                tmp_input.write(content)
+                tmp_input_path = tmp_input.name
+            
+            # Open and process image
+            img = Image.open(tmp_input_path)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            
+            # Save as JPG
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_output:
+                img.save(tmp_output.name, 'JPEG', quality=85)
+                tmp_output_path = tmp_output.name
+            
+            # Read processed content
+            with open(tmp_output_path, 'rb') as f:
+                processed_content = f.read()
+            
+            # Clean up
+            os.unlink(tmp_input_path)
+            os.unlink(tmp_output_path)
+            
+        except Exception as e:
+            logger.error(f"Error processing image: {e}")
+            raise HTTPException(status_code=400, detail="Invalid image file")
+        
+        # Upload to Supabase Storage
+        storage_path = f"business_logos/{filename}"
+        
+        # Remove existing file if present
+        try:
+            supabase.storage.from_('static').remove([storage_path])
+        except:
+            pass
+        
+        response = supabase.storage.from_('static').upload(
+            storage_path,
+            processed_content,
+            {
+                "content-type": "image/jpeg",
+                "upsert": "true"
+            }
+        )
+        
+        # Handle response
+        if hasattr(response, 'error') and response.error:
+            if "already exists" in str(response.error):
+                public_url = supabase.storage.from_('static').get_public_url(storage_path)
+                return {
+                    "status": "success",
+                    "message": "Logo uploaded successfully",
+                    "logo_url": public_url,
+                    "storage_path": storage_path,
+                    "filename": filename
+                }
+            else:
+                raise HTTPException(status_code=500, detail=f"Upload error: {response.error}")
+        else:
+            public_url = supabase.storage.from_('static').get_public_url(storage_path)
+            return {
+                "status": "success",
+                "message": "Logo uploaded successfully",
+                "logo_url": public_url,
+                "storage_path": storage_path,
+                "filename": filename
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading business logo: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/business/save-profile")
+async def save_business_profile(request: BusinessProfileRequest):
+    """
+    Save business profile information to database
+    """
+    try:
+        # Get user name and email from profiles table
+        user_profile = supabase.table('profiles')\
+            .select('full_name, email')\
+            .eq('user_id', request.firm_user_id)\
+            .single()\
+            .execute()
+        
+        if not user_profile.data:
+            raise HTTPException(status_code=404, detail="User profile not found")
+        
+        profile_data = user_profile.data
+        
+        # Prepare business profile data
+        business_data = {
+            'firm_user_id': request.firm_user_id,
+            'business_name': request.business_name,
+            'business_email': request.business_email,
+            'phone': request.phone,
+            'website': request.website,
+            'address': request.address,
+            'city': request.city,
+            'state': request.state,
+            'country': request.country,
+            'postal_code': request.postal_code,
+            'logo_url': request.logo_url,
+            'screenshot_url': request.screenshot_url,
+            'favicon_url': request.favicon_url,
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Upsert business profile
+        result = supabase.table('business_profiles')\
+            .upsert(business_data, on_conflict='firm_user_id')\
+            .execute()
+        
+        if result.error:
+            raise HTTPException(status_code=500, detail=f"Database error: {result.error}")
+        
+        return {
+            "status": "success",
+            "message": "Business profile saved successfully",
+            "business_profile": business_data,
+            "user_info": {
+                "name": profile_data['full_name'],
+                "email": profile_data['email']
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving business profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/business/profile/{firm_user_id}")
+async def get_business_profile(firm_user_id: str):
+    """
+    Get business profile by user ID
+    """
+    try:
+        result = supabase.table('business_profiles')\
+            .select('*')\
+            .eq('firm_user_id', firm_user_id)\
+            .single()\
+            .execute()
+        
+        if not result.data:
+            return {
+                "status": "not_found",
+                "message": "Business profile not found",
+                "business_profile": None
+            }
+        
+        return {
+            "status": "success",
+            "message": "Business profile found",
+            "business_profile": result.data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting business profile: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
 
