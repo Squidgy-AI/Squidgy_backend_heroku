@@ -2846,14 +2846,27 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
                     'created_at': datetime.now().isoformat()
                 }).execute()
                 
-                # Also update business_profiles table if profile exists
+                # Also update/create business_profiles table 
                 try:
-                    supabase.table('business_profiles').update({
-                        'screenshot_url': result.get('public_url'),
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).eq('firm_user_id', request.user_id).execute()
+                    # Get user info for creating profile if needed
+                    user_profile = supabase.table('profiles')\
+                        .select('full_name, email')\
+                        .eq('user_id', request.user_id)\
+                        .single()\
+                        .execute()
+                    
+                    if user_profile.data:
+                        # Upsert business profile with screenshot
+                        supabase.table('business_profiles').upsert({
+                            'firm_user_id': request.user_id,
+                            'business_name': user_profile.data.get('full_name', 'My Business'),
+                            'business_email': user_profile.data.get('email', 'contact@mybusiness.com'),
+                            'screenshot_url': result.get('public_url'),
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }, on_conflict='firm_user_id').execute()
+                        logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
                 except Exception as profile_error:
-                    logger.info(f"Business profile not found for screenshot update: {profile_error}")
+                    logger.error(f"Error updating business profile with screenshot: {profile_error}")
                     
             except Exception as db_error:
                 logger.error(f"Error saving screenshot metadata: {db_error}")
@@ -2901,14 +2914,27 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
                     'created_at': datetime.now().isoformat()
                 }).execute()
                 
-                # Also update business_profiles table if profile exists
+                # Also update/create business_profiles table
                 try:
-                    supabase.table('business_profiles').update({
-                        'favicon_url': result.get('public_url'),
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).eq('firm_user_id', request.user_id).execute()
+                    # Get user info for creating profile if needed
+                    user_profile = supabase.table('profiles')\
+                        .select('full_name, email')\
+                        .eq('user_id', request.user_id)\
+                        .single()\
+                        .execute()
+                    
+                    if user_profile.data:
+                        # Upsert business profile with favicon
+                        supabase.table('business_profiles').upsert({
+                            'firm_user_id': request.user_id,
+                            'business_name': user_profile.data.get('full_name', 'My Business'),
+                            'business_email': user_profile.data.get('email', 'contact@mybusiness.com'),
+                            'favicon_url': result.get('public_url'),
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }, on_conflict='firm_user_id').execute()
+                        logger.info(f"Business profile updated with favicon for user: {request.user_id}")
                 except Exception as profile_error:
-                    logger.info(f"Business profile not found for favicon update: {profile_error}")
+                    logger.error(f"Error updating business profile with favicon: {profile_error}")
                     
             except Exception as db_error:
                 logger.error(f"Error saving favicon metadata: {db_error}")
