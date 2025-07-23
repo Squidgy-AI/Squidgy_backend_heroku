@@ -3782,6 +3782,58 @@ async def send_invitation_email(request: dict):
             "details": str(e)
         }
 
+@app.post("/api/auth/reset-password")
+async def reset_password_email(request: dict):
+    """Send password reset email using Supabase Auth"""
+    try:
+        email = request.get('email')
+        
+        if not email:
+            return {
+                "success": False,
+                "error": "Email is required"
+            }
+        
+        # Get redirect URL from request or use default
+        redirect_url = request.get('redirect_url', 'https://boiler-plate-v1-lake.vercel.app/auth/reset-password')
+        
+        logger.info(f"Sending password reset email to: {email}")
+        
+        # Use Supabase client to send password reset email
+        try:
+            # Use the correct method name for the Python client
+            response = supabase.auth.reset_password_for_email(
+                email=email.lower(),
+                options={
+                    "redirect_to": redirect_url
+                }
+            )
+            
+            logger.info(f"Password reset email sent successfully to {email}")
+            
+            return {
+                "success": True,
+                "message": "Password reset link sent! Please check your email."
+            }
+            
+        except Exception as auth_error:
+            logger.error(f"Supabase auth error: {str(auth_error)}")
+            
+            # Return error directly - no retries
+            return {
+                "success": False,
+                "error": str(auth_error),
+                "message": "Failed to send password reset email"
+            }
+            
+    except Exception as e:
+        logger.error(f"Password reset endpoint error: {str(e)}")
+        return {
+            "success": False,
+            "error": "Failed to process password reset request",
+            "details": str(e)
+        }
+
 # =============================================================================
 # TOOL ENDPOINTS - Organized Tools Integration
 # =============================================================================
