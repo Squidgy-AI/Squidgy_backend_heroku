@@ -2836,10 +2836,11 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
         # If successful and user_id provided, update business profile
         if result['status'] == 'success' and request.user_id:
             try:
-                supabase.table('business_profiles').update({
+                supabase.table('business_profiles').upsert({
+                    'firm_user_id': request.user_id,
                     'screenshot_url': result.get('public_url'),
                     'updated_at': datetime.now(timezone.utc).isoformat()
-                }).eq('firm_user_id', request.user_id).execute()
+                }, on_conflict='firm_user_id').execute()
                 logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
             except Exception as profile_error:
                 logger.error(f"Error updating business profile with screenshot: {profile_error}")
@@ -2877,10 +2878,11 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
         # If successful and user_id provided, update business profile
         if result['status'] == 'success' and request.user_id:
             try:
-                supabase.table('business_profiles').update({
+                supabase.table('business_profiles').upsert({
+                    'firm_user_id': request.user_id,
                     'favicon_url': result.get('public_url'),
                     'updated_at': datetime.now(timezone.utc).isoformat()
-                }).eq('firm_user_id', request.user_id).execute()
+                }, on_conflict='firm_user_id').execute()
                 logger.info(f"Business profile updated with favicon for user: {request.user_id}")
             except Exception as profile_error:
                 logger.error(f"Error updating business profile with favicon: {profile_error}")
