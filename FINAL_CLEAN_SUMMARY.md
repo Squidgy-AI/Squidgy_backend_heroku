@@ -68,12 +68,12 @@ python main_simple.py
 
 ### **Environment Variables (.env):**
 ```
-GMAIL_2FA_EMAIL=somashekhar34@gmail.com
+GMAIL_2FA_EMAIL=info@squidgy.net
 GMAIL_2FA_APP_PASSWORD=ytmfxlelgyojxjmf
 ```
 
 ### **Test Credentials:**
-- **Email**: `somashekhar34@gmail.com`
+- **Email**: `info@squidgy.net`
 - **Password**: `Dummy@123`
 - **Location ID**: `GJSb0aPcrBRne73LK3A3`
 - **User ID**: `ExLH8YJG8qfhdmeZTzMX`

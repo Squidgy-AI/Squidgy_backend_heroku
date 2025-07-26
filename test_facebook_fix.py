@@ -16,7 +16,7 @@ async def test_facebook_integration():
     
     # Use the correct credentials provided
     test_request = FacebookPagesRequest(
-        email="somashekhar34+rlRJ1n5H@gmail.com",
+        email="info+zt1rcl49@squidgy.net",
         password="Dummy@123",
         user_id="MHwz5yMaG0JrTfGXjvxB",  # This is the user_id
         location_id="rlRJ1n5Hoy3X53WDOJlq",  # This is the location_id  
@@ -26,8 +26,8 @@ async def test_facebook_integration():
     )
     
     # Set environment variables for Gmail 2FA
-    os.environ["GMAIL_2FA_EMAIL"] = "somashekhar34+rlRJ1n5H@gmail.com"
-    os.environ["GMAIL_2FA_APP_PASSWORD"] = "ytmfxlelgyojxjmf"
+    os.environ["GMAIL_2FA_EMAIL"] = "info+zt1rcl49@squidgy.net"
+    os.environ["GMAIL_2FA_APP_PASSWORD"] = "qfwfjrfedcjbzdam"
     
     print(f"📧 Using email: {test_request.email}")
     print(f"🔑 Using password: {test_request.password}")

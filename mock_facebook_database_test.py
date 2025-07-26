@@ -21,7 +21,7 @@ class MockFacebookPagesRequest:
     def __init__(self):
         self.location_id = "GJSb0aPcrBRne73LK3A3"
         self.user_id = "ExLH8YJG8qfhdmeZTzMX"
-        self.email = "somashekhar34@gmail.com"
+        self.email = "info@squidgy.net"
         self.password = "Dummy@123"
         self.firm_user_id = f"test_firm_user_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 

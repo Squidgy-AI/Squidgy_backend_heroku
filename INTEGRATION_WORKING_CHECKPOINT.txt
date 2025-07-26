@@ -9,16 +9,16 @@
 
 ### Backend Implementation:
 - main.py updated to use facebook_pages_api_working.py
-- Uses Gmail 2FA (somashekhar34@gmail.com) instead of Outlook  
+- Uses Gmail 2FA (info@squidgy.net) instead of Outlook  
 - Working JWT token extraction with browser automation
 - Simplified, unified approach (no Heroku/local branching)
 
 ### Test Credentials (from .env):
-- Email: somashekhar34@gmail.com
+- Email: info@squidgy.net
 - Password: Dummy@123
 - Location ID: GJSb0aPcrBRne73LK3A3
 - User ID: ExLH8YJG8qfhdmeZTzMX
-- Gmail App Password: ytmfxlelgyojxjmf
+- Gmail App Password: qfwfjrfedcjbzdam
 
 ### Working Endpoints:
 - POST /api/facebook/integrate - ✅ WORKING

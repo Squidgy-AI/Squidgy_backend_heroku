@@ -13,7 +13,7 @@ url = "http://localhost:8000/api/facebook/get-pages"
 payload = {
     "location_id": "GJSb0aPcrBRne73LK3A3",
     "user_id": "ExLH8YJG8qfhdmeZTzMX",
-    "email": "somashekhar34@gmail.com",
+    "email": "info@squidgy.net",
     "password": "Dummy@123",
     "firm_user_id": "test_firm_user_" + datetime.now().strftime("%Y%m%d_%H%M%S")
 }

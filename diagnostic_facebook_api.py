@@ -24,7 +24,7 @@ async def diagnostic_facebook_test():
     test_request = FacebookPagesRequest(
         location_id="GJSb0aPcrBRne73LK3A3",
         user_id="ExLH8YJG8qfhdmeZTzMX", 
-        email="somashekhar34@gmail.com",
+        email="info@squidgy.net",
         password="Dummy@123",
         firm_user_id=f"diagnostic_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     )

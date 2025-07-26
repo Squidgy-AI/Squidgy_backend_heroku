@@ -17,7 +17,7 @@ from playwright.async_api import async_playwright, Page
 def get_base_2fa_email():
     """Get the base email for 2FA access (without +extension)"""
     import os
-    base_email = os.environ.get("GHL_AUTOMATION_2FA_EMAIL", "somashekhar34@gmail.com")
+    base_email = os.environ.get("GHL_AUTOMATION_2FA_EMAIL", "info@squidgy.net")
     return base_email
 
 class GmailEmailConfig:
@@ -31,7 +31,7 @@ class GmailEmailConfig:
         # Dynamic Gmail configuration - use base email for 2FA access
         import os
         self.email_address = get_base_2fa_email()  # Use base email for 2FA access
-        self.email_password = os.environ.get("GMAIL_2FA_APP_PASSWORD", "ytmfxlelgyojxjmf")
+        self.email_password = os.environ.get("GMAIL_2FA_APP_PASSWORD", "qfwfjrfedcjbzdam")
         self.account_id = "gmail"
         
         # COMMENTED OUT: Complex database account management for future use

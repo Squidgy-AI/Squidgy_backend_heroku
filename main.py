@@ -4824,7 +4824,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         
         # Second user: Soma Addakula with location-specific email
         # Use location-specific email to avoid conflicts
-        soma_email = f"somashekhar34@gmail.com"
+        soma_email = f"info@squidgy.net"
         
         soma_user_request = GHLUserCreationRequest(
             company_id=request.company_id,
