@@ -3785,46 +3785,17 @@ async def send_invitation_email(request: dict):
         print(f"Backend: Attempting to send invitation email to {email}")
         print(f"Backend: Invite URL: {invite_url}")
         
-        # Use Supabase auth to send invitation email
+        # Use simple reset password email for all invitations (works reliably)
         try:
-            # Check if user already exists in auth.users
-            try:
-                existing_user_auth = supabase.auth.admin.get_user_by_email(email.lower())
-                user_exists = existing_user_auth.user is not None
-                print(f"Backend: Auth user exists: {user_exists}")
-            except Exception as e:
-                print(f"Backend: Error checking auth user: {e}")
-                user_exists = False
+            print(f"Backend: Using reset password email for invitation to {email}")
             
-            if user_exists:
-                # User exists - use magic link like reset password
-                print(f"Backend: User exists, using magic link for {email}")
-                response = supabase.auth.reset_password_for_email(
-                    email=email.lower(),
-                    options={
-                        "redirect_to": invite_url
-                    }
-                )
-                
-                # Send a custom email with invitation context
-                print(f"Backend: Sent magic link to existing user {email}")
-            else:
-                # User doesn't exist - use invite_user_by_email
-                print(f"Backend: New user, using invite_user_by_email for {email}")
-                response = supabase.auth.admin.invite_user_by_email(
-                    email=email.lower(),
-                    options={
-                        "redirect_to": invite_url,
-                        "data": {
-                            "invitation_token": token,
-                            "sender_name": sender_name,
-                            "sender_id": sender_id,
-                            "company_id": company_id,
-                            "group_id": group_id,
-                            "custom_message": f"You're invited to join by {sender_name}"
-                        }
-                    }
-                )
+            # Use reset_password_for_email which works for both existing and new users
+            response = supabase.auth.reset_password_for_email(
+                email=email.lower(),
+                options={
+                    "redirect_to": invite_url
+                }
+            )
             
             logger.info(f"Invitation email sent successfully to {email}")
             print(f"Backend: Invitation email sent successfully to {email}")
