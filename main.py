@@ -33,6 +33,7 @@ from tools_connector import tools
 from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
 from solar_api_connector import SolarApiConnector, SolarInsightsRequest as SolarInsightsReq, SolarDataLayersRequest as SolarDataLayersReq, get_solar_analysis_for_agent
 from facebook_pages_api_working import FacebookPagesRequest, FacebookPagesResponse, get_facebook_pages
+from email_validation import verify_email_confirmed, require_email_confirmed, check_email_confirmation_status
 
 # Handler classes
 
@@ -1344,6 +1345,20 @@ async def health_check_detailed():
         "streaming_sessions": len(streaming_sessions)
     }
 
+@app.get("/api/user/email-status/{user_id}")
+async def get_email_confirmation_status(user_id: str):
+    """Check if user's email is confirmed"""
+    try:
+        status = await check_email_confirmation_status(supabase, user_id)
+        return status
+    except Exception as e:
+        logger.error(f"Error checking email status for user {user_id}: {str(e)}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "email_confirmed": False
+        }
+
 @app.get("/debug/agent-docs/{agent_name}")
 async def debug_agent_docs(agent_name: str):
     """Debug endpoint to check agent documents in database"""
@@ -2559,6 +2574,15 @@ async def n8n_main_request(request: N8nMainRequest, agent_name: str, session_id:
         # Generate a unique request ID
         request_id = request.request_id or str(uuid.uuid4())
         
+        # Verify email confirmation before processing chat
+        if request.user_id and not await verify_email_confirmed(supabase, request.user_id):
+            return {
+                "status": "error",
+                "message": "Email confirmation required. Please check your email and click the confirmation link.",
+                "request_id": request_id,
+                "requires_email_confirmation": True
+            }
+        
         request.agent_name = agent_name
         request.session_id = session_id
         
@@ -3166,6 +3190,16 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
     logger.info(f"New WebSocket connection: {connection_id}")
     
     await websocket.accept()
+    
+    # Verify email confirmation before allowing WebSocket connection
+    if not await verify_email_confirmed(supabase, user_id):
+        await websocket.send_json({
+            "type": "error",
+            "message": "Email confirmation required. Please check your email and click the confirmation link.",
+            "requires_email_confirmation": True
+        })
+        await websocket.close()
+        return
     
     active_connections[connection_id] = websocket
     
