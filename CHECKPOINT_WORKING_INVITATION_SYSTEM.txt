@@ -1,0 +1,98 @@
+🎯 CHECKPOINT: WORKING INVITATION SYSTEM - BACKEND
+================================================
+Date: 2025-07-27
+Status: ✅ FULLY WORKING
+
+📧 EMAIL FEATURES IMPLEMENTED:
+-----------------------------
+✅ Magic Link fallback support (when frontend fails)
+✅ Uses signInWithOtp for proper magic link emails
+✅ No more reset password emails for invitations
+✅ Proper error handling and logging
+
+🔄 BACKEND ROLE:
+---------------
+Backend serves as FALLBACK ONLY when frontend email sending fails:
+1. Frontend tries to send invitation → If fails
+2. Frontend calls backend as fallback
+3. Backend uses same magic link method (signInWithOtp)
+4. Ensures email gets sent either way
+
+📊 DATABASE OPERATIONS:
+-----------------------
+Backend does NOT handle:
+❌ Invitation database records (handled by frontend)
+❌ Status updates (handled by frontend real-time)
+❌ User relationship management
+
+Backend ONLY handles:
+✅ Fallback email sending via Supabase Auth
+✅ Same magic link generation as frontend
+✅ Error logging and debugging
+
+🔧 KEY FILES MODIFIED:
+---------------------
+Backend:
+- /main.py (send-invitation-email endpoint around line 3765)
+  - Changed from reset_password_for_email to sign_in_with_otp
+  - Proper magic link generation
+  - Consistent with frontend approach
+
+🛡️ SECURITY & CONFIG:
+---------------------
+✅ Uses same Supabase client as other operations
+✅ Proper environment variable handling
+✅ Error logging for debugging
+✅ Consistent redirect URL handling
+
+💻 ENDPOINT DETAILS:
+-------------------
+POST /api/send-invitation-email
+- Input: email, token, senderName, inviteUrl, senderId, companyId
+- Output: success/error response
+- Method: supabase.auth.sign_in_with_otp()
+- Redirect: Uses inviteUrl parameter properly
+
+🔄 PYTHON CODE SNIPPET:
+-----------------------
+```python
+# Use magic link OTP for invitations (proper template)
+response = supabase.auth.sign_in_with_otp({
+    "email": email.lower(),
+    "options": {
+        "should_create_user": True,
+        "email_redirect_to": invite_url
+    }
+})
+```
+
+📝 IMPORTANT NOTES:
+------------------
+- Backend is FALLBACK ONLY - frontend handles primary flow
+- Both frontend and backend use identical magic link method
+- Backend deployment auto-happens via Heroku when pushed to main
+- All invitation logic primarily handled in frontend for better UX
+
+🔄 RESTORE INSTRUCTIONS:
+-----------------------
+1. Ensure main.py has correct sign_in_with_otp implementation (not reset_password_for_email)
+2. Environment variables set in Heroku:
+   - SUPABASE_URL
+   - SUPABASE_KEY
+3. Auto-deployment working from GitHub to Heroku
+4. Test backend fallback by temporarily breaking frontend email
+
+💯 WORKING STATE:
+----------------
+- Fallback email sending: ✅ Working  
+- Magic link generation: ✅ Consistent with frontend
+- Error handling: ✅ Proper logging
+- Deployment: ✅ Auto-deploy via Heroku
+
+🔗 INTEGRATION:
+--------------
+Frontend → Backend fallback flow works seamlessly
+Both use same Supabase Auth methods for consistency
+No database conflicts since frontend handles all DB operations
+
+Last updated: 2025-07-27 by Claude Code Assistant
