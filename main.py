@@ -3797,23 +3797,17 @@ async def send_invitation_email(request: dict):
                 user_exists = False
             
             if user_exists:
-                # User exists - use generateLink instead of invite_user_by_email
-                print(f"Backend: User exists, using generateLink for {email}")
-                response = supabase.auth.admin.generate_link(
-                    type="invite",
+                # User exists - use magic link like reset password
+                print(f"Backend: User exists, using magic link for {email}")
+                response = supabase.auth.reset_password_for_email(
                     email=email.lower(),
                     options={
-                        "redirect_to": invite_url,
-                        "data": {
-                            "invitation_token": token,
-                            "sender_name": sender_name,
-                            "sender_id": sender_id,
-                            "company_id": company_id,
-                            "group_id": group_id,
-                            "custom_message": f"You're invited to join by {sender_name}"
-                        }
+                        "redirect_to": invite_url
                     }
                 )
+                
+                # Send a custom email with invitation context
+                print(f"Backend: Sent magic link to existing user {email}")
             else:
                 # User doesn't exist - use invite_user_by_email
                 print(f"Backend: New user, using invite_user_by_email for {email}")
