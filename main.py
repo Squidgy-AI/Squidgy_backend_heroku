@@ -3787,26 +3787,50 @@ async def send_invitation_email(request: dict):
         
         # Use Supabase auth to send invitation email
         try:
-            # Check if user already exists
-            existing_user = supabase.table('profiles').select('id, email').eq('email', email).execute()
-            print(f"Backend: Existing user check: {len(existing_user.data) if existing_user.data else 0} users found")
+            # Check if user already exists in auth.users
+            try:
+                existing_user_auth = supabase.auth.admin.get_user_by_email(email.lower())
+                user_exists = existing_user_auth.user is not None
+                print(f"Backend: Auth user exists: {user_exists}")
+            except Exception as e:
+                print(f"Backend: Error checking auth user: {e}")
+                user_exists = False
             
-            # Use Supabase's invite functionality to send email
-            # This will send an official invitation email from Supabase
-            response = supabase.auth.admin.invite_user_by_email(
-                email=email.lower(),
-                options={
-                    "redirect_to": invite_url,
-                    "data": {
-                        "invitation_token": token,
-                        "sender_name": sender_name,
-                        "sender_id": sender_id,
-                        "company_id": company_id,
-                        "group_id": group_id,
-                        "custom_message": f"You're invited to join by {sender_name}"
+            if user_exists:
+                # User exists - use generateLink instead of invite_user_by_email
+                print(f"Backend: User exists, using generateLink for {email}")
+                response = supabase.auth.admin.generate_link(
+                    type="invite",
+                    email=email.lower(),
+                    options={
+                        "redirect_to": invite_url,
+                        "data": {
+                            "invitation_token": token,
+                            "sender_name": sender_name,
+                            "sender_id": sender_id,
+                            "company_id": company_id,
+                            "group_id": group_id,
+                            "custom_message": f"You're invited to join by {sender_name}"
+                        }
                     }
-                }
-            )
+                )
+            else:
+                # User doesn't exist - use invite_user_by_email
+                print(f"Backend: New user, using invite_user_by_email for {email}")
+                response = supabase.auth.admin.invite_user_by_email(
+                    email=email.lower(),
+                    options={
+                        "redirect_to": invite_url,
+                        "data": {
+                            "invitation_token": token,
+                            "sender_name": sender_name,
+                            "sender_id": sender_id,
+                            "company_id": company_id,
+                            "group_id": group_id,
+                            "custom_message": f"You're invited to join by {sender_name}"
+                        }
+                    }
+                )
             
             logger.info(f"Invitation email sent successfully to {email}")
             print(f"Backend: Invitation email sent successfully to {email}")
