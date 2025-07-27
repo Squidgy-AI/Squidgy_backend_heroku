@@ -3764,12 +3764,15 @@ async def get_background_task_result(task_id: str):
 
 @app.post("/api/send-invitation-email")
 async def send_invitation_email(request: dict):
-    """Send invitation email using backend Supabase client"""
+    """Send invitation email using Supabase Auth"""
     try:
         email = request.get('email')
         token = request.get('token')
         sender_name = request.get('senderName', 'Someone')
         invite_url = request.get('inviteUrl')
+        sender_id = request.get('senderId')
+        company_id = request.get('companyId')
+        group_id = request.get('groupId')
         
         if not email or not token or not invite_url:
             return {
@@ -3778,39 +3781,57 @@ async def send_invitation_email(request: dict):
                 "details": f"Missing: {', '.join([k for k, v in {'email': email, 'token': token, 'invite_url': invite_url}.items() if not v])}"
             }
         
+        logger.info(f"Sending invitation email to: {email}")
         print(f"Backend: Attempting to send invitation email to {email}")
         print(f"Backend: Invite URL: {invite_url}")
         
-        # Try using the backend's Supabase client for admin operations
+        # Use Supabase auth to send invitation email
         try:
             # Check if user already exists
             existing_user = supabase.table('profiles').select('id, email').eq('email', email).execute()
             print(f"Backend: Existing user check: {len(existing_user.data) if existing_user.data else 0} users found")
             
-            # For now, return success with manual link since SMTP might not be configured
-            return {
-                "success": False,
-                "error": "Email sending not configured in backend",
-                "fallback_url": invite_url,
-                "message": f"Invitation created for {email}. Please share the link manually.",
-                "invitation_details": {
-                    "recipient": email,
-                    "sender": sender_name,
-                    "link": invite_url,
-                    "token": token
+            # Use Supabase's invite functionality to send email
+            # This will send an official invitation email from Supabase
+            response = supabase.auth.admin.invite_user_by_email(
+                email=email.lower(),
+                options={
+                    "redirect_to": invite_url,
+                    "data": {
+                        "invitation_token": token,
+                        "sender_name": sender_name,
+                        "sender_id": sender_id,
+                        "company_id": company_id,
+                        "group_id": group_id,
+                        "custom_message": f"You're invited to join by {sender_name}"
+                    }
                 }
+            )
+            
+            logger.info(f"Invitation email sent successfully to {email}")
+            print(f"Backend: Invitation email sent successfully to {email}")
+            
+            return {
+                "success": True,
+                "message": "Invitation email sent successfully!",
+                "details": "Email sent via Supabase Auth invitation system"
             }
             
-        except Exception as supabase_error:
-            print(f"Backend: Supabase operation failed: {str(supabase_error)}")
+        except Exception as auth_error:
+            logger.error(f"Supabase auth invitation error: {str(auth_error)}")
+            print(f"Backend: Supabase auth error: {str(auth_error)}")
+            
+            # Return error with fallback option
             return {
                 "success": False,
-                "error": "Backend database error",
-                "details": str(supabase_error),
-                "fallback_url": invite_url
+                "error": str(auth_error),
+                "message": "Failed to send invitation email",
+                "fallback_url": invite_url,
+                "suggestion": "Check Supabase SMTP configuration or share the link manually"
             }
             
     except Exception as e:
+        logger.error(f"Invitation email endpoint error: {str(e)}")
         print(f"Backend: Send invitation email error: {str(e)}")
         return {
             "success": False,
