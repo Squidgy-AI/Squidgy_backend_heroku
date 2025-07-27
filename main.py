@@ -3785,17 +3785,18 @@ async def send_invitation_email(request: dict):
         print(f"Backend: Attempting to send invitation email to {email}")
         print(f"Backend: Invite URL: {invite_url}")
         
-        # Use simple reset password email for all invitations (works reliably)
+        # Use magic link OTP for invitations (proper template)
         try:
-            print(f"Backend: Using reset password email for invitation to {email}")
+            print(f"Backend: Using magic link OTP for invitation to {email}")
             
-            # Use reset_password_for_email which works for both existing and new users
-            response = supabase.auth.reset_password_for_email(
-                email=email.lower(),
-                options={
-                    "redirect_to": invite_url
+            # Use signInWithOtp to send magic links (Your Magic Link template)
+            response = supabase.auth.sign_in_with_otp({
+                "email": email.lower(),
+                "options": {
+                    "should_create_user": True,
+                    "email_redirect_to": invite_url
                 }
-            )
+            })
             
             logger.info(f"Invitation email sent successfully to {email}")
             print(f"Backend: Invitation email sent successfully to {email}")
