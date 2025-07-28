@@ -19,29 +19,32 @@ async def verify_email_confirmed(supabase: Client, user_id: str) -> bool:
     Returns:
         bool: True if email is confirmed, False otherwise
     """
-    # TEMPORARY: Skip email confirmation check for development
-    # TODO: Re-enable this once email confirmation is properly configured
-    logger.info(f"⚠️ SKIPPING email confirmation check for user {user_id} (development mode)")
-    return True
-    
-    # Original email confirmation logic (commented out for now)
-    # try:
-    #     result = supabase.table('profiles')\
-    #         .select('email_confirmed, email')\
-    #         .eq('user_id', user_id)\
-    #         .single()\
-    #         .execute()
-    #     
-    #     if result.data and result.data.get('email_confirmed'):
-    #         logger.info(f"✅ Email confirmed for user {user_id}: {result.data.get('email')}")
-    #         return True
-    #     
-    #     logger.warning(f"❌ Email not confirmed for user {user_id}: {result.data.get('email') if result.data else 'No profile found'}")
-    #     return False
-    #     
-    # except Exception as e:
-    #     logger.error(f"Error checking email confirmation for user {user_id}: {str(e)}")
-    #     return False
+    # New approach: Always allow access, just log email status for tracking
+    try:
+        result = supabase.table('profiles')\
+            .select('email_confirmed, email')\
+            .eq('user_id', user_id)\
+            .single()\
+            .execute()
+        
+        if result.data:
+            email_confirmed = result.data.get('email_confirmed', True)  # Default to True if field missing
+            email = result.data.get('email', 'unknown')
+            
+            if email_confirmed:
+                logger.info(f"✅ Email confirmed for user {user_id}: {email}")
+            else:
+                logger.info(f"📧 Email not yet confirmed for user {user_id}: {email} (allowing access)")
+            
+            # Always return True - we don't block users anymore, just track status
+            return True
+        else:
+            logger.warning(f"❓ No profile found for user {user_id} (allowing access)")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Error checking email confirmation for user {user_id}: {str(e)} (allowing access)")
+        return True
 
 def require_email_confirmed(supabase: Client):
     """
