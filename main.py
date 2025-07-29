@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks, UploadFile, File, Form
 from starlette.websockets import WebSocketState
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from openai import OpenAI
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -3880,6 +3880,244 @@ async def reset_password_email(request: dict):
             "error": "Failed to process password reset request",
             "details": str(e)
         }
+
+@app.post("/api/auth/confirm-signup")
+async def confirm_signup_api(request: dict):
+    """Backend API endpoint to confirm user signup - called by frontend"""
+    try:
+        user_id = request.get('user_id')
+        token = request.get('token')
+        
+        # If we have a token, try to get user_id from it
+        if token and not user_id:
+            try:
+                response = supabase.auth.verify_otp({'token': token, 'type': 'email'})
+                if response.user:
+                    user_id = response.user.id
+            except:
+                pass
+        
+        if not user_id:
+            return {"success": False, "error": "user_id required"}
+        
+        # Update email_confirmed to True
+        supabase.table('profiles').update({'email_confirmed': True}).eq('user_id', user_id).execute()
+        
+        return {"success": True, "message": "Email confirmed successfully!"}
+        
+    except Exception as e:
+        logger.error(f"Confirm signup error: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/auth/confirm-email")
+async def confirm_email_endpoint(request: dict):
+    """Confirm user email address and update profile"""
+    try:
+        # Extract parameters - support both token-based and direct user_id confirmation
+        token = request.get('token')
+        user_id = request.get('user_id')
+        email = request.get('email')
+        
+        logger.info(f"Email confirmation request: token={bool(token)}, user_id={user_id}, email={email}")
+        
+        # Method 1: Token-based confirmation (when user clicks email link)
+        if token:
+            try:
+                # Verify the token with Supabase Auth
+                response = supabase.auth.verify_otp({
+                    'token': token,
+                    'type': 'email'
+                })
+                
+                if response.user:
+                    user_id = response.user.id
+                    email = response.user.email
+                    logger.info(f"Token verified successfully for user: {user_id}, email: {email}")
+                else:
+                    return {
+                        "success": False,
+                        "error": "Invalid or expired confirmation token"
+                    }
+                    
+            except Exception as token_error:
+                logger.error(f"Token verification error: {str(token_error)}")
+                return {
+                    "success": False,
+                    "error": "Invalid or expired confirmation token",
+                    "details": str(token_error)
+                }
+        
+        # Method 2: Direct confirmation (when user_id is provided)
+        elif user_id:
+            logger.info(f"Direct confirmation for user_id: {user_id}")
+        else:
+            return {
+                "success": False,
+                "error": "Either token or user_id is required for email confirmation"
+            }
+        
+        # Update the profiles table to mark email as confirmed
+        try:
+            logger.info(f"Updating email_confirmed=true for user_id: {user_id}")
+            
+            update_result = supabase.table('profiles')\
+                .update({
+                    'email_confirmed': True,
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                })\
+                .eq('user_id', user_id)\
+                .execute()
+            
+            if update_result.data:
+                logger.info(f"✅ Email confirmed successfully for user: {user_id}")
+                
+                # Get updated profile info
+                profile_result = supabase.table('profiles')\
+                    .select('email, full_name, email_confirmed')\
+                    .eq('user_id', user_id)\
+                    .single()\
+                    .execute()
+                
+                profile_data = profile_result.data if profile_result.data else {}
+                
+                return {
+                    "success": True,
+                    "message": "Email confirmed successfully! You can now access all features.",
+                    "user_id": user_id,
+                    "email": profile_data.get('email', email),
+                    "full_name": profile_data.get('full_name'),
+                    "email_confirmed": True
+                }
+            else:
+                logger.warning(f"No profile found for user_id: {user_id}")
+                return {
+                    "success": False,
+                    "error": "User profile not found",
+                    "user_id": user_id
+                }
+                
+        except Exception as db_error:
+            logger.error(f"Database update error for user {user_id}: {str(db_error)}")
+            return {
+                "success": False,
+                "error": "Failed to update email confirmation status",
+                "details": str(db_error)
+            }
+    
+    except Exception as e:
+        logger.error(f"Email confirmation endpoint error: {str(e)}")
+        return {
+            "success": False,
+            "error": "Failed to process email confirmation",
+            "details": str(e)
+        }
+
+@app.get("/api/auth/confirm-email")
+async def confirm_email_get_endpoint(token: str = None, user_id: str = None):
+    """Handle email confirmation via GET request (for email links)"""
+    try:
+        logger.info(f"GET email confirmation: token={bool(token)}, user_id={user_id}")
+        
+        # Call the POST endpoint logic
+        request_data = {}
+        if token:
+            request_data['token'] = token
+        if user_id:
+            request_data['user_id'] = user_id
+            
+        result = await confirm_email_endpoint(request_data)
+        
+        # For GET requests, we might want to redirect or return HTML
+        if result.get('success'):
+            return {
+                "success": True,
+                "message": "Email confirmed successfully! You can now close this window and return to the application.",
+                "data": result
+            }
+        else:
+            return result
+            
+    except Exception as e:
+        logger.error(f"GET email confirmation error: {str(e)}")
+        return {
+            "success": False,
+            "error": "Failed to process email confirmation",
+            "details": str(e)
+        }
+
+@app.get("/confirm-email", response_class=HTMLResponse)
+async def email_confirmation_page():
+    """Serve email confirmation HTML page"""
+    try:
+        # Read the HTML file
+        html_file_path = os.path.join(os.path.dirname(__file__), "email_confirmation_page.html")
+        
+        if os.path.exists(html_file_path):
+            with open(html_file_path, 'r', encoding='utf-8') as file:
+                html_content = file.read()
+            return HTMLResponse(content=html_content, status_code=200)
+        else:
+            # Fallback HTML if file doesn't exist
+            fallback_html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Email Confirmation - Squidgy</title>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                    .container { max-width: 500px; margin: 0 auto; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>🦑 Squidgy Email Confirmation</h1>
+                    <p>Confirming your email address...</p>
+                    <script>
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const token = urlParams.get('token');
+                        const userId = urlParams.get('user_id');
+                        
+                        if (token || userId) {
+                            fetch('/api/auth/confirm-email', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ token: token, user_id: userId })
+                            })
+                            .then(response => response.json())
+                            .then(result => {
+                                if (result.success) {
+                                    document.body.innerHTML = '<div class="container"><h1>✅ Email Confirmed!</h1><p>Thank you! You can now close this window.</p></div>';
+                                } else {
+                                    document.body.innerHTML = '<div class="container"><h1>❌ Confirmation Failed</h1><p>' + (result.error || 'Unknown error') + '</p></div>';
+                                }
+                            })
+                            .catch(error => {
+                                document.body.innerHTML = '<div class="container"><h1>❌ Error</h1><p>Unable to confirm email. Please try again.</p></div>';
+                            });
+                        } else {
+                            document.body.innerHTML = '<div class="container"><h1>❌ Invalid Link</h1><p>This confirmation link is invalid.</p></div>';
+                        }
+                    </script>
+                </div>
+            </body>
+            </html>
+            """
+            return HTMLResponse(content=fallback_html, status_code=200)
+            
+    except Exception as e:
+        logger.error(f"Error serving email confirmation page: {str(e)}")
+        error_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head><title>Error - Squidgy</title></head>
+        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+            <h1>❌ Error</h1>
+            <p>Unable to load email confirmation page.</p>
+            <p>Error: {str(e)}</p>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
 
 # =============================================================================
 # TOOL ENDPOINTS - Organized Tools Integration
