@@ -4536,7 +4536,7 @@ class GHLUserCreationRequest(BaseModel):
     password: Optional[str] = None
     phone: Optional[str] = None
     account_type: Optional[str] = "account"
-    role: Optional[str] = "user"
+    role: Optional[str] = "admin"
     custom_permissions: Optional[Dict[str, Any]] = None
 
 # Global variable to store location_id after subaccount creation
@@ -4837,7 +4837,7 @@ async def create_ghl_user(request: GHLUserCreationRequest):
                 "details": {
                     "name": f"{request.first_name} {request.last_name}",
                     "email": email,
-                    "role": "user",
+                    "role": request.role,
                     "location_id": request.location_id,
                     "created_at": datetime.now().isoformat()
                 }
@@ -4865,7 +4865,7 @@ async def create_agency_user(
     email: str,
     password: str,
     phone: str,
-    role: str = "user",
+    role: str = "admin",
     permissions: dict = None,
     scopes: list = None
 ):
@@ -5164,7 +5164,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             "details": {
                 "name": f"{request.prospect_first_name} {request.prospect_last_name}",
                 "email": request.prospect_email,
-                "role": "user",
+                "role": "admin",
                 "location_ids": [location_id]
             }
         }
@@ -5197,7 +5197,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             email=soma_unique_email,  # Use unique email per location
             password="Dummy@123",
             phone="+17166044029",
-            role="user",
+            role="admin",
             permissions=full_permissions,
             scopes=location_scopes
         )
