@@ -3942,6 +3942,7 @@ async def update_password(request: dict):
             "details": str(e)
         }
 
+
 @app.post("/api/auth/confirm-signup")
 async def confirm_signup_api(request: dict):
     """Backend API endpoint to confirm user signup - called by frontend"""
