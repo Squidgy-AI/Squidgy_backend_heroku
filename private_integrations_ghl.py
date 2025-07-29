@@ -79,7 +79,7 @@ class HighLevelManualVerification:
                     print("[INFO] Continuing anyway - code may already be sent")
                 
                 print("[INFO] HighLevel is sending a verification code to your email:")
-                print("       somashekhar34+vzz9GjJC@gmail.com")
+                print("       somashekhar34+MdY4KL72@gmail.com")
                 print("[INFO] The email will be from: noreply@talk.onetoo.com")
                 print()
                 print("[ACTION NEEDED] Please:")
@@ -740,7 +740,7 @@ def main():
         return
     
     # Use the correct location ID directly
-    location_id = "vzz9GjJCLmJv6WeP2rel"
+    location_id = "MdY4KL72E0lc7TqMm3H0"
     print(f"\n[INPUT] Using location ID: {location_id}")
     
     print()

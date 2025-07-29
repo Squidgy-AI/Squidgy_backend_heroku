@@ -407,7 +407,7 @@ def main():
     # Get credentials from environment
     email = os.getenv('HIGHLEVEL_EMAIL')
     password = os.getenv('HIGHLEVEL_PASSWORD')
-    location_id = "vzz9GjJCLmJv6WeP2rel"
+    location_id = "MdY4KL72E0lc7TqMm3H0"
     
     if not email or not password:
         print("❌ Missing credentials in .env file:")

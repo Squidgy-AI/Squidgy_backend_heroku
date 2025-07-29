@@ -636,7 +636,7 @@ def main():
         return
     
     # Use the correct location ID
-    location_id = "vzz9GjJCLmJv6WeP2rel"
+    location_id = "MdY4KL72E0lc7TqMm3H0"
     print(f"[INPUT] Using location ID: {location_id}")
     
     # Run automation
