@@ -3881,6 +3881,67 @@ async def reset_password_email(request: dict):
             "details": str(e)
         }
 
+@app.post("/api/auth/update-password")
+async def update_password(request: dict):
+    """Update user password using reset token"""
+    try:
+        token = request.get('token')
+        new_password = request.get('password')
+        
+        if not token or not new_password:
+            return {
+                "success": False,
+                "error": "Token and password are required"
+            }
+        
+        # Update password using Supabase Auth with token verification
+        try:
+            # First verify the token and update password in one go
+            response = supabase.auth.verify_otp({
+                'token': token,
+                'type': 'recovery'  # This is for password reset tokens
+            })
+            
+            if response.user:
+                # Now update the password using the verified session
+                update_response = supabase.auth.update_user({
+                    'password': new_password
+                })
+                
+                if update_response.user:
+                    logger.info(f"Password updated successfully for user: {response.user.id}")
+                    return {
+                        "success": True,
+                        "message": "Password updated successfully!",
+                        "user_id": response.user.id
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": "Failed to update password after token verification"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": "Invalid or expired reset token"
+                }
+                
+        except Exception as auth_error:
+            logger.error(f"Supabase password update error: {str(auth_error)}")
+            return {
+                "success": False,
+                "error": "Invalid or expired reset token",
+                "details": str(auth_error)
+            }
+            
+    except Exception as e:
+        logger.error(f"Update password endpoint error: {str(e)}")
+        return {
+            "success": False,
+            "error": "Failed to update password",
+            "details": str(e)
+        }
+
 @app.post("/api/auth/confirm-signup")
 async def confirm_signup_api(request: dict):
     """Backend API endpoint to confirm user signup - called by frontend"""
