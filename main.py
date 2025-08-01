@@ -4215,16 +4215,6 @@ async def solar_report_endpoint(address: str):
         logger.error(f"Error in solar report endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/website/screenshot")
-async def website_screenshot_endpoint(url: str, session_id: str = None):
-    """Capture website screenshot"""
-    try:
-        result = await tools.capture_website_screenshot_async(url, session_id)
-        return result
-    except Exception as e:
-        logger.error(f"Error in website screenshot endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.get("/api/website/favicon")
 async def website_favicon_endpoint(url: str, session_id: str = None):
     """Get website favicon"""
