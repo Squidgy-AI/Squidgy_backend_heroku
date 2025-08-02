@@ -5627,6 +5627,105 @@ async def connect_facebook_page(request: dict):
             "message": f"Error connecting page: {str(e)}"
         }
 
+@app.post("/api/facebook/connect-page-enhanced")
+async def connect_facebook_page_enhanced(request: dict):
+    """
+    Enhanced Facebook page connection that uses business setup credentials
+    Uses location_id to get proper business information from squidgy_business_information table
+    """
+    try:
+        location_id = request.get('location_id')
+        page_id = request.get('page_id')
+        jwt_token = request.get('jwt_token')
+        firm_user_id = request.get('firm_user_id')
+        
+        print(f"🔍 Enhanced connection request received:")
+        print(f"   Location ID: {location_id}")
+        print(f"   Page ID: {page_id}")
+        print(f"   Firm User ID: {firm_user_id}")
+        print(f"   JWT Token: {jwt_token[:50] + '...' if jwt_token else 'None'}")
+        
+        if not location_id or not page_id or not jwt_token:
+            missing_fields = []
+            if not location_id: missing_fields.append('location_id')
+            if not page_id: missing_fields.append('page_id')
+            if not jwt_token: missing_fields.append('jwt_token')
+            
+            error_msg = f"Missing required fields: {', '.join(missing_fields)}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Get business information from database
+        if firm_user_id:
+            business_result = supabase.table('squidgy_business_information').select(
+                'business_name, ghl_user_email, ghl_user_password, firm_user_id'
+            ).eq('ghl_location_id', location_id).eq('firm_user_id', firm_user_id).single().execute()
+        else:
+            business_result = supabase.table('squidgy_business_information').select(
+                'business_name, ghl_user_email, ghl_user_password, firm_user_id'
+            ).eq('ghl_location_id', location_id).single().execute()
+        
+        if not business_result.data:
+            print(f"❌ Business setup not found for location_id: {location_id}")
+            raise HTTPException(status_code=404, detail=f"Business setup not found for location_id: {location_id}")
+        
+        business_data = business_result.data
+        print(f"✅ Found business: {business_data['business_name']}")
+        
+        # Get page details from database
+        page_response = supabase.table('squidgy_facebook_pages').select("*").eq('location_id', location_id).eq('page_id', page_id).execute()
+        
+        if not page_response.data:
+            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in database for location {location_id}")
+        
+        page_data = page_response.data[0]
+        print(f"✅ Found page: {page_data['page_name']}")
+        
+        # Connect page using same logic as original but with enhanced business context
+        ghl_connect_url = f"https://services.leadconnectorhq.com/facebook/app/connect?locationId={location_id}&pageId={page_id}"
+        
+        headers = {
+            'Authorization': f'Bearer {jwt_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(ghl_connect_url, headers=headers)
+        
+        if response.status_code == 200:
+            # Update connection status in database
+            supabase.table('squidgy_facebook_pages').update({
+                'is_connected': True,
+                'connected_at': datetime.now().isoformat(),
+                'connection_status': 'active',
+                'business_name': business_data['business_name']
+            }).eq('location_id', location_id).eq('page_id', page_id).execute()
+            
+            print(f"✅ Successfully connected page {page_data['page_name']} to location {location_id}")
+            
+            return {
+                "success": True,
+                "message": f"Successfully connected {page_data['page_name']} to {business_data['business_name']}",
+                "page_name": page_data['page_name'],
+                "business_name": business_data['business_name'],
+                "location_id": location_id,
+                "page_id": page_id
+            }
+        else:
+            print(f"❌ Failed to connect page: {response.status_code} - {response.text}")
+            return {
+                "success": False,
+                "message": f"Failed to connect page to GHL: {response.status_code}",
+                "error": response.text
+            }
+    
+    except Exception as e:
+        print(f"💥 Error in enhanced page connection: {e}")
+        return {
+            "success": False,
+            "message": f"Error connecting page: {str(e)}"
+        }
+
 @app.post("/api/facebook/get-pages", response_model=FacebookPagesResponse)
 async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
     """
@@ -5634,6 +5733,58 @@ async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
     Handles browser automation, JWT extraction, and Facebook pages retrieval
     """
     return await get_facebook_pages(request)
+
+@app.post("/api/facebook/get-pages-by-location", response_model=FacebookPagesResponse)
+async def get_facebook_pages_by_location(request: dict):
+    """
+    Enhanced Facebook integration endpoint that uses business setup credentials
+    Uses location_id to fetch credentials from squidgy_business_information table
+    """
+    try:
+        location_id = request.get('location_id')
+        firm_user_id = request.get('firm_user_id')
+        agent_id = request.get('agent_id', 'SOLAgent')
+        
+        if not location_id:
+            raise HTTPException(status_code=400, detail="location_id is required")
+        
+        if not firm_user_id:
+            raise HTTPException(status_code=400, detail="firm_user_id is required")
+        
+        print(f"🔍 Getting Facebook pages for location: {location_id}")
+        
+        # Get business information and GHL credentials from database
+        business_result = supabase.table('squidgy_business_information').select(
+            'ghl_user_email, ghl_user_password, business_name, firm_user_id'
+        ).eq('ghl_location_id', location_id).eq('firm_user_id', firm_user_id).single().execute()
+        
+        if not business_result.data:
+            raise HTTPException(status_code=404, detail=f"Business setup not found for location_id: {location_id}")
+        
+        business_data = business_result.data
+        
+        print(f"✅ Found business: {business_data['business_name']}")
+        print(f"   Email: {business_data['ghl_user_email']}")
+        
+        # Create FacebookPagesRequest with business credentials
+        fb_request = FacebookPagesRequest(
+            location_id=location_id,
+            user_id=f"business_user_{location_id}",  # Generate user_id from location
+            email=business_data['ghl_user_email'],
+            password=business_data['ghl_user_password'],
+            firm_user_id=business_data['firm_user_id']
+        )
+        
+        # Call the main Facebook pages function
+        result = await get_facebook_pages(fb_request)
+        
+        print(f"🎯 Facebook pages result for location {location_id}: {result.success}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error getting Facebook pages by location: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
 # BUSINESS PROFILE ENDPOINTS
