@@ -5912,9 +5912,9 @@ async def save_business_profile(request: BusinessProfileRequest):
     Save business profile information to database
     """
     try:
-        # Get user name and email from profiles table
+        # Get user name, email, and company_id from profiles table
         user_profile = supabase.table('profiles')\
-            .select('full_name, email')\
+            .select('full_name, email, company_id')\
             .eq('user_id', request.firm_user_id)\
             .single()\
             .execute()
@@ -5924,9 +5924,19 @@ async def save_business_profile(request: BusinessProfileRequest):
         
         profile_data = user_profile.data
         
+        # Ensure company_id exists for firm_id
+        print(f"[BUSINESS PROFILE] User profile data: {profile_data}")
+        
+        if not profile_data.get('company_id'):
+            print(f"[BUSINESS PROFILE] ❌ Missing company_id in profile for user: {request.firm_user_id}")
+            raise HTTPException(status_code=400, detail="User profile missing company_id - required for business profile")
+        
+        print(f"[BUSINESS PROFILE] ✅ Using company_id as firm_id: {profile_data['company_id']}")
+        
         # Prepare business profile data
         business_data = {
             'firm_user_id': request.firm_user_id,
+            'firm_id': profile_data['company_id'],  # Use company_id from profiles as firm_id
             'business_name': request.business_name,
             'business_email': request.business_email,
             'phone': request.phone,
