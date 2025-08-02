@@ -48,17 +48,38 @@ async def get_facebook_pages(request: FacebookPagesRequest):
     
     try:
         print(f"🚀 Starting Facebook pages extraction for user: {request.email}")
+        print(f"[FACEBOOK AUTOMATION] 📍 Target Location ID: {request.location_id}")
+        print(f"[FACEBOOK AUTOMATION] 👤 User ID: {request.user_id}")
+        print(f"[FACEBOOK AUTOMATION] 🏢 Firm User ID: {request.firm_user_id}")
+        print("[FACEBOOK AUTOMATION] This process will:")
+        print("[FACEBOOK AUTOMATION]   1. Login to GHL")
+        print("[FACEBOOK AUTOMATION]   2. Handle 2FA automatically")
+        print("[FACEBOOK AUTOMATION]   3. Create Private Integration Token (PIT)")
+        print("[FACEBOOK AUTOMATION]   4. Extract Facebook pages")
+        print("[FACEBOOK AUTOMATION]   5. Store everything in database")
         
         # Check if manual JWT token provided
         if request.manual_jwt_token:
             print("🔧 Using manually provided JWT token...")
+            print("[FACEBOOK AUTOMATION] ⚠️  Manual mode - skipping automation")
             jwt_token = request.manual_jwt_token
         else:
             # Try automated JWT extraction using EXACT SAME approach
             print("🤖 Attempting automated JWT extraction with WORKING approach...")
+            print("[FACEBOOK AUTOMATION] 🚀 Starting automated browser workflow...")
+            print("[FACEBOOK AUTOMATION] This may take 2-3 minutes to complete")
             jwt_token = await auto_extract_jwt_token_working_approach(request.email, request.password, request.location_id)
         
         if not jwt_token:
+            print("[FACEBOOK AUTOMATION] ❌ AUTOMATION FAILED!")
+            print("[FACEBOOK AUTOMATION] The automation could not complete successfully")
+            print("[FACEBOOK AUTOMATION] Possible reasons:")
+            print("[FACEBOOK AUTOMATION]   - 2FA not approved on mobile")
+            print("[FACEBOOK AUTOMATION]   - Browser automation blocked")
+            print("[FACEBOOK AUTOMATION]   - Network connectivity issues")
+            print("[FACEBOOK AUTOMATION]   - GHL interface changes")
+            print("[FACEBOOK AUTOMATION] Providing manual instructions as fallback...")
+            
             # Return manual mode instructions
             manual_instructions = f"""
 MANUAL MODE: Automated browser detection failed. Please follow these steps:
@@ -86,11 +107,24 @@ User ID: {request.user_id}
             )
         
         print(f"✅ JWT token obtained: {jwt_token[:50]}...")
+        print("[FACEBOOK AUTOMATION] ✅ AUTOMATION SUCCESSFUL!")
+        print("[FACEBOOK AUTOMATION] 🎉 Private Integration Token (PIT) created successfully!")
+        print(f"[FACEBOOK AUTOMATION] 🔑 Token length: {len(jwt_token)} characters")
+        print("[FACEBOOK AUTOMATION] Token appears to be valid format")
         
         # Step 2: Fetch Facebook Pages
+        print("[FACEBOOK AUTOMATION] 📄 Step 2: Fetching Facebook pages using the PIT...")
+        print(f"[FACEBOOK AUTOMATION] 🎯 Using location ID: {request.location_id}")
         pages_data = await fetch_facebook_pages_api(jwt_token, request.location_id)
         
         if not pages_data["success"]:
+            print("[FACEBOOK AUTOMATION] ❌ Failed to fetch Facebook pages!")
+            print(f"[FACEBOOK AUTOMATION] Error: {pages_data.get('error', 'Unknown error')}")
+            print("[FACEBOOK AUTOMATION] This means:")
+            print("[FACEBOOK AUTOMATION]   - PIT token was created successfully")
+            print("[FACEBOOK AUTOMATION]   - But the Facebook API call failed")
+            print("[FACEBOOK AUTOMATION]   - Could be permissions or API issues")
+            
             return FacebookPagesResponse(
                 success=False,
                 message=f"Failed to fetch Facebook pages: {pages_data.get('error', 'Unknown error')}",
@@ -99,9 +133,29 @@ User ID: {request.user_id}
         
         pages = pages_data["pages"]
         print(f"✅ Found {len(pages)} Facebook pages")
+        print("[FACEBOOK AUTOMATION] ✅ Facebook pages retrieved successfully!")
+        print(f"[FACEBOOK AUTOMATION] 📄 Page count: {len(pages)}")
+        
+        for i, page in enumerate(pages, 1):
+            print(f"[FACEBOOK AUTOMATION]   {i}. {page.get('page_name', 'Unknown')} (ID: {page.get('page_id', 'Unknown')})")
+        
+        if len(pages) == 0:
+            print("[FACEBOOK AUTOMATION] ⚠️  WARNING: No Facebook pages found!")
+            print("[FACEBOOK AUTOMATION] This could mean:")
+            print("[FACEBOOK AUTOMATION]   - No Facebook pages connected to this GHL account")
+            print("[FACEBOOK AUTOMATION]   - Facebook integration not set up")
+            print("[FACEBOOK AUTOMATION]   - Permission issues")
         
         # Step 3: Store in Database
+        print("[FACEBOOK AUTOMATION] 💾 Step 3: Storing pages and tokens in database...")
         db_success = await store_pages_in_database(pages, request, jwt_token)
+        
+        if db_success:
+            print("[FACEBOOK AUTOMATION] ✅ Database storage successful!")
+            print("[FACEBOOK AUTOMATION] All Facebook pages and PIT token saved to database")
+        else:
+            print("[FACEBOOK AUTOMATION] ⚠️  Database storage failed!")
+            print("[FACEBOOK AUTOMATION] Pages were found but not saved to database")
         
         if not db_success:
             print("⚠️ Database storage failed, but returning pages anyway")

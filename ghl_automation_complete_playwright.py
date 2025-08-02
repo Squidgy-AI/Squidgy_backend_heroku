@@ -444,25 +444,48 @@ class HighLevelCompleteAutomationPlaywright:
     async def create_private_integration(self):
         """Create the private integration with all required scopes and extract token - Playwright version"""
         print("\n[STEP 3] Creating private integration...")
+        print("[PIT CREATION] 🎯 Starting Private Integration Token (PIT) creation process")
+        print("[PIT CREATION] This is the critical step that creates the API token")
         
         # We should already be on the private integrations page after login/verification
         print("[INFO] Should already be on private integrations page after login/verification")
         current_url = self.page.url
         print(f"[CURRENT URL] {current_url}")
+        print(f"[PIT CREATION] 📍 Current page: {current_url}")
+        
+        # Check if we're actually on the right page
+        if "private-integrations" not in current_url:
+            print("[PIT CREATION] ⚠️  WARNING: Not on private integrations page!")
+            print(f"[PIT CREATION] Expected: contains 'private-integrations'")
+            print(f"[PIT CREATION] Actual: {current_url}")
+            print("[PIT CREATION] This might explain why PIT creation fails")
+        else:
+            print("[PIT CREATION] ✅ Confirmed on private integrations page")
         
         # Wait for page to fully load and handle any redirects
         print("[⏳ WAITING] Waiting for page to stabilize...")
+        print("[PIT CREATION] 🕐 Waiting 8 seconds for page elements to load...")
         await asyncio.sleep(8)  # Increased wait time
         
         # Check if URL has changed after waiting
         new_url = self.page.url
         if new_url != current_url:
             print(f"[📍 REDIRECT] Page redirected to: {new_url}")
+            print(f"[PIT CREATION] 🔄 Page changed from {current_url} to {new_url}")
+            if "private-integrations" not in new_url:
+                print("[PIT CREATION] ❌ CRITICAL: Redirected away from private integrations page!")
+                print("[PIT CREATION] This will cause PIT creation to fail")
+            else:
+                print("[PIT CREATION] ✅ Still on private integrations page after redirect")
         
         # Try multiple times with different strategies
         max_retries = 3
+        print(f"[PIT CREATION] 🔍 Looking for 'Create Integration' button...")
+        print(f"[PIT CREATION] Will try {max_retries} attempts with different selectors")
+        
         for retry in range(max_retries):
             print(f"\n[🔄 RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
+            print(f"[PIT CREATION] 🎯 Step 3.{retry + 1}: Searching for integration creation button")
             
             # Press the integration creation button with multiple fallback options
             try:
@@ -484,20 +507,26 @@ class HighLevelCompleteAutomationPlaywright:
                 ]
                 
                 button_clicked = False
-                for selector in button_selectors:
+                print(f"[PIT CREATION] 📋 Testing {len(button_selectors)} different button selectors...")
+                
+                for i, selector in enumerate(button_selectors, 1):
                     try:
-                        print(f"[🔍 SEARCH] Trying selector: {selector}")
+                        print(f"[🔍 SEARCH] {i}/{len(button_selectors)} Trying selector: {selector}")
                         xpath_selector = f"xpath={selector}"
                         await self.page.wait_for_selector(xpath_selector, timeout=5000)
+                        
+                        print(f"[PIT CREATION] ✅ Found button with selector {i}!")
                         
                         # Scroll element into view
                         await self.page.locator(xpath_selector).scroll_into_view_if_needed()
                         await asyncio.sleep(0.5)
                         await self.page.click(xpath_selector)
                         print(f"[✅ SUCCESS] Integration button clicked using: {selector}")
+                        print(f"[PIT CREATION] 🎉 Successfully clicked 'Create Integration' button!")
                         button_clicked = True
                         break
-                    except Exception:
+                    except Exception as e:
+                        print(f"[🔍 SEARCH] {i}/{len(button_selectors)} Selector failed: {str(e)[:50]}...")
                         continue
                 
                 if button_clicked:
@@ -523,35 +552,52 @@ class HighLevelCompleteAutomationPlaywright:
         # Fill integration name
         try:
             print("[INTEGRATION] Filling integration name...")
+            print("[PIT CREATION] 📝 Step 3.A: Filling integration form with name 'location key'")
             name_xpath = "/html/body/div[1]/div[1]/div[4]/section/div/section/div/div/div/div[2]/div/div[2]/div/div/div[1]/div/form/div[1]/div[1]/div/div[1]/div[1]/input"
             xpath_selector = f"xpath={name_xpath}"
             
+            print(f"[PIT CREATION] 🔍 Looking for name input field: {name_xpath}")
             await self.page.wait_for_selector(xpath_selector, timeout=10000)
+            print("[PIT CREATION] ✅ Found name input field")
+            
             await self.page.fill(xpath_selector, "")  # Clear by filling with empty string
             await self.page.fill(xpath_selector, "location key")
             print("[INTEGRATION] Integration name set to: location key")
+            print("[PIT CREATION] ✅ Successfully filled integration name")
             await asyncio.sleep(2)
         except Exception as e:
             print(f"[ERROR] Could not fill integration name: {e}")
+            print(f"[PIT CREATION] ❌ CRITICAL: Failed to fill integration name - {e}")
+            print("[PIT CREATION] This will prevent PIT creation from completing")
             return False
         
         # Submit the form
         try:
             print("[INTEGRATION] Submitting integration form...")
+            print("[PIT CREATION] 📤 Step 3.B: Submitting the integration form")
             submit_xpath = "/html/body/div[1]/div[1]/div[4]/section/div/section/div/div/div/div[2]/div/div[2]/div/div/div[2]/div/button[2]"
             xpath_selector = f"xpath={submit_xpath}"
             
+            print(f"[PIT CREATION] 🔍 Looking for submit button: {submit_xpath}")
             await self.page.wait_for_selector(xpath_selector, timeout=10000)
+            print("[PIT CREATION] ✅ Found submit button")
+            
             await self.page.click(xpath_selector)
             print("[INTEGRATION] Form submitted")
+            print("[PIT CREATION] ✅ Successfully submitted integration form")
+            print("[PIT CREATION] 🕐 Waiting 5 seconds for next step to load...")
             await asyncio.sleep(5)
         except Exception as e:
             print(f"[ERROR] Could not submit integration form: {e}")
+            print(f"[PIT CREATION] ❌ CRITICAL: Failed to submit integration form - {e}")
+            print("[PIT CREATION] Cannot proceed to scope selection without form submission")
             return False
         
         # Select scopes
         try:
             print("[INTEGRATION] Opening scopes selection...")
+            print("[PIT CREATION] 🎯 Step 3.C: Starting scope selection process")
+            print("[PIT CREATION] This is critical - we need to select 15 specific scopes")
             
             # Click the main scopes container to activate the input
             print("[INTEGRATION] Clicking main scopes container...")
@@ -573,6 +619,11 @@ class HighLevelCompleteAutomationPlaywright:
                 "View Custom Values", "Edit Custom Values",
                 "View Medias", "Edit Tags", "View Tags"
             ]
+            
+            print(f"[PIT CREATION] 📋 Need to select {len(scopes_to_add)} scopes:")
+            for i, scope in enumerate(scopes_to_add, 1):
+                print(f"[PIT CREATION]   {i:2d}. {scope}")
+            print("[PIT CREATION] All scopes must be selected for PIT to work properly")
             
             try:
                 # Direct targeting approach
@@ -687,13 +738,22 @@ class HighLevelCompleteAutomationPlaywright:
                 await self.page.wait_for_selector(xpath_selector, timeout=10000)
                 
                 # Before clicking, try to get the token text directly
+                print("[PIT CREATION] 🎯 Step 3.D: Extracting the Private Integration Token")
+                print("[PIT CREATION] This is the final step - getting the actual token!")
+                
                 try:
+                    print("[PIT CREATION] 🔍 Searching for token elements on the page...")
                     # Look for pre or code elements that might contain the token
                     token_elements = await self.page.locator("pre, code, div[class*='token'], textarea").all()
-                    for elem in token_elements:
+                    print(f"[PIT CREATION] Found {len(token_elements)} potential token elements")
+                    
+                    for i, elem in enumerate(token_elements, 1):
+                        print(f"[PIT CREATION] 🔍 Checking element {i}/{len(token_elements)}...")
                         if await elem.is_visible():
+                            print(f"[PIT CREATION] ✅ Element {i} is visible, extracting text...")
                             token_text = await elem.text_content() or await elem.input_value()
                             if token_text and len(token_text) > 10:  # Likely a token
+                                print(f"[PIT CREATION] 🎉 Found token! Length: {len(token_text)} characters")
                                 print("\n")
                                 print("*"*100)
                                 print("*" + " "*38 + "INTEGRATION TOKEN FOUND" + " "*38 + "*")
@@ -704,14 +764,27 @@ class HighLevelCompleteAutomationPlaywright:
                                 print("\n")
                                 print("*"*100)
                                 
+                                print("[PIT CREATION] ✅ Successfully extracted PIT token!")
+                                print("[PIT CREATION] 💾 Saving token and extracting additional tokens...")
+                                
                                 # Extract tokens one more time
                                 await self.extract_tokens_from_storage()
                                 
                                 # Save all tokens
                                 self.pit_token = token_text
                                 await self.save_all_tokens(token_text)
+                                print("[PIT CREATION] ✅ Token extraction and saving completed!")
+                                return True
+                            else:
+                                print(f"[PIT CREATION] ❌ Element {i} text too short or empty")
+                        else:
+                            print(f"[PIT CREATION] ❌ Element {i} not visible")
+                            
+                    print("[PIT CREATION] ⚠️  No valid token found in direct search, trying copy button...")
+                    
                 except Exception as e:
-                    print(f"Could not read token directly: {e}")
+                    print(f"[PIT CREATION] ❌ Error in direct token search: {e}")
+                    print(f"[PIT CREATION] Falling back to copy button method...")
                 
                 # Click the copy button
                 await self.page.click(xpath_selector)
