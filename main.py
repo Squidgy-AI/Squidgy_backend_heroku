@@ -5202,6 +5202,54 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             scopes=location_scopes
         )
         
+        # Save business information to database for automation
+        business_id = str(uuid.uuid4())
+        
+        print(f"[GHL AUTOMATION] 💾 Saving business data to database for automation...")
+        print(f"[GHL AUTOMATION] Business: {request.subaccount_name}")
+        print(f"[GHL AUTOMATION] Location ID: {location_id}")
+        print(f"[GHL AUTOMATION] Automation Email: {soma_unique_email}")
+        
+        try:
+            # Insert business data for Facebook automation
+            supabase.table('squidgy_business_information').insert({
+                'id': business_id,
+                'firm_user_id': request.company_id,  # Using company_id as firm_user_id
+                'agent_id': 'SOLAgent',
+                'business_name': request.subaccount_name,
+                'business_address': request.address,
+                'city': request.city,
+                'state': request.state,
+                'country': request.country,
+                'postal_code': request.postal_code,
+                'ghl_location_id': location_id,
+                'ghl_user_email': soma_unique_email,
+                'ghl_user_password': "Dummy@123",
+                'ghl_user_id': soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None,
+                'setup_status': 'user_created'
+            }).execute()
+            
+            print(f"[GHL AUTOMATION] ✅ Business data saved successfully!")
+            print(f"[GHL AUTOMATION] Business ID: {business_id}")
+            
+            # Trigger Facebook automation asynchronously
+            print(f"[GHL AUTOMATION] 🚀 Triggering Facebook PIT creation automation...")
+            print(f"[GHL AUTOMATION] This will run in background - check logs for PIT creation progress")
+            
+            # Use asyncio to run automation in background (non-blocking)
+            import asyncio
+            asyncio.create_task(run_facebook_automation_for_business(
+                business_id=business_id,
+                location_id=location_id,
+                email=soma_unique_email,
+                password="Dummy@123",
+                firm_user_id=request.company_id
+            ))
+            
+        except Exception as db_error:
+            print(f"[GHL AUTOMATION] ⚠️ Database save failed: {db_error}")
+            print(f"[GHL AUTOMATION] Account created but automation won't trigger")
+
         # Return combined response with SOMA's credentials for downstream Facebook integration
         return {
             "status": "success",
@@ -5223,6 +5271,8 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
                 "email": soma_unique_email,
                 "role": "Admin User"
             },
+            "business_id": business_id,  # Include business_id for tracking
+            "automation_triggered": True,  # Indicate automation was started
             "created_at": datetime.now().isoformat()
         }
         
@@ -6095,6 +6145,102 @@ async def create_ghl_user_sim(location_id: str, email: str, password: str, busin
     except Exception as e:
         print(f"[ERROR] User creation failed: {e}")
         return {"success": False, "error": str(e)}
+
+async def run_facebook_automation_for_business(business_id: str, location_id: str, email: str, password: str, firm_user_id: str):
+    """Run Facebook automation specifically for GHL subaccount creation - with enhanced logging"""
+    try:
+        print(f"[FACEBOOK AUTOMATION] 🎯 Starting Facebook PIT creation for business: {business_id}")
+        print(f"[FACEBOOK AUTOMATION] 📍 Location ID: {location_id}")
+        print(f"[FACEBOOK AUTOMATION] 👤 Email: {email}")
+        print(f"[FACEBOOK AUTOMATION] 🏢 Firm User ID: {firm_user_id}")
+        
+        # Update status to automation_running
+        supabase.table('squidgy_business_information').update({
+            'setup_status': 'automation_running',
+            'automation_started_at': datetime.now().isoformat()
+        }).eq('id', business_id).execute()
+        
+        print(f"[FACEBOOK AUTOMATION] ✅ Updated database status to 'automation_running'")
+        
+        # Import and run the Playwright automation
+        try:
+            print(f"[FACEBOOK AUTOMATION] 📦 Loading Playwright automation module...")
+            from ghl_automation_complete_playwright import HighLevelCompleteAutomationPlaywright
+            
+            print(f"[FACEBOOK AUTOMATION] 🚀 Initializing automation (headless mode)...")
+            automation = HighLevelCompleteAutomationPlaywright(headless=True)
+            
+            print(f"[FACEBOOK AUTOMATION] ▶️ Starting automation workflow...")
+            success = await automation.run_automation(
+                email=email, 
+                password=password, 
+                location_id=location_id, 
+                firm_user_id=firm_user_id, 
+                agent_id='SOLAgent', 
+                ghl_user_id=None
+            )
+            
+            if success:
+                # Update status to completed and save PIT token
+                pit_token = automation.pit_token if hasattr(automation, 'pit_token') else None
+                
+                supabase.table('squidgy_business_information').update({
+                    'setup_status': 'completed',
+                    'automation_completed_at': datetime.now().isoformat(),
+                    'pit_token': pit_token,
+                    'access_token_expires_at': automation.token_expiry.isoformat() if automation.token_expiry else None,
+                    'firebase_token_available': bool(automation.firebase_token)
+                }).eq('id', business_id).execute()
+                
+                print(f"[FACEBOOK AUTOMATION] ✅ AUTOMATION SUCCESSFUL!")
+                print(f"[FACEBOOK AUTOMATION] 🎉 PIT Token created: {pit_token[:30] if pit_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 🔑 Access Token: {'✅ Captured' if automation.access_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION] 🔥 Firebase Token: {'✅ Captured' if automation.firebase_token else '❌ Missing'}")
+                
+            else:
+                # Update status to failed
+                supabase.table('squidgy_business_information').update({
+                    'setup_status': 'failed',
+                    'automation_completed_at': datetime.now().isoformat(),
+                    'automation_error': "Automation workflow failed - check detailed logs above"
+                }).eq('id', business_id).execute()
+                
+                print(f"[FACEBOOK AUTOMATION] ❌ AUTOMATION FAILED!")
+                print(f"[FACEBOOK AUTOMATION] Check the detailed logs above for specific failure points")
+                
+        except ImportError as import_error:
+            error_msg = f"Could not import automation module: {import_error}"
+            print(f"[FACEBOOK AUTOMATION] ❌ IMPORT ERROR: {error_msg}")
+            
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': error_msg
+            }).eq('id', business_id).execute()
+            
+        except Exception as automation_error:
+            error_msg = f"Automation execution failed: {automation_error}"
+            print(f"[FACEBOOK AUTOMATION] ❌ EXECUTION ERROR: {error_msg}")
+            
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': error_msg
+            }).eq('id', business_id).execute()
+            
+    except Exception as e:
+        error_msg = f"Background automation failed: {e}"
+        print(f"[FACEBOOK AUTOMATION] ❌ BACKGROUND ERROR: {error_msg}")
+        
+        # Update status to failed with error
+        try:
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': error_msg
+            }).eq('id', business_id).execute()
+        except:
+            print(f"[FACEBOOK AUTOMATION] ❌ Could not update database with error status")
 
 async def run_playwright_automation_background(business_id: str, email: str, password: str, location_id: str, firm_user_id: str, agent_id: str, ghl_user_id: str = None):
     """Run the Playwright automation in the background (NON-BLOCKING)"""
