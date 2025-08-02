@@ -5794,16 +5794,16 @@ class BusinessProfileRequest(BaseModel):
     firm_user_id: str
     business_name: str
     business_email: str
-    phone: str = None
-    website: str = None
-    address: str = None
-    city: str = None
-    state: str = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
     country: str = "US"
-    postal_code: str = None
-    logo_url: str = None
-    screenshot_url: str = None
-    favicon_url: str = None
+    postal_code: Optional[str] = None
+    logo_url: Optional[str] = None
+    screenshot_url: Optional[str] = None
+    favicon_url: Optional[str] = None
 
 @app.post("/api/business/upload-logo")
 async def upload_business_logo(
