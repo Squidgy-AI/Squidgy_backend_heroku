@@ -15,17 +15,30 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 import httpx
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
-# Import our database and Playwright automation
+# Import Playwright automation
 try:
-    from database import execute, fetch_one
     from ghl_automation_complete_playwright import HighLevelCompleteAutomationPlaywright
-    DATABASE_AVAILABLE = True
+    PLAYWRIGHT_AVAILABLE = True
 except ImportError as e:
-    print(f"[WARNING] Import failed: {e}")
-    DATABASE_AVAILABLE = False
+    print(f"[WARNING] Playwright import failed: {e}")
+    PLAYWRIGHT_AVAILABLE = False
 
 load_dotenv()
+
+# Initialize Supabase client (same as main.py)
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+def create_supabase_client() -> Client:
+    return create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Initialize Supabase client  
+supabase = create_supabase_client()
+
+print(f"✅ Using Supabase URL: {SUPABASE_URL}")
+print(f"✅ Playwright Available: {PLAYWRIGHT_AVAILABLE}")
 
 app = FastAPI(title="Business Setup Complete API")
 
@@ -125,12 +138,10 @@ async def run_playwright_automation_async(business_id: str, email: str, password
         print(f"[AUTOMATION] Starting background automation for business: {business_id}")
         
         # Update status to automation_running
-        await execute("""
-            UPDATE public.squidgy_business_information 
-            SET setup_status = 'automation_running', 
-                automation_started_at = CURRENT_TIMESTAMP 
-            WHERE id = $1
-        """, business_id)
+        supabase.table('squidgy_business_information').update({
+            'setup_status': 'automation_running',
+            'automation_started_at': datetime.now().isoformat()
+        }).eq('id', business_id).execute()
         
         # Run the Playwright automation
         automation = HighLevelCompleteAutomationPlaywright(headless=True)  # Headless for background
@@ -140,28 +151,24 @@ async def run_playwright_automation_async(business_id: str, email: str, password
             # Update status to completed and save PIT token
             pit_token = automation.pit_token if hasattr(automation, 'pit_token') else None
             
-            await execute("""
-                UPDATE public.squidgy_business_information 
-                SET setup_status = 'completed', 
-                    automation_completed_at = CURRENT_TIMESTAMP,
-                    pit_token = $2,
-                    access_token_expires_at = $3,
-                    firebase_token_available = $4
-                WHERE id = $1
-            """, business_id, pit_token, automation.token_expiry, bool(automation.firebase_token))
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'completed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'pit_token': pit_token,
+                'access_token_expires_at': automation.token_expiry.isoformat() if automation.token_expiry else None,
+                'firebase_token_available': bool(automation.firebase_token)
+            }).eq('id', business_id).execute()
             
             print(f"[AUTOMATION] Completed successfully for business: {business_id}")
             print(f"[AUTOMATION] PIT Token: {pit_token}")
             
         else:
             # Update status to failed
-            await execute("""
-                UPDATE public.squidgy_business_information 
-                SET setup_status = 'failed', 
-                    automation_completed_at = CURRENT_TIMESTAMP,
-                    automation_error = $2
-                WHERE id = $1
-            """, business_id, "Automation workflow failed")
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': "Automation workflow failed"
+            }).eq('id', business_id).execute()
             
             print(f"[AUTOMATION] Failed for business: {business_id}")
             
@@ -169,13 +176,11 @@ async def run_playwright_automation_async(business_id: str, email: str, password
         print(f"[ERROR] Automation failed: {e}")
         
         # Update status to failed with error
-        await execute("""
-            UPDATE public.squidgy_business_information 
-            SET setup_status = 'failed', 
-                automation_completed_at = CURRENT_TIMESTAMP,
-                automation_error = $2
-            WHERE id = $1
-        """, business_id, str(e))
+        supabase.table('squidgy_business_information').update({
+            'setup_status': 'failed',
+            'automation_completed_at': datetime.now().isoformat(),
+            'automation_error': str(e)
+        }).eq('id', business_id).execute()
 
 # API Endpoints
 @app.post("/api/business/setup", response_model=BusinessSetupResponse)
@@ -190,9 +195,6 @@ async def setup_business_complete(request: BusinessInformationRequest, backgroun
     """
     
     try:
-        if not DATABASE_AVAILABLE:
-            raise HTTPException(status_code=500, detail="Database not available")
-        
         print(f"🚀 Starting business setup for: {request.business_name}")
         
         # Step 1: Generate credentials
@@ -220,14 +222,24 @@ async def setup_business_complete(request: BusinessInformationRequest, backgroun
         
         # Step 4: Save business information to database
         print(f"[STEP 3] Saving to database...")
-        await execute("""
-            INSERT INTO public.squidgy_business_information 
-            (id, firm_user_id, agent_id, business_name, business_address, city, state, country, postal_code, 
-             business_logo_url, snapshot_id, ghl_location_id, ghl_user_email, ghl_user_password, ghl_user_id, setup_status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'user_created')
-        """, business_id, request.firm_user_id, request.agent_id, request.business_name, request.business_address,
-             request.city, request.state, request.country, request.postal_code, request.business_logo_url,
-             request.snapshot_id, location_id, user_email, user_password, user_id)
+        supabase.table('squidgy_business_information').insert({
+            'id': business_id,
+            'firm_user_id': request.firm_user_id,
+            'agent_id': request.agent_id,
+            'business_name': request.business_name,
+            'business_address': request.business_address,
+            'city': request.city,
+            'state': request.state,
+            'country': request.country,
+            'postal_code': request.postal_code,
+            'business_logo_url': request.business_logo_url,
+            'snapshot_id': request.snapshot_id,
+            'ghl_location_id': location_id,
+            'ghl_user_email': user_email,
+            'ghl_user_password': user_password,
+            'ghl_user_id': user_id,
+            'setup_status': 'user_created'
+        }).execute()
         
         # Step 5: Start automation in background (NON-BLOCKING!)
         print(f"[STEP 4] Starting background automation...")
@@ -262,33 +274,29 @@ async def setup_business_complete(request: BusinessInformationRequest, backgroun
 async def get_business_status(business_id: str):
     """Get the current status of business setup and automation"""
     try:
-        if not DATABASE_AVAILABLE:
-            raise HTTPException(status_code=500, detail="Database not available")
+        result = supabase.table('squidgy_business_information').select(
+            'id, business_name, setup_status, ghl_location_id, ghl_user_email, '
+            'pit_token, automation_started_at, automation_completed_at, automation_error, '
+            'access_token_expires_at, firebase_token_available, created_at'
+        ).eq('id', business_id).execute()
         
-        result = await fetch_one("""
-            SELECT id, business_name, setup_status, ghl_location_id, ghl_user_email, 
-                   pit_token, automation_started_at, automation_completed_at, automation_error,
-                   access_token_expires_at, firebase_token_available, created_at
-            FROM public.squidgy_business_information 
-            WHERE id = $1
-        """, business_id)
-        
-        if not result:
+        if not result.data:
             raise HTTPException(status_code=404, detail="Business not found")
         
+        business = result.data[0]
         return {
-            "business_id": result["id"],
-            "business_name": result["business_name"],
-            "status": result["setup_status"],
-            "location_id": result["ghl_location_id"],
-            "user_email": result["ghl_user_email"],
-            "has_pit_token": bool(result["pit_token"]),
-            "automation_started_at": result["automation_started_at"],
-            "automation_completed_at": result["automation_completed_at"],
-            "automation_error": result["automation_error"],
-            "token_expires_at": result["access_token_expires_at"],
-            "has_firebase_token": result["firebase_token_available"],
-            "created_at": result["created_at"]
+            "business_id": business["id"],
+            "business_name": business["business_name"],
+            "status": business["setup_status"],
+            "location_id": business["ghl_location_id"],
+            "user_email": business["ghl_user_email"],
+            "has_pit_token": bool(business["pit_token"]),
+            "automation_started_at": business["automation_started_at"],
+            "automation_completed_at": business["automation_completed_at"],
+            "automation_error": business["automation_error"],
+            "token_expires_at": business["access_token_expires_at"],
+            "has_firebase_token": business["firebase_token_available"],
+            "created_at": business["created_at"]
         }
         
     except Exception as e:
@@ -298,18 +306,13 @@ async def get_business_status(business_id: str):
 async def list_business_setups(firm_user_id: str, agent_id: str):
     """List all business setups for a firm_user_id and agent_id"""
     try:
-        if not DATABASE_AVAILABLE:
-            raise HTTPException(status_code=500, detail="Database not available")
-        
-        results = await execute("""
-            SELECT * FROM business_setup_status 
-            WHERE firm_user_id = $1 AND agent_id = $2 
-            ORDER BY created_at DESC
-        """, firm_user_id, agent_id)
+        results = supabase.table('squidgy_business_information').select('*').eq(
+            'firm_user_id', firm_user_id
+        ).eq('agent_id', agent_id).order('created_at', desc=True).execute()
         
         return {
-            "businesses": results,
-            "total": len(results)
+            "businesses": results.data,
+            "total": len(results.data)
         }
         
     except Exception as e:
@@ -320,7 +323,8 @@ async def list_business_setups(firm_user_id: str, agent_id: str):
 async def health_check():
     return {
         "status": "healthy",
-        "database_available": DATABASE_AVAILABLE,
+        "supabase_available": bool(SUPABASE_URL and SUPABASE_KEY),
+        "playwright_available": PLAYWRIGHT_AVAILABLE,
         "timestamp": datetime.now().isoformat()
     }
 
