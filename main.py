@@ -5953,12 +5953,18 @@ async def save_business_profile(request: BusinessProfileRequest):
         }
         
         # Upsert business profile
-        result = supabase.table('business_profiles')\
-            .upsert(business_data, on_conflict='firm_user_id')\
-            .execute()
-        
-        if result.error:
-            raise HTTPException(status_code=500, detail=f"Database error: {result.error}")
+        try:
+            result = supabase.table('business_profiles')\
+                .upsert(business_data, on_conflict='firm_user_id')\
+                .execute()
+            
+            print(f"[BUSINESS PROFILE] ✅ Successfully saved business profile")
+            print(f"[BUSINESS PROFILE] Business: {request.business_name}")
+            print(f"[BUSINESS PROFILE] Firm ID: {profile_data['company_id']}")
+            
+        except Exception as e:
+            print(f"[BUSINESS PROFILE] ❌ Database error: {e}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
         
         return {
             "status": "success",
