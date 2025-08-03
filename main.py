@@ -3785,18 +3785,21 @@ async def send_invitation_email(request: dict):
         print(f"Backend: Attempting to send invitation email to {email}")
         print(f"Backend: Invite URL: {invite_url}")
         
-        # Use magic link OTP for invitations (proper template)
+        # Use proper invitation method (same as frontend)
         try:
-            print(f"Backend: Using magic link OTP for invitation to {email}")
+            print(f"Backend: Using admin.invite_user_by_email for invitation to {email}")
             
-            # Use signInWithOtp to send magic links (Your Magic Link template)
-            response = supabase.auth.sign_in_with_otp({
-                "email": email.lower(),
-                "options": {
-                    "should_create_user": True,
-                    "email_redirect_to": invite_url
+            # Use admin.invite_user_by_email to send proper invitation template (same as frontend)
+            response = supabase.auth.admin.invite_user_by_email(
+                email.lower(),
+                {
+                    "redirect_to": invite_url,
+                    "data": {
+                        "invitation_token": token,
+                        "sender_name": sender_name
+                    }
                 }
-            })
+            )
             
             logger.info(f"Invitation email sent successfully to {email}")
             print(f"Backend: Invitation email sent successfully to {email}")
@@ -3804,7 +3807,8 @@ async def send_invitation_email(request: dict):
             return {
                 "success": True,
                 "message": "Invitation email sent successfully!",
-                "details": "Email sent via Supabase Auth invitation system"
+                "details": "Email sent via Supabase admin.invite_user_by_email (proper invitation template)",
+                "method": "admin_invite_backend_fallback"
             }
             
         except Exception as auth_error:
@@ -3815,9 +3819,10 @@ async def send_invitation_email(request: dict):
             return {
                 "success": False,
                 "error": str(auth_error),
-                "message": "Failed to send invitation email",
+                "message": "Failed to send invitation email via backend fallback",
                 "fallback_url": invite_url,
-                "suggestion": "Check Supabase SMTP configuration or share the link manually"
+                "suggestion": "Backend admin.invite_user_by_email failed. Check Supabase service role key or share the link manually",
+                "method": "admin_invite_backend_failed"
             }
             
     except Exception as e:
