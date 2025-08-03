@@ -5886,8 +5886,7 @@ async def get_facebook_pages_simple(request: dict):
             "channel": "APP",
             "source": "WEB_USER",
             "version": "2021-07-28",  # Required by GHL API
-            "accept": "application/json",
-            "content-type": "application/json"
+            "accept": "application/json, text/plain, */*"
         }
         
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -5969,17 +5968,59 @@ async def connect_facebook_pages_simple(request: dict):
         setup_data = setup_result.data
         target_location_id = setup_data.get('ghl_location_id') or location_id
         
-        # For now, just mark the pages as connected in our tracking
-        # In a real implementation, you'd make API calls to actually connect them
-        connected_pages = []
-        for page_id in selected_page_ids:
-            connected_pages.append({
-                "page_id": page_id,
-                "status": "connected",
-                "location_id": target_location_id
-            })
+        # Get Firebase token for API calls
+        tokens = setup_data.get('highlevel_tokens', {})
+        firebase_token = None
+        if isinstance(tokens, dict):
+            firebase_token = tokens.get('tokens', {}).get('firebase_token')
         
-        print(f"📱 [SIMPLE CONNECT] ✅ Marked {len(connected_pages)} pages as connected")
+        if not firebase_token:
+            return {
+                "success": False,
+                "message": "No Firebase JWT token found",
+                "connected_pages": []
+            }
+        
+        # Connect pages via GHL API
+        import httpx
+        headers = {
+            "token-id": firebase_token,
+            "channel": "APP",
+            "source": "WEB_USER",
+            "version": "2021-07-28",
+            "accept": "application/json, text/plain, */*",
+            "content-type": "application/json"
+        }
+        
+        connected_pages = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            connect_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages"
+            
+            # Prepare the request body - format based on what GHL expects
+            body = {
+                "facebookPageIds": selected_page_ids,
+                "reconnect": False
+            }
+            
+            response = await client.post(connect_url, headers=headers, json=body)
+            
+            if response.status_code in [200, 201]:
+                print(f"📱 [SIMPLE CONNECT] ✅ Successfully connected pages via GHL API")
+                for page_id in selected_page_ids:
+                    connected_pages.append({
+                        "page_id": page_id,
+                        "status": "connected",
+                        "location_id": target_location_id
+                    })
+            else:
+                print(f"📱 [SIMPLE CONNECT] ❌ GHL API error: {response.status_code} - {response.text}")
+                return {
+                    "success": False,
+                    "message": f"Failed to connect pages: {response.text}",
+                    "connected_pages": []
+                }
+        
+        print(f"📱 [SIMPLE CONNECT] ✅ Connected {len(connected_pages)} pages")
         
         return {
             "success": True,
