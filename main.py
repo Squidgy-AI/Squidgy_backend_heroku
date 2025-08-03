@@ -5884,7 +5884,8 @@ async def get_facebook_pages_simple(request: dict):
         headers = {
             "token-id": firebase_token,
             "channel": "APP",
-            "source": "WEB_USER", 
+            "source": "WEB_USER",
+            "version": "2021-07-28",  # Required by GHL API
             "accept": "application/json",
             "content-type": "application/json"
         }
