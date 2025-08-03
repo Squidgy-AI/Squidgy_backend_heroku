@@ -5838,7 +5838,7 @@ async def get_facebook_pages_simple(request: dict):
         
         # Get Firebase JWT token from squidgy_agent_business_setup table
         setup_result = supabase.table('squidgy_agent_business_setup').select(
-            'highlevel_tokens, ghl_location_id, setup_json'
+            'highlevel_tokens, ghl_location_id, setup_json, facebook_account_id'
         ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
         
         if not setup_result.data:
@@ -5852,15 +5852,17 @@ async def get_facebook_pages_simple(request: dict):
         setup_data = setup_result.data
         tokens = setup_data.get('highlevel_tokens', {})
         
-        # Extract Firebase JWT token - this is what GHL actually uses
+        # Extract both Firebase JWT token and PIT token
         firebase_token = None
+        pit_token = None
         if isinstance(tokens, dict):
             firebase_token = tokens.get('tokens', {}).get('firebase_token')
+            pit_token = tokens.get('tokens', {}).get('private_integration_token')
         
-        if not firebase_token:
+        if not firebase_token and not pit_token:
             return {
                 "success": False, 
-                "message": "No Firebase JWT token found. GHL automation may not have completed successfully.",
+                "message": "No Firebase JWT token or PIT token found. GHL automation may not have completed successfully.",
                 "pages": [],
                 "total_pages": 0
             }
@@ -5876,57 +5878,140 @@ async def get_facebook_pages_simple(request: dict):
                 "total_pages": 0
             }
         
-        print(f"📱 [SIMPLE API] Using Firebase JWT token: {firebase_token[:30]}...")
+        print(f"📱 [SIMPLE API] Using tokens - Firebase: {firebase_token[:30] if firebase_token else 'None'}... PIT: {pit_token[:30] if pit_token else 'None'}...")
         print(f"📱 [SIMPLE API] Target location: {target_location_id}")
         
-        # Call Facebook API directly with stored Firebase JWT token
-        # Using the same endpoint that the browser uses
         import httpx
-        headers = {
-            "token-id": firebase_token,
-            "channel": "APP",
-            "source": "WEB_USER",
-            "version": "2021-07-28",
-            "accept": "application/json, text/plain, */*"
-        }
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Use the integration endpoint that actually works
-            pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages?getAll=true"
-            response = await client.get(pages_url, headers=headers)
+        # Step 1: Check if we have a stored Facebook account ID
+        facebook_account_id = setup_data.get('facebook_account_id')
+        
+        if not facebook_account_id and pit_token:
+            print(f"📱 [SIMPLE API] No Facebook account ID stored, checking for existing accounts...")
             
-            if response.status_code == 200:
-                data = response.json()
-                # The integration endpoint returns pages directly
-                pages = data.get('pages', [])
+            # Try to find existing Facebook accounts using PIT token
+            pit_headers = {
+                "Authorization": f"Bearer {pit_token}",
+                "Version": "2021-07-28",
+                "Accept": "application/json"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                try:
+                    accounts_url = f"https://services.leadconnectorhq.com/social-media-posting/{target_location_id}/accounts"
+                    accounts_response = await client.get(accounts_url, headers=pit_headers)
+                    
+                    if accounts_response.status_code == 200:
+                        accounts_data = accounts_response.json()
+                        facebook_accounts = []
+                        
+                        if 'results' in accounts_data and 'accounts' in accounts_data['results']:
+                            facebook_accounts = [acc for acc in accounts_data['results']['accounts'] if acc.get('platform') == 'facebook']
+                        
+                        if facebook_accounts:
+                            facebook_account_id = facebook_accounts[0].get('_id') or facebook_accounts[0].get('id')
+                            print(f"📱 [SIMPLE API] Found existing Facebook account ID: {facebook_account_id}")
+                            
+                            # Store the account ID in database
+                            supabase.table('squidgy_agent_business_setup').update({
+                                'facebook_account_id': facebook_account_id,
+                                'updated_at': 'now()'
+                            }).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
+                            
+                        else:
+                            print(f"📱 [SIMPLE API] No existing Facebook accounts found")
+                    else:
+                        print(f"📱 [SIMPLE API] Failed to check accounts: {accounts_response.text}")
+                except Exception as e:
+                    print(f"📱 [SIMPLE API] Error checking accounts: {e}")
+        
+        # Step 2: Get pages using the appropriate method
+        if facebook_account_id and pit_token:
+            print(f"📱 [SIMPLE API] Using PIT token with account ID: {facebook_account_id}")
+            
+            # Use social-media-posting endpoint with PIT token and account ID
+            pit_headers = {
+                "Authorization": f"Bearer {pit_token}",
+                "Version": "2021-07-28",
+                "Accept": "application/json"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pages_url = f"https://services.leadconnectorhq.com/social-media-posting/oauth/{target_location_id}/facebook/accounts/{facebook_account_id}"
+                response = await client.get(pages_url, headers=pit_headers)
                 
-                print(f"📱 [SIMPLE API] ✅ Found {len(pages)} Facebook pages")
-                
-                # Format pages for frontend
-                formatted_pages = []
-                for page in pages:
-                    formatted_pages.append({
-                        "page_id": page.get("facebookPageId", "unknown"),
-                        "page_name": page.get("facebookPageName", "Unknown Page"),
-                        "is_connected": page.get("isConnected", False),
-                        "instagram_available": page.get("isInstagramAvailable", False)
-                    })
-                
-                return {
-                    "success": True,
-                    "message": f"Successfully retrieved {len(pages)} Facebook pages",
-                    "pages": formatted_pages,
-                    "total_pages": len(pages),
-                    "location_id": target_location_id
-                }
+        elif firebase_token:
+            print(f"📱 [SIMPLE API] Using Firebase JWT token (fallback to integration endpoint)")
+            
+            # Use integration endpoint with Firebase token
+            firebase_headers = {
+                "token-id": firebase_token,
+                "channel": "APP",
+                "source": "WEB_USER",
+                "version": "2021-07-28",
+                "accept": "application/json, text/plain, */*"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages?getAll=true"
+                response = await client.get(pages_url, headers=firebase_headers)
+        else:
+            return {
+                "success": False,
+                "message": "No valid authentication method available",
+                "pages": [],
+                "total_pages": 0
+            }
+        
+        # Step 3: Process the response
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Handle different response formats
+            pages = []
+            if facebook_account_id and pit_token:
+                # Social-media-posting endpoint response format
+                if 'results' in data and 'pages' in data['results']:
+                    pages = data['results']['pages']
+                elif 'pages' in data:
+                    pages = data['pages']
             else:
-                print(f"📱 [SIMPLE API] ❌ Facebook API error: {response.status_code}")
-                return {
-                    "success": False,
-                    "message": f"Facebook API returned {response.status_code}: {response.text}",
-                    "pages": [],
-                    "total_pages": 0
-                }
+                # Integration endpoint response format
+                pages = data.get('pages', [])
+            
+            print(f"📱 [SIMPLE API] ✅ Found {len(pages)} Facebook pages")
+            
+            # Format pages for frontend
+            formatted_pages = []
+            for page in pages:
+                # Handle different page formats
+                page_id = page.get("facebookPageId") or page.get("id", "unknown")
+                page_name = page.get("facebookPageName") or page.get("name", "Unknown Page")
+                
+                formatted_pages.append({
+                    "page_id": page_id,
+                    "page_name": page_name,
+                    "is_connected": page.get("isConnected", False),
+                    "instagram_available": page.get("isInstagramAvailable", False),
+                    "avatar": page.get("avatar", "")
+                })
+            
+            return {
+                "success": True,
+                "message": f"Successfully retrieved {len(pages)} Facebook pages",
+                "pages": formatted_pages,
+                "total_pages": len(pages),
+                "location_id": target_location_id,
+                "facebook_account_id": facebook_account_id
+            }
+        else:
+            print(f"📱 [SIMPLE API] ❌ Facebook API error: {response.status_code}")
+            return {
+                "success": False,
+                "message": f"Facebook API returned {response.status_code}: {response.text}",
+                "pages": [],
+                "total_pages": 0
+            }
                 
     except Exception as e:
         print(f"📱 [SIMPLE API] ❌ Error: {str(e)}")
@@ -5956,9 +6041,9 @@ async def connect_facebook_pages_simple(request: dict):
         
         print(f"📱 [SIMPLE CONNECT] Connecting {len(selected_page_ids)} pages for user: {user_id}")
         
-        # Get existing setup data
+        # Get existing setup data including Facebook account ID
         setup_result = supabase.table('squidgy_agent_business_setup').select(
-            'highlevel_tokens, ghl_location_id, setup_json'
+            'highlevel_tokens, ghl_location_id, setup_json, facebook_account_id'
         ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
         
         if not setup_result.data:
@@ -5970,58 +6055,120 @@ async def connect_facebook_pages_simple(request: dict):
         
         setup_data = setup_result.data
         target_location_id = setup_data.get('ghl_location_id') or location_id
+        facebook_account_id = setup_data.get('facebook_account_id')
         
-        # Get Firebase token for API calls
+        # Get both Firebase and PIT tokens
         tokens = setup_data.get('highlevel_tokens', {})
         firebase_token = None
+        pit_token = None
         if isinstance(tokens, dict):
             firebase_token = tokens.get('tokens', {}).get('firebase_token')
+            pit_token = tokens.get('tokens', {}).get('private_integration_token')
         
-        if not firebase_token:
+        if not firebase_token and not pit_token:
             return {
                 "success": False,
-                "message": "No Firebase JWT token found",
+                "message": "No authentication tokens found",
                 "connected_pages": []
             }
         
         # Connect pages via GHL API
         import httpx
-        headers = {
-            "token-id": firebase_token,
-            "channel": "APP",
-            "source": "WEB_USER",
-            "version": "2021-07-28",
-            "accept": "application/json, text/plain, */*",
-            "content-type": "application/json"
-        }
-        
         connected_pages = []
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            connect_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages"
+        
+        if facebook_account_id and pit_token:
+            print(f"📱 [SIMPLE CONNECT] Using PIT token with account ID: {facebook_account_id}")
             
-            # Prepare the request body - format based on what GHL expects
-            body = {
-                "facebookPageIds": selected_page_ids,
-                "reconnect": False
+            # Use social-media-posting endpoint to attach pages
+            headers = {
+                "Authorization": f"Bearer {pit_token}",
+                "Version": "2021-07-28",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
             }
             
-            response = await client.post(connect_url, headers=headers, json=body)
-            
-            if response.status_code in [200, 201]:
-                print(f"📱 [SIMPLE CONNECT] ✅ Successfully connected pages via GHL API")
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                attach_url = f"https://services.leadconnectorhq.com/social-media-posting/oauth/{target_location_id}/facebook/accounts/{facebook_account_id}"
+                
+                # Attach each page individually
                 for page_id in selected_page_ids:
-                    connected_pages.append({
-                        "page_id": page_id,
-                        "status": "connected",
-                        "location_id": target_location_id
-                    })
-            else:
-                print(f"📱 [SIMPLE CONNECT] ❌ GHL API error: {response.status_code} - {response.text}")
-                return {
-                    "success": False,
-                    "message": f"Failed to connect pages: {response.text}",
-                    "connected_pages": []
+                    attach_body = {
+                        "type": "page",
+                        "originId": page_id,
+                        "name": f"Page {page_id}",
+                        "avatar": "",
+                        "companyId": "lp2p1q27DrdGta1qGDJd"
+                    }
+                    
+                    try:
+                        response = await client.post(attach_url, headers=headers, json=attach_body)
+                        
+                        if response.status_code in [200, 201]:
+                            print(f"📱 [SIMPLE CONNECT] ✅ Attached page {page_id}")
+                            connected_pages.append({
+                                "page_id": page_id,
+                                "status": "connected",
+                                "location_id": target_location_id
+                            })
+                        else:
+                            print(f"📱 [SIMPLE CONNECT] ❌ Failed to attach page {page_id}: {response.text}")
+                            
+                    except Exception as e:
+                        print(f"📱 [SIMPLE CONNECT] ❌ Error attaching page {page_id}: {e}")
+            
+        elif firebase_token:
+            print(f"📱 [SIMPLE CONNECT] Using Firebase token (integration endpoint)")
+            
+            # Use integration endpoint
+            headers = {
+                "token-id": firebase_token,
+                "channel": "APP",
+                "source": "WEB_USER",
+                "version": "2021-07-28",
+                "accept": "application/json, text/plain, */*",
+                "content-type": "application/json"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                connect_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages"
+                
+                body = {
+                    "facebookPageIds": selected_page_ids,
+                    "reconnect": False
                 }
+                
+                try:
+                    response = await client.post(connect_url, headers=headers, json=body)
+                    
+                    if response.status_code in [200, 201]:
+                        print(f"📱 [SIMPLE CONNECT] ✅ Successfully connected pages via integration endpoint")
+                        for page_id in selected_page_ids:
+                            connected_pages.append({
+                                "page_id": page_id,
+                                "status": "connected",
+                                "location_id": target_location_id
+                            })
+                    else:
+                        print(f"📱 [SIMPLE CONNECT] ❌ Integration API error: {response.status_code} - {response.text}")
+                        return {
+                            "success": False,
+                            "message": f"Failed to connect pages: {response.text}",
+                            "connected_pages": []
+                        }
+                        
+                except Exception as e:
+                    print(f"📱 [SIMPLE CONNECT] ❌ Error connecting pages: {e}")
+                    return {
+                        "success": False,
+                        "message": f"Error connecting pages: {e}",
+                        "connected_pages": []
+                    }
+        else:
+            return {
+                "success": False,
+                "message": "No valid authentication method for connecting pages",
+                "connected_pages": []
+            }
         
         print(f"📱 [SIMPLE CONNECT] ✅ Connected {len(connected_pages)} pages")
         
