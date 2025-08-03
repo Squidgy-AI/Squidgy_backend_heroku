@@ -1138,12 +1138,22 @@ class HighLevelCompleteAutomationPlaywright:
                            firm_user_id: str = None, agent_id: str = None, ghl_user_id: str = None):
         """Run the complete automation workflow with automatic email verification - Playwright version"""
         try:
+            # Always use agency credentials from environment variables
+            import os
+            agency_email = os.getenv('HIGHLEVEL_EMAIL')
+            agency_password = os.getenv('HIGHLEVEL_PASSWORD')
+            
+            if not agency_email or not agency_password:
+                print("[ERROR] Agency credentials not found in environment variables!")
+                print("Required: HIGHLEVEL_EMAIL and HIGHLEVEL_PASSWORD")
+                return False
+            
             print("="*80)
             print("[AUTOMATION] HighLevel Complete Automation with Playwright - Automatic OTP and Full PIT Creation")
             print("="*80)
             print(f"[TARGET] Location ID: {location_id}")
             print(f"[TARGET] URL: https://app.onetoo.com/v2/location/{location_id}/settings/private-integrations/")
-            print(f"[CREDENTIALS] HighLevel Email: {email}")
+            print(f"[CREDENTIALS] HighLevel Email: {agency_email}")
             print("[INFO] 2FA codes will be read automatically from Gmail")
             print("[INFO] Private Integration Token (PIT) will be created and extracted")
             print()
@@ -1155,7 +1165,7 @@ class HighLevelCompleteAutomationPlaywright:
             
             # Step 2: Navigate and handle login/verification
             print("\n[STEP 2] Navigating with login and automatic email verification...")
-            if not await self.navigate_to_target(location_id, email, password):
+            if not await self.navigate_to_target(location_id, agency_email, agency_password):
                 return False
             
             # Step 3: Save to database if parameters provided
