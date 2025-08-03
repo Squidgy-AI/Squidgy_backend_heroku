@@ -5852,7 +5852,7 @@ async def get_facebook_pages_simple(request: dict):
         setup_data = setup_result.data
         tokens = setup_data.get('highlevel_tokens', {})
         
-        # Extract Firebase JWT token
+        # Extract Firebase JWT token - this is what GHL actually uses
         firebase_token = None
         if isinstance(tokens, dict):
             firebase_token = tokens.get('tokens', {}).get('firebase_token')
@@ -5880,21 +5880,24 @@ async def get_facebook_pages_simple(request: dict):
         print(f"📱 [SIMPLE API] Target location: {target_location_id}")
         
         # Call Facebook API directly with stored Firebase JWT token
+        # Using the same endpoint that the browser uses
         import httpx
         headers = {
             "token-id": firebase_token,
             "channel": "APP",
             "source": "WEB_USER",
-            "version": "2021-07-28",  # Required by GHL API
+            "version": "2021-07-28",
             "accept": "application/json, text/plain, */*"
         }
         
         async with httpx.AsyncClient(timeout=30.0) as client:
+            # Use the integration endpoint that actually works
             pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages?getAll=true"
             response = await client.get(pages_url, headers=headers)
             
             if response.status_code == 200:
                 data = response.json()
+                # The integration endpoint returns pages directly
                 pages = data.get('pages', [])
                 
                 print(f"📱 [SIMPLE API] ✅ Found {len(pages)} Facebook pages")
@@ -5905,7 +5908,7 @@ async def get_facebook_pages_simple(request: dict):
                     formatted_pages.append({
                         "page_id": page.get("facebookPageId", "unknown"),
                         "page_name": page.get("facebookPageName", "Unknown Page"),
-                        "is_connected": False,  # Will be updated when user connects
+                        "is_connected": page.get("isConnected", False),
                         "instagram_available": page.get("isInstagramAvailable", False)
                     })
                 
