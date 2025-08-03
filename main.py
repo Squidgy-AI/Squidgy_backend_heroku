@@ -4938,6 +4938,48 @@ async def create_agency_user(
         logger.error(f"Exception in agency user creation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"User creation failed: {str(e)}")
 
+async def wait_for_location_availability(location_id: str, agency_token: str, max_retries: int = 10, delay_seconds: float = 2) -> bool:
+    """Wait for newly created location to become available for user creation"""
+    
+    headers = {
+        "Authorization": f"Bearer {agency_token}",
+        "Version": "2021-07-28",
+        "Accept": "application/json"
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Checking location availability: attempt {attempt + 1}/{max_retries}")
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    "https://services.leadconnectorhq.com/locations/search",
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    locations = data.get('locations', [])
+                    
+                    # Check if our location_id is in the list
+                    for location in locations:
+                        if location.get('id') == location_id:
+                            logger.info(f"✅ Location {location_id} is now available!")
+                            return True
+                    
+                    logger.info(f"Location {location_id} not yet available (attempt {attempt + 1})")
+                else:
+                    logger.warning(f"Failed to check locations: {response.status_code}")
+                    
+        except Exception as e:
+            logger.error(f"Error checking location availability: {e}")
+        
+        if attempt < max_retries - 1:  # Don't sleep on the last attempt
+            await asyncio.sleep(delay_seconds)
+    
+    logger.error(f"❌ Location {location_id} never became available after {max_retries} attempts")
+    return False
+
 @app.post("/api/ghl/create-subaccount-and-user")
 async def create_subaccount_and_user(request: GHLSubAccountRequest):
     """Create both sub-account and user in one call - triggered after Solar setup completion"""
@@ -5188,6 +5230,18 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         # Create Soma user with UNIQUE email per location to avoid conflicts
         # Use location-specific email to ensure uniqueness
         soma_unique_email = f"somashekhar34+{location_id[:8]}@gmail.com"
+        
+# Wait for location to be available before creating users
+        location_available = await wait_for_location_availability(
+            location_id=location_id,
+            agency_token=request.agency_token,
+            max_retries=10,
+            delay_seconds=2
+        )
+        
+        if not location_available:
+            logger.error(f"Location {location_id} not available after waiting")
+            raise HTTPException(status_code=500, detail=f"Location {location_id} not ready for user creation after waiting")
         
         soma_user_response = await create_agency_user(
             company_id=request.company_id,
