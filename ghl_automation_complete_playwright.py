@@ -480,7 +480,7 @@ class HighLevelCompleteAutomationPlaywright:
         
         # Try multiple times with different strategies
         max_retries = 3
-        print(f"[PIT CREATION] 🔍 Looking for 'Create Integration' button...")
+        print(f"[PIT CREATION] 🔍 Looking for 'Create new integration' button...")
         print(f"[PIT CREATION] Will try {max_retries} attempts with different selectors")
         
         for retry in range(max_retries):
@@ -491,19 +491,20 @@ class HighLevelCompleteAutomationPlaywright:
             try:
                 # List of button selectors to try
                 button_selectors = [
-                    # Primary button
-                    "/html/body/div[1]/div[1]/div[4]/section/div/section/div/div/div/div[2]/div/div/div[2]/button[2]/span",
-                    # Fallback button
-                    "/html/body/div[1]/div[1]/div[4]/section/div/section/div/div/div/div[2]/div/div/div/button/span",
-                    # Alternative selectors
+                    # CORRECT button text from screenshot
+                    "//button[contains(text(), 'Create new integration')]",
+                    "//button[text()='Create new integration']",
+                    # Simple fallbacks
+                    "//button[contains(text(), 'Create')]",
+                    "//button[contains(text(), 'new integration')]",
+                    # Old selectors (keep as fallback)
                     "//button[contains(text(), 'Create Private Integration')]",
                     "//button[contains(text(), 'Create Integration')]",
                     "//button[contains(text(), 'New Integration')]",
                     "//button[contains(text(), 'Add Integration')]",
-                    "//button[contains(@class, 'integration')]//span",
-                    "//button[contains(@id, 'create')]//span",
-                    "//span[contains(text(), 'Create')]/..",
-                    "//div[contains(@class, 'integration')]//button[last()]"
+                    # CSS selectors
+                    "button:has-text('Create new integration')",
+                    "button:has-text('Create')"
                 ]
                 
                 button_clicked = False
@@ -513,16 +514,16 @@ class HighLevelCompleteAutomationPlaywright:
                     try:
                         print(f"[🔍 SEARCH] {i}/{len(button_selectors)} Trying selector: {selector}")
                         xpath_selector = f"xpath={selector}"
-                        await self.page.wait_for_selector(xpath_selector, timeout=5000)
+                        await self.page.wait_for_selector(xpath_selector, timeout=3000)
                         
                         print(f"[PIT CREATION] ✅ Found button with selector {i}!")
                         
                         # Scroll element into view
                         await self.page.locator(xpath_selector).scroll_into_view_if_needed()
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.2)
                         await self.page.click(xpath_selector)
                         print(f"[✅ SUCCESS] Integration button clicked using: {selector}")
-                        print(f"[PIT CREATION] 🎉 Successfully clicked 'Create Integration' button!")
+                        print(f"[PIT CREATION] 🎉 Successfully clicked 'Create new integration' button!")
                         button_clicked = True
                         break
                     except Exception as e:
