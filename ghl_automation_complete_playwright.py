@@ -487,6 +487,10 @@ class HighLevelCompleteAutomationPlaywright:
         current_url = self.page.url
         print(f"[DEBUG] Current page URL: {current_url}")
         
+        # Wait for the page to be fully loaded
+        await self.page.wait_for_load_state('networkidle')
+        await asyncio.sleep(2)  # Additional wait for dynamic content
+        
         # Take a debug screenshot
         try:
             await self.page.screenshot(path="debug_button_search.png")
@@ -502,20 +506,20 @@ class HighLevelCompleteAutomationPlaywright:
             try:
                 # List of button selectors to try
                 button_selectors = [
-                    # CORRECT button text from screenshot
-                    "//button[contains(text(), 'Create new integration')]",
+                    # EXACT button text from screenshot - try multiple approaches
+                    "//button[normalize-space(text())='Create new integration']",
+                    "//button[contains(normalize-space(text()), 'Create new integration')]",
                     "//button[text()='Create new integration']",
+                    "//button[contains(text(), 'Create new integration')]",
+                    # Try finding by partial text and structure
+                    "//button[contains(., 'Create') and contains(., 'new') and contains(., 'integration')]",
+                    "//button[@type='button' and contains(text(), 'Create')]",
+                    # CSS class based (common in React apps)
+                    "//button[contains(@class, 'btn') and contains(text(), 'Create')]",
+                    "//button[contains(@class, 'button') and contains(text(), 'Create')]",
                     # Simple fallbacks
                     "//button[contains(text(), 'Create')]",
-                    "//button[contains(text(), 'new integration')]",
-                    # Case variations
-                    "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'create new integration')]",
-                    "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'create')]",
-                    # Old selectors (keep as fallback)
-                    "//button[contains(text(), 'Create Private Integration')]",
-                    "//button[contains(text(), 'Create Integration')]",
-                    "//button[contains(text(), 'New Integration')]",
-                    "//button[contains(text(), 'Add Integration')]"
+                    "//button[contains(text(), 'new integration')]"
                 ]
                 
                 button_clicked = False
@@ -547,7 +551,36 @@ class HighLevelCompleteAutomationPlaywright:
                     await asyncio.sleep(3)
                     break
                 else:
-                    if retry < max_retries - 1:
+                    print("[⏳ TRYING] Modern Playwright selectors...")
+                    # Try modern Playwright selectors as last resort
+                    try:
+                        # Modern Playwright way to find button by text
+                        button = self.page.get_by_text("Create new integration")
+                        if await button.is_visible():
+                            await button.click()
+                            print("[✅ SUCCESS] Button clicked using modern Playwright selector!")
+                            button_clicked = True
+                            break
+                        else:
+                            print("[DEBUG] Button found but not visible")
+                    except Exception as e:
+                        print(f"[DEBUG] Modern selector failed: {str(e)[:50]}...")
+                    
+                    if not button_clicked:
+                        # Try by role
+                        try:
+                            button = self.page.get_by_role("button", name="Create new integration")
+                            if await button.is_visible():
+                                await button.click()
+                                print("[✅ SUCCESS] Button clicked using role selector!")
+                                button_clicked = True
+                                break
+                        except Exception as e:
+                            print(f"[DEBUG] Role selector failed: {str(e)[:50]}...")
+                    
+                    if button_clicked:
+                        break
+                    elif retry < max_retries - 1:
                         print(f"[⏳ WAITING] No button found, waiting 5 seconds before retry...")
                         await asyncio.sleep(5)
                     else:
