@@ -487,8 +487,11 @@ class HighLevelCompleteAutomationPlaywright:
         current_url = self.page.url
         print(f"[DEBUG] Current page URL: {current_url}")
         
-        # Wait for the page to be fully loaded
-        await self.page.wait_for_load_state('networkidle')
+        # Wait for the page to be fully loaded (with timeout)
+        try:
+            await self.page.wait_for_load_state('networkidle', timeout=10000)
+        except:
+            print("[DEBUG] Network idle timeout, proceeding anyway...")
         await asyncio.sleep(2)  # Additional wait for dynamic content
         
         # Take a debug screenshot
