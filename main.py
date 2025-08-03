@@ -5231,18 +5231,10 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         # Use location-specific email to ensure uniqueness
         soma_unique_email = f"somashekhar34+{location_id[:8]}@gmail.com"
         
-# Wait for location to be available before creating users
-        location_available = await wait_for_location_availability(
-            location_id=location_id,
-            agency_token=request.agency_token,
-            max_retries=10,
-            delay_seconds=2
-        )
-        
-        if not location_available:
-            logger.error(f"Location {location_id} not available after waiting")
-            raise HTTPException(status_code=500, detail=f"Location {location_id} not ready for user creation after waiting")
-        
+        # Add delay to ensure location is propagated in production
+        logger.info(f"Waiting 5 seconds for location {location_id} to propagate...")
+        await asyncio.sleep(5)
+
         soma_user_response = await create_agency_user(
             company_id=request.company_id,
             location_id=location_id,
