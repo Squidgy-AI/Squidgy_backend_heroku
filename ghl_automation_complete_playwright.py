@@ -505,97 +505,22 @@ class HighLevelCompleteAutomationPlaywright:
             print(f"\n[🔄 RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
             print(f"[PIT CREATION] 🎯 Step 3.{retry + 1}: Searching for integration creation button")
             
-            # Press the integration creation button with multiple fallback options
+            # SIMPLE: Just click the button
             try:
-                # List of button selectors to try
-                button_selectors = [
-                    # EXACT button text from screenshot - try multiple approaches
-                    "//button[normalize-space(text())='Create new integration']",
-                    "//button[contains(normalize-space(text()), 'Create new integration')]",
-                    "//button[text()='Create new integration']",
-                    "//button[contains(text(), 'Create new integration')]",
-                    # Try finding by partial text and structure
-                    "//button[contains(., 'Create') and contains(., 'new') and contains(., 'integration')]",
-                    "//button[@type='button' and contains(text(), 'Create')]",
-                    # CSS class based (common in React apps)
-                    "//button[contains(@class, 'btn') and contains(text(), 'Create')]",
-                    "//button[contains(@class, 'button') and contains(text(), 'Create')]",
-                    # Simple fallbacks
-                    "//button[contains(text(), 'Create')]",
-                    "//button[contains(text(), 'new integration')]"
-                ]
-                
-                button_clicked = False
-                print(f"[PIT CREATION] 📋 Testing {len(button_selectors)} different button selectors...")
-                
-                for i, selector in enumerate(button_selectors, 1):
-                    try:
-                        print(f"[🔍 SEARCH] {i}/{len(button_selectors)} Trying selector: {selector}")
-                        # All our selectors are already XPath format
-                        await self.page.wait_for_selector(f"xpath={selector}", timeout=3000)
-                        
-                        print(f"[PIT CREATION] ✅ Found button with selector {i}!")
-                        
-                        # Scroll element into view
-                        await self.page.locator(f"xpath={selector}").scroll_into_view_if_needed()
-                        await asyncio.sleep(0.2)
-                        await self.page.click(f"xpath={selector}")
-                        print(f"[✅ SUCCESS] Integration button clicked using: {selector}")
-                        print(f"[PIT CREATION] 🎉 Successfully clicked 'Create new integration' button!")
-                        button_clicked = True
-                        break
-                    except Exception as e:
-                        print(f"[🔍 SEARCH] {i}/{len(button_selectors)} Selector failed: {str(e)[:50]}...")
-                        continue
-                
-                if button_clicked:
-                    # Wait for form to load
-                    print("[⏳ WAITING] Waiting for form to load...")
-                    await asyncio.sleep(3)
-                    break
-                else:
-                    print("[⏳ TRYING] Modern Playwright selectors...")
-                    # Try modern Playwright selectors as last resort
-                    try:
-                        # Modern Playwright way to find button by text
-                        button = self.page.get_by_text("Create new integration")
-                        if await button.is_visible():
-                            await button.click()
-                            print("[✅ SUCCESS] Button clicked using modern Playwright selector!")
-                            button_clicked = True
-                            break
-                        else:
-                            print("[DEBUG] Button found but not visible")
-                    except Exception as e:
-                        print(f"[DEBUG] Modern selector failed: {str(e)[:50]}...")
-                    
-                    if not button_clicked:
-                        # Try by role
-                        try:
-                            button = self.page.get_by_role("button", name="Create new integration")
-                            if await button.is_visible():
-                                await button.click()
-                                print("[✅ SUCCESS] Button clicked using role selector!")
-                                button_clicked = True
-                                break
-                        except Exception as e:
-                            print(f"[DEBUG] Role selector failed: {str(e)[:50]}...")
-                    
-                    if button_clicked:
-                        break
-                    elif retry < max_retries - 1:
-                        print(f"[⏳ WAITING] No button found, waiting 5 seconds before retry...")
-                        await asyncio.sleep(5)
-                    else:
-                        raise Exception("Could not find integration creation button after all retries")
-                    
+                print("[SIMPLE] Clicking 'Create new integration' button...")
+                await self.page.click("text=Create new integration", timeout=10000)
+                print("[✅ SUCCESS] Button clicked!")
+                break
             except Exception as e:
-                print(f"[❌ ERROR] Failed on attempt {retry + 1}: {e}")
-                if retry == max_retries - 1:
-                    print("[💡 FALLBACK] Could not click integration button. Please click it manually in the browser.")
-                    print("[⏳ WAITING] Waiting 20 seconds for manual intervention...")
-                    await asyncio.sleep(20)
-                    # Continue anyway as user might have clicked manually
+                print(f"[❌ ERROR] Could not click button: {e}")
+                await self.page.screenshot(path="debug_button_fail.png")
+                print("[📸 DEBUG] Screenshot saved")
+                
+        # If we get here, button clicking failed after all retries  
+        print("[💡 FALLBACK] Could not click integration button. Please click it manually in the browser.")
+        print("[⏳ WAITING] Waiting 20 seconds for manual intervention...")
+        await asyncio.sleep(20)
+        # Continue anyway as user might have clicked manually
         
         # Fill integration name
         try:
