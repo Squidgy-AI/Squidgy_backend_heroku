@@ -4489,6 +4489,7 @@ class GHLSubAccountRequest(BaseModel):
     company_id: str
     snapshot_id: str
     agency_token: str
+    user_id: Optional[str] = None  # Add user_id for Facebook automation
     phone: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
@@ -5211,10 +5212,19 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         print(f"[GHL AUTOMATION] Automation Email: {soma_unique_email}")
         
         try:
+            # Get the actual user_id to use as firm_user_id
+            actual_user_id = request.user_id
+            if not actual_user_id:
+                print(f"[GHL AUTOMATION] ⚠️ No user_id provided, automation cannot be triggered")
+                print(f"[GHL AUTOMATION] Frontend needs to send user_id in the request")
+                raise Exception("user_id is required for automation - frontend must provide current user's ID")
+            
+            print(f"[GHL AUTOMATION] 👤 Using user_id as firm_user_id: {actual_user_id}")
+            
             # Insert business data for Facebook automation
             supabase.table('squidgy_business_information').insert({
                 'id': business_id,
-                'firm_user_id': request.company_id,  # Using company_id as firm_user_id
+                'firm_user_id': actual_user_id,  # Use proper UUID user_id
                 'agent_id': 'SOLAgent',
                 'business_name': request.subaccount_name,
                 'business_address': request.address,
@@ -5243,7 +5253,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
                 location_id=location_id,
                 email=soma_unique_email,
                 password="Dummy@123",
-                firm_user_id=request.company_id
+                firm_user_id=actual_user_id
             ))
             
         except Exception as db_error:
