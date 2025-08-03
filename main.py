@@ -6187,6 +6187,120 @@ async def connect_facebook_pages_simple(request: dict):
             "connected_pages": []
         }
 
+@app.post("/api/facebook/check-accounts-after-oauth")
+async def check_facebook_accounts_after_oauth(request: dict):
+    """
+    Check for newly created Facebook accounts after OAuth completion
+    This is called when user clicks 'I Completed Facebook OAuth'
+    """
+    try:
+        user_id = request.get('user_id')
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id is required")
+        
+        print(f"📱 [OAUTH CHECK] Checking for Facebook accounts after OAuth for user: {user_id}")
+        
+        # Get setup data
+        setup_result = supabase.table('squidgy_agent_business_setup').select(
+            'highlevel_tokens, ghl_location_id, facebook_account_id'
+        ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
+        
+        if not setup_result.data:
+            return {
+                "success": False,
+                "message": "No GHL setup found",
+                "facebook_account_id": None
+            }
+        
+        setup_data = setup_result.data
+        tokens = setup_data.get('highlevel_tokens', {})
+        target_location_id = setup_data.get('ghl_location_id')
+        existing_account_id = setup_data.get('facebook_account_id')
+        
+        # If we already have an account ID, return it
+        if existing_account_id:
+            print(f"📱 [OAUTH CHECK] Found existing account ID: {existing_account_id}")
+            return {
+                "success": True,
+                "message": "Facebook account already registered",
+                "facebook_account_id": existing_account_id
+            }
+        
+        # Check for PIT token
+        pit_token = None
+        if isinstance(tokens, dict):
+            pit_token = tokens.get('tokens', {}).get('private_integration_token')
+        
+        if not pit_token or not target_location_id:
+            return {
+                "success": False,
+                "message": "Missing PIT token or location ID",
+                "facebook_account_id": None
+            }
+        
+        print(f"📱 [OAUTH CHECK] Checking for new Facebook accounts with PIT token...")
+        
+        # Check for Facebook accounts using PIT token
+        import httpx
+        headers = {
+            "Authorization": f"Bearer {pit_token}",
+            "Version": "2021-07-28",
+            "Accept": "application/json"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            accounts_url = f"https://services.leadconnectorhq.com/social-media-posting/{target_location_id}/accounts"
+            response = await client.get(accounts_url, headers=headers)
+            
+            if response.status_code == 200:
+                accounts_data = response.json()
+                facebook_accounts = []
+                
+                if 'results' in accounts_data and 'accounts' in accounts_data['results']:
+                    facebook_accounts = [acc for acc in accounts_data['results']['accounts'] if acc.get('platform') == 'facebook']
+                
+                if facebook_accounts:
+                    # Found Facebook account(s)! Store the first one
+                    facebook_account_id = facebook_accounts[0].get('_id') or facebook_accounts[0].get('id')
+                    
+                    print(f"📱 [OAUTH CHECK] ✅ Found new Facebook account: {facebook_account_id}")
+                    
+                    # Store the account ID in database
+                    supabase.table('squidgy_agent_business_setup').update({
+                        'facebook_account_id': facebook_account_id,
+                        'updated_at': 'now()'
+                    }).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
+                    
+                    return {
+                        "success": True,
+                        "message": f"Facebook account registered successfully",
+                        "facebook_account_id": facebook_account_id,
+                        "total_accounts": len(facebook_accounts)
+                    }
+                else:
+                    print(f"📱 [OAUTH CHECK] No Facebook accounts found yet")
+                    return {
+                        "success": False,
+                        "message": "No Facebook accounts found. OAuth may still be processing.",
+                        "facebook_account_id": None
+                    }
+            else:
+                print(f"📱 [OAUTH CHECK] ❌ API error: {response.status_code} - {response.text}")
+                return {
+                    "success": False,
+                    "message": f"API error: {response.status_code}",
+                    "facebook_account_id": None
+                }
+                
+    except Exception as e:
+        print(f"📱 [OAUTH CHECK] ❌ Error: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "facebook_account_id": None
+        }
+
 @app.post("/api/facebook/get-pages-by-location", response_model=FacebookPagesResponse)
 async def get_facebook_pages_by_location(request: dict):
     """
