@@ -5268,6 +5268,10 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             print(f"[GHL AUTOMATION] 🚀 Triggering Facebook PIT creation automation...")
             print(f"[GHL AUTOMATION] This will run in background - check logs for PIT creation progress")
             
+            # Extract Soma user ID for automation
+            soma_ghl_user_id = soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None
+            print(f"[GHL AUTOMATION] 👤 Soma GHL User ID: {soma_ghl_user_id}")
+            
             # Use asyncio to run automation in background (non-blocking)
             import asyncio
             asyncio.create_task(run_facebook_automation_for_business(
@@ -5275,7 +5279,8 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
                 location_id=location_id,
                 email=soma_unique_email,
                 password="Dummy@123",
-                firm_user_id=actual_user_id
+                firm_user_id=actual_user_id,
+                ghl_user_id=soma_ghl_user_id
             ))
             
         except Exception as db_error:
@@ -6178,13 +6183,14 @@ async def create_ghl_user_sim(location_id: str, email: str, password: str, busin
         print(f"[ERROR] User creation failed: {e}")
         return {"success": False, "error": str(e)}
 
-async def run_facebook_automation_for_business(business_id: str, location_id: str, email: str, password: str, firm_user_id: str):
+async def run_facebook_automation_for_business(business_id: str, location_id: str, email: str, password: str, firm_user_id: str, ghl_user_id: str = None):
     """Run Facebook automation specifically for GHL subaccount creation - with enhanced logging"""
     try:
         print(f"[FACEBOOK AUTOMATION] 🎯 Starting Facebook PIT creation for business: {business_id}")
         print(f"[FACEBOOK AUTOMATION] 📍 Location ID: {location_id}")
         print(f"[FACEBOOK AUTOMATION] 👤 Email: {email}")
         print(f"[FACEBOOK AUTOMATION] 🏢 Firm User ID: {firm_user_id}")
+        print(f"[FACEBOOK AUTOMATION] 👤 GHL User ID (Soma): {ghl_user_id}")
         
         # Update status to automation_running
         supabase.table('squidgy_business_information').update({
@@ -6209,7 +6215,7 @@ async def run_facebook_automation_for_business(business_id: str, location_id: st
                 location_id=location_id, 
                 firm_user_id=firm_user_id, 
                 agent_id='SOLAgent', 
-                ghl_user_id=None
+                ghl_user_id=ghl_user_id
             )
             
             if success:
