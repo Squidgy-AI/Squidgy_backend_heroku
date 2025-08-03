@@ -5319,7 +5319,6 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             print(f"[GHL AUTOMATION] 👤 Soma GHL User ID: {soma_ghl_user_id}")
             
             # Use asyncio to run automation in background (non-blocking)
-            import asyncio
             asyncio.create_task(run_facebook_automation_for_business(
                 business_id=business_id,
                 location_id=location_id,
