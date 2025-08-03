@@ -483,6 +483,17 @@ class HighLevelCompleteAutomationPlaywright:
         print(f"[PIT CREATION] 🔍 Looking for 'Create new integration' button...")
         print(f"[PIT CREATION] Will try {max_retries} attempts with different selectors")
         
+        # Debug: Check current page URL and take screenshot
+        current_url = self.page.url
+        print(f"[DEBUG] Current page URL: {current_url}")
+        
+        # Take a debug screenshot
+        try:
+            await self.page.screenshot(path="debug_button_search.png")
+            print("[DEBUG] Screenshot saved as debug_button_search.png")
+        except:
+            pass
+        
         for retry in range(max_retries):
             print(f"\n[🔄 RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
             print(f"[PIT CREATION] 🎯 Step 3.{retry + 1}: Searching for integration creation button")
@@ -497,14 +508,14 @@ class HighLevelCompleteAutomationPlaywright:
                     # Simple fallbacks
                     "//button[contains(text(), 'Create')]",
                     "//button[contains(text(), 'new integration')]",
+                    # Case variations
+                    "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'create new integration')]",
+                    "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'create')]",
                     # Old selectors (keep as fallback)
                     "//button[contains(text(), 'Create Private Integration')]",
                     "//button[contains(text(), 'Create Integration')]",
                     "//button[contains(text(), 'New Integration')]",
-                    "//button[contains(text(), 'Add Integration')]",
-                    # CSS selectors
-                    "button:has-text('Create new integration')",
-                    "button:has-text('Create')"
+                    "//button[contains(text(), 'Add Integration')]"
                 ]
                 
                 button_clicked = False
@@ -513,15 +524,15 @@ class HighLevelCompleteAutomationPlaywright:
                 for i, selector in enumerate(button_selectors, 1):
                     try:
                         print(f"[🔍 SEARCH] {i}/{len(button_selectors)} Trying selector: {selector}")
-                        xpath_selector = f"xpath={selector}"
-                        await self.page.wait_for_selector(xpath_selector, timeout=3000)
+                        # All our selectors are already XPath format
+                        await self.page.wait_for_selector(f"xpath={selector}", timeout=3000)
                         
                         print(f"[PIT CREATION] ✅ Found button with selector {i}!")
                         
                         # Scroll element into view
-                        await self.page.locator(xpath_selector).scroll_into_view_if_needed()
+                        await self.page.locator(f"xpath={selector}").scroll_into_view_if_needed()
                         await asyncio.sleep(0.2)
-                        await self.page.click(xpath_selector)
+                        await self.page.click(f"xpath={selector}")
                         print(f"[✅ SUCCESS] Integration button clicked using: {selector}")
                         print(f"[PIT CREATION] 🎉 Successfully clicked 'Create new integration' button!")
                         button_clicked = True
