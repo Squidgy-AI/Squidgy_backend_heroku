@@ -5236,9 +5236,9 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             firm_id = user_profile.data['company_id']
             print(f"[GHL AUTOMATION] ✅ Found company_id to use as firm_id: {firm_id}")
             
-            # Insert business data for Facebook automation
+            # Upsert business data for Facebook automation (handle duplicates)
             # Note: firm_user_id = user_id, and we store company_id for reference
-            supabase.table('squidgy_business_information').insert({
+            supabase.table('squidgy_business_information').upsert({
                 'id': business_id,
                 'firm_user_id': actual_user_id,  # user_id as firm_user_id (always)
                 'agent_id': 'SOLAgent',
@@ -5252,8 +5252,9 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
                 'ghl_user_email': soma_unique_email,
                 'ghl_user_password': "Dummy@123",
                 'ghl_user_id': soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None,
-                'setup_status': 'user_created'
-            }).execute()
+                'setup_status': 'user_created',
+                'updated_at': datetime.now().isoformat()
+            }, on_conflict='firm_user_id,agent_id').execute()
             
             print(f"[GHL AUTOMATION] 📋 Database mapping:")
             print(f"[GHL AUTOMATION]   user_id → firm_user_id: {actual_user_id}")
@@ -6371,9 +6372,9 @@ async def setup_business_complete(request: BusinessInformationRequest, backgroun
         
         user_id = user_result["user_id"]
         
-        # Step 4: Save business information to database
+        # Step 4: Save business information to database (upsert to handle duplicates)
         print(f"[STEP 3] Saving to database...")
-        supabase.table('squidgy_business_information').insert({
+        supabase.table('squidgy_business_information').upsert({
             'id': business_id,
             'firm_user_id': request.firm_user_id,
             'agent_id': request.agent_id,
@@ -6389,8 +6390,9 @@ async def setup_business_complete(request: BusinessInformationRequest, backgroun
             'ghl_user_email': user_email,
             'ghl_user_password': user_password,
             'ghl_user_id': user_id,
-            'setup_status': 'user_created'
-        }).execute()
+            'setup_status': 'user_created',
+            'updated_at': datetime.now().isoformat()
+        }, on_conflict='firm_user_id,agent_id').execute()
         
         # Step 5: Start automation in background (NON-BLOCKING!)
         print(f"[STEP 4] Starting background automation...")

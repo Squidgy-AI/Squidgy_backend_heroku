@@ -220,9 +220,10 @@ async def setup_business_complete(request: BusinessInformationRequest, backgroun
         
         user_id = user_result["user_id"]
         
-        # Step 4: Save business information to database
+        # Step 4: Save business information to database (upsert to handle duplicates)
         print(f"[STEP 3] Saving to database...")
-        supabase.table('squidgy_business_information').insert({
+        from datetime import datetime
+        supabase.table('squidgy_business_information').upsert({
             'id': business_id,
             'firm_user_id': request.firm_user_id,
             'agent_id': request.agent_id,
@@ -238,8 +239,9 @@ async def setup_business_complete(request: BusinessInformationRequest, backgroun
             'ghl_user_email': user_email,
             'ghl_user_password': user_password,
             'ghl_user_id': user_id,
-            'setup_status': 'user_created'
-        }).execute()
+            'setup_status': 'user_created',
+            'updated_at': datetime.now().isoformat()
+        }, on_conflict='firm_user_id,agent_id').execute()
         
         # Step 5: Start automation in background (NON-BLOCKING!)
         print(f"[STEP 4] Starting background automation...")
