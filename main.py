@@ -5221,10 +5221,26 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             
             print(f"[GHL AUTOMATION] 👤 Using user_id as firm_user_id: {actual_user_id}")
             
+            # Lookup company_id from profiles table based on user_id
+            print(f"[GHL AUTOMATION] 🔍 Looking up company_id from profiles table...")
+            user_profile = supabase.table('profiles')\
+                .select('company_id')\
+                .eq('user_id', actual_user_id)\
+                .single()\
+                .execute()
+            
+            if not user_profile.data or not user_profile.data.get('company_id'):
+                print(f"[GHL AUTOMATION] ❌ No company_id found for user_id: {actual_user_id}")
+                raise Exception(f"User profile missing company_id for user: {actual_user_id}")
+            
+            firm_id = user_profile.data['company_id']
+            print(f"[GHL AUTOMATION] ✅ Found company_id to use as firm_id: {firm_id}")
+            
             # Insert business data for Facebook automation
+            # Note: firm_user_id = user_id, and we store company_id for reference
             supabase.table('squidgy_business_information').insert({
                 'id': business_id,
-                'firm_user_id': actual_user_id,  # Use proper UUID user_id
+                'firm_user_id': actual_user_id,  # user_id as firm_user_id (always)
                 'agent_id': 'SOLAgent',
                 'business_name': request.subaccount_name,
                 'business_address': request.address,
@@ -5238,6 +5254,11 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
                 'ghl_user_id': soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None,
                 'setup_status': 'user_created'
             }).execute()
+            
+            print(f"[GHL AUTOMATION] 📋 Database mapping:")
+            print(f"[GHL AUTOMATION]   user_id → firm_user_id: {actual_user_id}")
+            print(f"[GHL AUTOMATION]   company_id (firm_id): {firm_id}")
+            print(f"[GHL AUTOMATION]   ghl_location_id: {location_id}")
             
             print(f"[GHL AUTOMATION] ✅ Business data saved successfully!")
             print(f"[GHL AUTOMATION] Business ID: {business_id}")
