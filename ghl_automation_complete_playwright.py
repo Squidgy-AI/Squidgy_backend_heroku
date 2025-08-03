@@ -16,13 +16,13 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from playwright.async_api import async_playwright
 
-# Import database functions
+# Import Supabase client - same as main.py
 try:
-    from database import execute
-    DATABASE_AVAILABLE = True
+    from supabase import create_client, Client
+    SUPABASE_AVAILABLE = True
 except ImportError:
-    print("[WARNING] Database module not available. Will only save to files.")
-    DATABASE_AVAILABLE = False
+    print("[WARNING] Supabase module not available. Will only save to files.")
+    SUPABASE_AVAILABLE = False
 
 class HighLevelCompleteAutomationPlaywright:
     def __init__(self, headless: bool = False):
@@ -1027,13 +1027,18 @@ class HighLevelCompleteAutomationPlaywright:
             print(f"[ERROR] Could not save tokens: {e}")
     
     async def save_to_database(self, pit_token: str, firm_user_id: str, agent_id: str, ghl_location_id: str, ghl_user_id: str = None):
-        """Save all captured data to the database"""
+        """Save all captured data to the database using Supabase"""
         try:
-            if not DATABASE_AVAILABLE:
-                print("[💾 DATABASE] Database not available - skipping database save")
+            if not SUPABASE_AVAILABLE:
+                print("[💾 DATABASE] Supabase not available - skipping database save")
                 return True
                 
             print("\n[💾 DATABASE] Saving tokens and setup data...")
+            
+            # Initialize Supabase client - same as main.py
+            supabase_url = "https://aoteeitreschwzkbpqyd.supabase.co"
+            supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvdGVlaXRyZXNjaHd6a2JwcXlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxMjAwMzQsImV4cCI6MjA1OTY5NjAzNH0.S7P9-G4CaSE6DWycNq0grv-x6UCIsfLvXooCtMwaKHM"
+            supabase: Client = create_client(supabase_url, supabase_key)
             
             # Decode tokens for expiry info
             access_token_info = None
@@ -1080,34 +1085,24 @@ class HighLevelCompleteAutomationPlaywright:
                 "created_at": datetime.now().isoformat()
             }
             
-            # Insert into database
-            query = """
-            INSERT INTO public.squidgy_agent_business_setup 
-            (firm_user_id, agent_id, agent_name, setup_json, setup_type, 
-             ghl_location_id, ghl_user_id, highlevel_tokens, is_enabled)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            ON CONFLICT (firm_user_id, agent_id, setup_type)
-            DO UPDATE SET
-                setup_json = EXCLUDED.setup_json,
-                highlevel_tokens = EXCLUDED.highlevel_tokens,
-                ghl_location_id = EXCLUDED.ghl_location_id,
-                ghl_user_id = EXCLUDED.ghl_user_id,
-                updated_at = CURRENT_TIMESTAMP,
-                is_enabled = EXCLUDED.is_enabled
-            """
+            # Upsert into database using Supabase
+            data = {
+                'firm_user_id': firm_user_id,
+                'agent_id': agent_id,
+                'agent_name': f"Agent_{agent_id}",
+                'setup_json': setup_config,
+                'setup_type': 'GHLSetup',
+                'ghl_location_id': ghl_location_id,
+                'ghl_user_id': ghl_user_id,
+                'highlevel_tokens': tokens_data,
+                'is_enabled': True,
+                'updated_at': datetime.now().isoformat()
+            }
             
-            await execute(
-                query,
-                firm_user_id,
-                agent_id,
-                f"Agent_{agent_id}",  # agent_name
-                json.dumps(setup_config),  # setup_json
-                'GHLSetup',  # setup_type
-                ghl_location_id,
-                ghl_user_id,
-                json.dumps(tokens_data),  # highlevel_tokens
-                True  # is_enabled
-            )
+            supabase.table('squidgy_agent_business_setup').upsert(
+                data, 
+                on_conflict='firm_user_id,agent_id,setup_type'
+            ).execute()
             
             print("[✅ DATABASE] Successfully saved to database!")
             print(f"[📍] Firm User ID: {firm_user_id}")
