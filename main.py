@@ -5824,7 +5824,7 @@ async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
 @app.post("/api/facebook/get-pages-simple")
 async def get_facebook_pages_simple(request: dict):
     """
-    Simple Facebook pages API - just uses stored PIT token from database
+    Simple Facebook pages API - uses stored Firebase JWT token from database
     No browser automation needed - just API calls
     """
     try:
@@ -5836,7 +5836,7 @@ async def get_facebook_pages_simple(request: dict):
         
         print(f"📱 [SIMPLE API] Getting Facebook pages for user: {user_id}")
         
-        # Get PIT token from squidgy_agent_business_setup table
+        # Get Firebase JWT token from squidgy_agent_business_setup table
         setup_result = supabase.table('squidgy_agent_business_setup').select(
             'highlevel_tokens, ghl_location_id, setup_json'
         ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
@@ -5844,7 +5844,7 @@ async def get_facebook_pages_simple(request: dict):
         if not setup_result.data:
             return {
                 "success": False,
-                "message": "No Facebook automation found. Please run GHL setup first.",
+                "message": "No GHL setup found. Please complete GHL setup first.",
                 "pages": [],
                 "total_pages": 0
             }
@@ -5852,15 +5852,15 @@ async def get_facebook_pages_simple(request: dict):
         setup_data = setup_result.data
         tokens = setup_data.get('highlevel_tokens', {})
         
-        # Extract PIT token
-        pit_token = None
+        # Extract Firebase JWT token
+        firebase_token = None
         if isinstance(tokens, dict):
-            pit_token = tokens.get('tokens', {}).get('private_integration_token')
+            firebase_token = tokens.get('tokens', {}).get('firebase_token')
         
-        if not pit_token:
+        if not firebase_token:
             return {
                 "success": False, 
-                "message": "No PIT token found. Facebook automation may not have completed successfully.",
+                "message": "No Firebase JWT token found. GHL automation may not have completed successfully.",
                 "pages": [],
                 "total_pages": 0
             }
@@ -5876,22 +5876,21 @@ async def get_facebook_pages_simple(request: dict):
                 "total_pages": 0
             }
         
-        print(f"📱 [SIMPLE API] Using PIT token: {pit_token[:30]}...")
+        print(f"📱 [SIMPLE API] Using Firebase JWT token: {firebase_token[:30]}...")
         print(f"📱 [SIMPLE API] Target location: {target_location_id}")
         
-        # Call Facebook API directly with stored PIT token
+        # Call Facebook API directly with stored Firebase JWT token
         import httpx
         headers = {
-            "token-id": pit_token,
+            "token-id": firebase_token,
             "channel": "APP",
             "source": "WEB_USER", 
-            "version": "2021-07-28",
             "accept": "application/json",
             "content-type": "application/json"
         }
         
         async with httpx.AsyncClient(timeout=30.0) as client:
-            pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/allPages?limit=20"
+            pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages?getAll=true"
             response = await client.get(pages_url, headers=headers)
             
             if response.status_code == 200:
