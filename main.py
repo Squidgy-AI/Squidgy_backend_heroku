@@ -5994,11 +5994,13 @@ async def get_facebook_pages_simple(request: dict):
                 "channel": "APP",
                 "source": "WEB_USER",
                 "version": "2021-07-28",
-                "accept": "application/json, text/plain, */*"
+                "accept": "application/json, text/plain, */*",
+                "origin": "https://app.onetoo.com",
+                "referer": "https://app.onetoo.com/"
             }
             
             async with httpx.AsyncClient(timeout=30.0) as client:
-                pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages?getAll=true"
+                pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/allPages?limit=20"
                 response = await client.get(pages_url, headers=firebase_headers)
         else:
             return {
@@ -6171,15 +6173,37 @@ async def connect_facebook_pages_simple(request: dict):
                 "source": "WEB_USER",
                 "version": "2021-07-28",
                 "accept": "application/json, text/plain, */*",
-                "content-type": "application/json"
+                "content-type": "application/json",
+                "origin": "https://app.onetoo.com",
+                "referer": "https://app.onetoo.com/"
             }
             
             async with httpx.AsyncClient(timeout=30.0) as client:
                 connect_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages"
                 
+                # Format pages array to match browser request
+                pages_data = []
+                for page_id in selected_page_ids:
+                    # Find the page details from available pages
+                    page_info = None
+                    for page in pages:
+                        if page.get('facebookPageId') == page_id:
+                            page_info = page
+                            break
+                    
+                    if page_info:
+                        pages_data.append({
+                            "facebookPageId": page_info.get('facebookPageId'),
+                            "facebookPageName": page_info.get('facebookPageName', ''),
+                            "facebookIgnoreMessages": page_info.get('facebookIgnoreMessages', False),
+                            "facebookUrl": page_info.get('facebookUrl', f"https://www.facebook.com/{page_id}"),
+                            "isInstagramAvailable": page_info.get('isInstagramAvailable', False),
+                            "syncType": "ALL_LEADS",
+                            "instagramIgnoreMessages": False
+                        })
+                
                 body = {
-                    "facebookPageIds": selected_page_ids,
-                    "reconnect": False
+                    "pages": pages_data
                 }
                 
                 try:
