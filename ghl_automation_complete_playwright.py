@@ -320,8 +320,9 @@ class HighLevelCompleteAutomationPlaywright:
         except Exception as e:
             print(f"[⚠️ TOKENS] Could not check browser storage: {e}")
     
-    async def handle_automatic_verification(self):
+    async def handle_automatic_verification(self, location_id=None):
         """Handle email verification with automatic OTP reading - Playwright version"""
+        self.location_id = location_id or getattr(self, 'location_id', None)
         try:
             page_source = (await self.page.content()).lower()
             
@@ -432,6 +433,21 @@ class HighLevelCompleteAutomationPlaywright:
             
             print("[SUCCESS] Verification completed!")
             
+            # Wait for page to fully load after verification
+            print("[⏳ WAITING] Waiting for page to stabilize after verification...")
+            await asyncio.sleep(5)
+            
+            # Check if we're redirected to the right page
+            current_url = self.page.url
+            print(f"[📍 POST-VERIFICATION] Current URL: {current_url}")
+            
+            # If we're not on private integrations page, navigate there
+            if "private-integrations" not in current_url:
+                print("[📍 REDIRECT] Not on private integrations page, navigating...")
+                private_int_url = f"https://app.gohighlevel.com/v2/location/{self.location_id}/settings/private-integrations/"
+                await self.page.goto(private_int_url)
+                await asyncio.sleep(3)
+            
             # Extract tokens after successful login
             await self.extract_tokens_from_storage()
             
@@ -483,38 +499,85 @@ class HighLevelCompleteAutomationPlaywright:
         print(f"[PIT CREATION] 🔍 Looking for 'Create new integration' button...")
         print(f"[PIT CREATION] Will try {max_retries} attempts with different selectors")
         
-        # Debug: Check current page URL and take screenshot
+        # Debug: Check current page URL (no screenshot to save time)
         current_url = self.page.url
         print(f"[DEBUG] Current page URL: {current_url}")
         
-        # Wait for the page to be fully loaded (with timeout)
+        # Wait for the page to be fully loaded (with shorter timeout)
         try:
-            await self.page.wait_for_load_state('networkidle', timeout=10000)
+            await self.page.wait_for_load_state('domcontentloaded', timeout=5000)
         except:
-            print("[DEBUG] Network idle timeout, proceeding anyway...")
-        await asyncio.sleep(2)  # Additional wait for dynamic content
+            print("[DEBUG] DOM content loaded timeout, proceeding anyway...")
         
-        # Take a debug screenshot
+        # Check for iframes (GHL often uses iframes)
         try:
-            await self.page.screenshot(path="debug_button_search.png")
-            print("[DEBUG] Screenshot saved as debug_button_search.png")
-        except:
-            pass
+            frames = self.page.frames
+            print(f"[DEBUG] Found {len(frames)} frames on page")
+            if len(frames) > 1:
+                # Try to find the main content frame
+                for frame in frames:
+                    frame_url = frame.url
+                    if 'private-integrations' in frame_url or frame != self.page.main_frame:
+                        print(f"[DEBUG] Switching to frame: {frame_url}")
+                        # Note: In Playwright, we work with frames directly, no need to switch
+                        # We'll search in all frames
+        except Exception as e:
+            print(f"[DEBUG] Frame check error: {e}")
+        
+        await asyncio.sleep(3)  # Wait for dynamic content to render
         
         for retry in range(max_retries):
             print(f"\n[🔄 RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
             print(f"[PIT CREATION] 🎯 Step 3.{retry + 1}: Searching for integration creation button")
             
-            # SIMPLE: Just click the button
-            try:
-                print("[SIMPLE] Clicking 'Create new integration' button...")
-                await self.page.click("text=Create new integration", timeout=10000)
-                print("[✅ SUCCESS] Button clicked!")
+            # Try multiple selectors for the button
+            button_selectors = [
+                "text=Create new integration",
+                "button:has-text('Create new integration')",
+                "//button[contains(text(), 'Create new integration')]",
+                "//button[contains(., 'Create new integration')]",
+                "//button[contains(@class, 'btn') and contains(., 'Create new')]",
+                "//a[contains(text(), 'Create new integration')]",
+                "//span[contains(text(), 'Create new integration')]/parent::button",
+                "//*[contains(text(), 'Create new integration') and (self::button or self::a)]"
+            ]
+            
+            button_clicked = False
+            
+            # Search in all frames
+            all_frames = [self.page] + self.page.frames
+            
+            for frame in all_frames:
+                if button_clicked:
+                    break
+                    
+                for selector in button_selectors:
+                    try:
+                        # Skip if not main page and selector doesn't make sense for frame
+                        if frame != self.page and selector.startswith("text="):
+                            continue
+                            
+                        print(f"[BUTTON] Trying selector in {('main frame' if frame == self.page else 'iframe')}: {selector}")
+                        
+                        # First check if element exists in this frame
+                        element = await frame.locator(selector).first.element_handle(timeout=2000)
+                        if element:
+                            # Scroll element into view
+                            await element.scroll_into_view_if_needed()
+                            await asyncio.sleep(0.5)
+                            
+                            # Try to click
+                            await frame.click(selector, timeout=5000)
+                            print("[✅ SUCCESS] Button clicked!")
+                            button_clicked = True
+                            break
+                    except Exception as e:
+                        continue
+            
+            if button_clicked:
                 break
-            except Exception as e:
-                print(f"[❌ ERROR] Could not click button: {e}")
-                await self.page.screenshot(path="debug_button_fail.png")
-                print("[📸 DEBUG] Screenshot saved")
+            else:
+                print(f"[❌ ERROR] Could not find button with any selector on attempt {retry + 1}")
                 
         # If we get here, button clicking failed after all retries  
         print("[💡 FALLBACK] Could not click integration button. Please click it manually in the browser.")
@@ -1092,15 +1155,10 @@ class HighLevelCompleteAutomationPlaywright:
             return False
     
     async def take_screenshot(self, location_id: str):
-        """Take a screenshot of the current page - Playwright version"""
-        try:
-            filename = f"ghl_complete_automation_playwright_{location_id}.png"
-            await self.page.screenshot(path=filename)
-            print(f"[SCREENSHOT] Saved: {filename}")
-            return filename
-        except Exception as e:
-            print(f"[ERROR] Screenshot failed: {e}")
-            return None
+        """Screenshot function disabled for performance - Playwright version"""
+        # Screenshots disabled to improve performance
+        print(f"[SCREENSHOT] Skipped for performance")
+        return None
     
     async def run_automation(self, email: str, password: str, location_id: str, 
                            firm_user_id: str = None, agent_id: str = None, ghl_user_id: str = None):
