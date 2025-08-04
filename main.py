@@ -34,6 +34,7 @@ from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
 from solar_api_connector import SolarApiConnector, SolarInsightsRequest as SolarInsightsReq, SolarDataLayersRequest as SolarDataLayersReq, get_solar_analysis_for_agent
 from facebook_pages_api_working import FacebookPagesRequest, FacebookPagesResponse, get_facebook_pages
 from email_validation import verify_email_confirmed, require_email_confirmed, check_email_confirmation_status
+from invitation_handler import InvitationHandler
 
 # Handler classes
 
@@ -3764,13 +3765,14 @@ async def get_background_task_result(task_id: str):
 
 @app.post("/api/send-invitation-email")
 async def send_invitation_email(request: dict):
-    """Send invitation email using Supabase Auth"""
+    """Send invitation email using Supabase Auth with profile creation"""
     try:
         email = request.get('email')
         token = request.get('token')
         sender_name = request.get('senderName', 'Someone')
         invite_url = request.get('inviteUrl')
         sender_id = request.get('senderId')
+        sender_email = request.get('senderEmail')
         company_id = request.get('companyId')
         group_id = request.get('groupId')
         
@@ -3781,53 +3783,120 @@ async def send_invitation_email(request: dict):
                 "details": f"Missing: {', '.join([k for k, v in {'email': email, 'token': token, 'invite_url': invite_url}.items() if not v])}"
             }
         
-        logger.info(f"Sending invitation email to: {email}")
-        print(f"Backend: Attempting to send invitation email to {email}")
-        print(f"Backend: Invite URL: {invite_url}")
+        logger.info(f"Creating invitation and sending email to: {email}")
+        print(f"Backend: Creating invitation for {email}")
         
-        # Use proper invitation method (same as frontend)
-        try:
-            print(f"Backend: Using admin.invite_user_by_email for invitation to {email}")
-            
-            # Use admin.invite_user_by_email to send proper invitation template (same as frontend)
-            response = supabase.auth.admin.invite_user_by_email(
-                email.lower(),
-                {
-                    "redirect_to": invite_url,
-                    "data": {
-                        "invitation_token": token,
-                        "sender_name": sender_name
+        # Initialize invitation handler
+        invitation_handler = InvitationHandler(supabase)
+        
+        # Get sender details if not provided
+        if not sender_id or not company_id:
+            if sender_email:
+                sender_result = supabase.from_('profiles').select(
+                    'user_id, company_id, full_name'
+                ).eq('email', sender_email.lower()).single().execute()
+                
+                if sender_result.data:
+                    sender_id = sender_result.data['user_id']
+                    company_id = sender_result.data['company_id']
+                    sender_name = sender_result.data.get('full_name', sender_name)
+                else:
+                    return {
+                        "success": False,
+                        "error": "Sender not found",
+                        "details": f"No profile found for sender email: {sender_email}"
                     }
+            else:
+                return {
+                    "success": False,
+                    "error": "Missing sender information",
+                    "details": "Either senderId/companyId or senderEmail must be provided"
                 }
-            )
+        
+        # Create invitation with profile
+        try:
+            print(f"Backend: Creating invitation with profile for {email}")
             
-            logger.info(f"Invitation email sent successfully to {email}")
-            print(f"Backend: Invitation email sent successfully to {email}")
+            # Call the database function through RPC
+            result = supabase.rpc(
+                'create_invitation_with_profile',
+                {
+                    'p_sender_id': sender_id,
+                    'p_recipient_email': email.lower().strip(),
+                    'p_sender_company_id': company_id,
+                    'p_group_id': group_id,
+                    'p_token': token
+                }
+            ).execute()
             
-            return {
-                "success": True,
-                "message": "Invitation email sent successfully!",
-                "details": "Email sent via Supabase admin.invite_user_by_email (proper invitation template)",
-                "method": "admin_invite_backend_fallback"
-            }
+            # Parse the result
+            invitation_result = result.data
+            if isinstance(invitation_result, list) and len(invitation_result) > 0:
+                invitation_result = invitation_result[0]
             
-        except Exception as auth_error:
-            logger.error(f"Supabase auth invitation error: {str(auth_error)}")
-            print(f"Backend: Supabase auth error: {str(auth_error)}")
+            if not invitation_result or not invitation_result.get('success'):
+                error_msg = invitation_result.get('error', 'Unknown error') if invitation_result else 'No result from database function'
+                return {
+                    "success": False,
+                    "error": "Failed to create invitation",
+                    "details": f"Database error: {error_msg}",
+                    "fallback_url": invite_url
+                }
             
-            # Return error with fallback option
+            print(f"Backend: Invitation created successfully - ID: {invitation_result.get('invitation_id')}")
+            print(f"Backend: Profile ID: {invitation_result.get('profile_id')}, Recipient ID: {invitation_result.get('recipient_id')}")
+            
+            # Now send the email
+            try:
+                response = supabase.auth.admin.invite_user_by_email(
+                    email.lower(),
+                    {
+                        "redirect_to": invite_url,
+                        "data": {
+                            "invitation_token": token,
+                            "sender_name": sender_name,
+                            "invitation_id": str(invitation_result.get('invitation_id')),
+                            "recipient_id": str(invitation_result.get('recipient_id'))
+                        }
+                    }
+                )
+                
+                logger.info(f"Invitation created and email sent successfully to {email}")
+                
+                return {
+                    "success": True,
+                    "message": "Invitation created and email sent successfully!",
+                    "details": invitation_result.get('message', 'Invitation created with profile'),
+                    "invitation_id": str(invitation_result.get('invitation_id')),
+                    "recipient_id": str(invitation_result.get('recipient_id')),
+                    "method": "admin_invite_with_profile"
+                }
+                
+            except Exception as email_error:
+                logger.error(f"Email sending error: {str(email_error)}")
+                # Invitation created but email failed
+                return {
+                    "success": True,
+                    "message": "Invitation created but email sending failed",
+                    "invitation_id": str(invitation_result.get('invitation_id')),
+                    "recipient_id": str(invitation_result.get('recipient_id')),
+                    "fallback_url": invite_url,
+                    "email_error": str(email_error),
+                    "suggestion": "Invitation was created successfully. Share the link manually or retry sending email."
+                }
+                
+        except Exception as db_error:
+            logger.error(f"Database error creating invitation: {str(db_error)}")
             return {
                 "success": False,
-                "error": str(auth_error),
-                "message": "Failed to send invitation email via backend fallback",
-                "fallback_url": invite_url,
-                "suggestion": "Backend admin.invite_user_by_email failed. Check Supabase service role key or share the link manually",
-                "method": "admin_invite_backend_failed"
+                "error": "Failed to create invitation",
+                "details": f"Database error: {str(db_error)}",
+                "fallback_url": invite_url
             }
             
     except Exception as e:
-        logger.error(f"Invitation email endpoint error: {str(e)}")
-        print(f"Backend: Send invitation email error: {str(e)}")
+        logger.error(f"Invitation endpoint error: {str(e)}")
+        print(f"Backend: Invitation endpoint error: {str(e)}")
         return {
             "success": False,
             "error": "Backend invitation processing failed",
