@@ -1012,14 +1012,8 @@ class HighLevelCompleteAutomationPlaywright:
                 }
             }
             
-            # Save to JSON file
-            with open("highlevel_tokens_complete_playwright.json", "w") as f:
-                json.dump(tokens_data, f, indent=2)
-            
-            # Also save PIT to the original file for backward compatibility
-            if pit_token:
-                with open("highlevel_token_playwright.txt", "w") as f:
-                    f.write(pit_token)
+            # Skip file saving - we're using database instead
+            # Tokens are already saved to database in save_to_database method
             
             # Display all tokens
             print("\n" + "="*100)
@@ -1056,8 +1050,7 @@ class HighLevelCompleteAutomationPlaywright:
                     print(f"   Token lifetime: {firebase_token_info['expires_at'] - firebase_token_info['issued_at']}")
             print()
             print("="*100)
-            print("\nAll tokens saved to: highlevel_tokens_complete_playwright.json")
-            print("PIT also saved to: highlevel_token_playwright.txt")
+            print("\n✅ All tokens saved to database")
             
         except Exception as e:
             print(f"[ERROR] Could not save tokens: {e}")
@@ -1210,8 +1203,7 @@ class HighLevelCompleteAutomationPlaywright:
             if screenshot:
                 print(f"[SCREENSHOT] Screenshot saved as: {screenshot}")
             print("[INFO] Browser will remain open for you to continue working")
-            print("[INFO] Check highlevel_tokens_complete_playwright.json for all tokens (PIT, access, refresh)")
-            print("[INFO] PIT also saved to highlevel_token_playwright.txt for backward compatibility")
+            print("[INFO] All tokens saved to database (check squidgy_business_information table)")
             print("="*80)
             
             # Keep browser open - don't close automatically
