@@ -542,38 +542,34 @@ class HighLevelCompleteAutomationPlaywright:
             
             # Try multiple selectors for the button
             button_selectors = [
-                # Text-based selectors
+                # Most generic - just find the text and click its container
                 "text=Create new integration",
+                
+                # Specific to the current implementation (Naive UI)
+                ".n-button:has-text('Create new integration')",
+                "[class*='n-button--primary']:has-text('Create new integration')",
+                "#no-apps-found-btn-positive-action",  # ID selector if it stays consistent
+                
+                # Generic button selectors
                 "button:has-text('Create new integration')",
+                "[type='button']:has-text('Create new integration')",
                 
-                # Class-based selectors (for styled buttons)
-                ".btn-primary:has-text('Create new integration')",
-                "[class*='btn']:has-text('Create new integration')",
-                "[class*='button']:has-text('Create new integration')",
+                # Look for the span and click parent
+                "//span[contains(text(), 'Create new integration')]/parent::button",
+                "//span[normalize-space()='Create new integration']/ancestor::button",
+                ".n-button__content:has-text('Create new integration')",
                 
-                # Role-based selectors
-                "[role='button']:has-text('Create new integration')",
+                # Very generic - any element with the text
+                "//*[contains(text(), 'Create new integration')]",
+                "//*[normalize-space(text())='Create new integration']",
                 
-                # Data attribute selectors
-                "[data-test*='create']",
-                "[data-testid*='create']",
+                # Fallback to any clickable element with primary styling
+                "[class*='primary']:has-text('Create')",
+                "[class*='button']:has-text('Create')",
                 
-                # XPath selectors
-                "//button[contains(text(), 'Create new integration')]",
-                "//button[contains(., 'Create new integration')]",
-                "//button[contains(@class, 'btn') and contains(., 'Create new')]",
-                "//*[contains(@class, 'btn') and contains(text(), 'Create new integration')]",
-                
-                # Link selectors (in case it's an anchor)
-                "//a[contains(text(), 'Create new integration')]",
-                "a:has-text('Create new integration')",
-                
-                # Parent/child selectors
-                "//span[contains(text(), 'Create new integration')]/parent::*",
-                "//*[contains(text(), 'Create new integration') and (self::button or self::a)]",
-                
-                # Generic clickable elements
-                "//*[@onclick and contains(text(), 'Create new integration')]"
+                # Last resort - find by partial text
+                ":has-text('Create new')",
+                ":has-text('new integration')"
             ]
             
             button_clicked = False
@@ -600,11 +596,47 @@ class HighLevelCompleteAutomationPlaywright:
                             await element.scroll_into_view_if_needed()
                             await asyncio.sleep(0.5)
                             
-                            # Try to click
-                            await frame.click(selector, timeout=5000)
-                            print("[✅ SUCCESS] Button clicked!")
-                            button_clicked = True
-                            break
+                            # Try multiple click strategies
+                            click_success = False
+                            
+                            # Strategy 1: Direct element click
+                            try:
+                                await element.click(timeout=3000)
+                                print("[✅ SUCCESS] Button clicked using element.click()!")
+                                click_success = True
+                            except:
+                                pass
+                            
+                            # Strategy 2: Frame click with selector
+                            if not click_success:
+                                try:
+                                    await frame.click(selector, timeout=3000)
+                                    print("[✅ SUCCESS] Button clicked using frame.click()!")
+                                    click_success = True
+                                except:
+                                    pass
+                            
+                            # Strategy 3: JavaScript click
+                            if not click_success:
+                                try:
+                                    await frame.evaluate("(el) => el.click()", element)
+                                    print("[✅ SUCCESS] Button clicked using JavaScript!")
+                                    click_success = True
+                                except:
+                                    pass
+                            
+                            # Strategy 4: Dispatch click event
+                            if not click_success:
+                                try:
+                                    await element.dispatch_event('click')
+                                    print("[✅ SUCCESS] Button clicked using dispatch_event!")
+                                    click_success = True
+                                except:
+                                    pass
+                            
+                            if click_success:
+                                button_clicked = True
+                                break
                     except Exception as e:
                         continue
             
