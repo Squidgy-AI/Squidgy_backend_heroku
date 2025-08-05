@@ -545,6 +545,9 @@ class HighLevelCompleteAutomationPlaywright:
             
             # Try multiple selectors for the button
             button_selectors = [
+                # PRIMARY METHOD: User-provided XPath (most reliable)
+                "xpath=/html/body/div[1]/div[1]/div[4]/section/div/section/div/div/div/div[2]/div/div/div[2]/button[2]/span",
+                
                 # Most generic - just find the text and click its container
                 "text=Create new integration",
                 
@@ -644,15 +647,19 @@ class HighLevelCompleteAutomationPlaywright:
                         continue
             
             if button_clicked:
+                print(f"[✅ BUTTON SUCCESS] Integration button clicked successfully on attempt {retry + 1}")
                 break
             else:
                 print(f"[❌ ERROR] Could not find button with any selector on attempt {retry + 1}")
                 
-        # If we get here, button clicking failed after all retries  
-        print("[💡 FALLBACK] Could not click integration button. Please click it manually in the browser.")
-        print("[⏳ WAITING] Waiting 20 seconds for manual intervention...")
-        await asyncio.sleep(20)
-        # Continue anyway as user might have clicked manually
+        # Check if button was successfully clicked across all retries
+        if not button_clicked:
+            print("[💡 FALLBACK] Could not click integration button after all attempts. Please click it manually in the browser.")
+            print("[⏳ WAITING] Waiting 20 seconds for manual intervention...")
+            await asyncio.sleep(20)
+            # Continue anyway as user might have clicked manually
+        else:
+            print("[🎯 PROCEEDING] Button clicked successfully, continuing with form filling...")
         
         # Fill integration name
         try:
