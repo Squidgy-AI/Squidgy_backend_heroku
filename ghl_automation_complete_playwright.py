@@ -524,7 +524,17 @@ class HighLevelCompleteAutomationPlaywright:
         except Exception as e:
             print(f"[DEBUG] Frame check error: {e}")
         
-        await asyncio.sleep(3)  # Wait for dynamic content to render
+        # Better wait strategy for dynamic content
+        print("[⏳ WAIT] Waiting for page to be fully loaded...")
+        await self.page.wait_for_load_state('networkidle', timeout=30000)
+        await asyncio.sleep(3)  # Additional wait for dynamic content
+        
+        # Check if we're on the right page by looking for key elements
+        try:
+            await self.page.wait_for_selector("text=Private Integrations", timeout=5000)
+            print("✅ Confirmed on Private Integrations page")
+        except:
+            print("⚠️ May not be on the correct page")
         
         for retry in range(max_retries):
             print(f"\n[🔄 RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
@@ -532,14 +542,38 @@ class HighLevelCompleteAutomationPlaywright:
             
             # Try multiple selectors for the button
             button_selectors = [
+                # Text-based selectors
                 "text=Create new integration",
                 "button:has-text('Create new integration')",
+                
+                # Class-based selectors (for styled buttons)
+                ".btn-primary:has-text('Create new integration')",
+                "[class*='btn']:has-text('Create new integration')",
+                "[class*='button']:has-text('Create new integration')",
+                
+                # Role-based selectors
+                "[role='button']:has-text('Create new integration')",
+                
+                # Data attribute selectors
+                "[data-test*='create']",
+                "[data-testid*='create']",
+                
+                # XPath selectors
                 "//button[contains(text(), 'Create new integration')]",
                 "//button[contains(., 'Create new integration')]",
                 "//button[contains(@class, 'btn') and contains(., 'Create new')]",
+                "//*[contains(@class, 'btn') and contains(text(), 'Create new integration')]",
+                
+                # Link selectors (in case it's an anchor)
                 "//a[contains(text(), 'Create new integration')]",
-                "//span[contains(text(), 'Create new integration')]/parent::button",
-                "//*[contains(text(), 'Create new integration') and (self::button or self::a)]"
+                "a:has-text('Create new integration')",
+                
+                # Parent/child selectors
+                "//span[contains(text(), 'Create new integration')]/parent::*",
+                "//*[contains(text(), 'Create new integration') and (self::button or self::a)]",
+                
+                # Generic clickable elements
+                "//*[@onclick and contains(text(), 'Create new integration')]"
             ]
             
             button_clicked = False

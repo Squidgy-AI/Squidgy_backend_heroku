@@ -5088,16 +5088,16 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         # Create TWO users: 1) Business Owner 2) Soma Addakula
         
         # First user: Business Owner with form data
-        business_user_request = GHLUserCreationRequest(
-            company_id=request.company_id,
-            location_id=location_id,
-            agency_token=request.agency_token,
-            first_name=request.prospect_first_name,
-            last_name=request.prospect_last_name,
-            email=request.prospect_email,
-            password="Dummy@123",  # Standard password as requested
-            phone=request.phone
-        )
+        # business_user_request = GHLUserCreationRequest(
+        #     company_id=request.company_id,
+        #     location_id=location_id,
+        #     agency_token=request.agency_token,
+        #     first_name=request.prospect_first_name,
+        #     last_name=request.prospect_last_name,
+        #     email=request.prospect_email,
+        #     password="Dummy@123",  # Standard password as requested
+        #     phone=request.phone
+        # )
         
         # Create users using proper agency-level API with full permissions
         
@@ -5274,32 +5274,32 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         # )
         
         # Create mock business user response since we're skipping creation
-        business_user_response = {
-            "status": "skipped",
-            "message": "Business user creation skipped to avoid conflicts",
-            "user_id": f"skipped_business_{location_id[:8]}",
-            "details": {
-                "name": f"{request.prospect_first_name} {request.prospect_last_name}",
-                "email": request.prospect_email,
-                "role": "admin",
-                "location_ids": [location_id]
-            }
-        }
+        # business_user_response = {
+        #     "status": "skipped",
+        #     "message": "Business user creation skipped to avoid conflicts",
+        #     "user_id": f"skipped_business_{location_id[:8]}",
+        #     "details": {
+        #         "name": f"{request.prospect_first_name} {request.prospect_last_name}",
+        #         "email": request.prospect_email,
+        #         "role": "admin",
+        #         "location_ids": [location_id]
+        #     }
+        # }
         
         # Second user: Soma Addakula with location-specific email
         # Use location-specific email to avoid conflicts
-        soma_email = f"info@squidgy.net"
+        # soma_email = f"info@squidgy.net"
         
-        soma_user_request = GHLUserCreationRequest(
-            company_id=request.company_id,
-            location_id=location_id,
-            agency_token=request.agency_token,
-            first_name="Soma",
-            last_name="Addakula",
-            email=soma_email,  # Use unique email per location
-            password="Dummy@123",
-            phone=request.phone or "+17166044029"  # Use business phone or default
-        )
+        # soma_user_request = GHLUserCreationRequest(
+        #     company_id=request.company_id,
+        #     location_id=location_id,
+        #     agency_token=request.agency_token,
+        #     first_name="Soma",
+        #     last_name="Addakula",
+        #     email=soma_email,  # Use unique email per location
+        #     password="Dummy@123",
+        #     phone=request.phone or "+17166044029"  # Use business phone or default
+        # )
         
         # Create Soma user with UNIQUE email per location to avoid conflicts
         # Use location-specific email to ensure uniqueness
