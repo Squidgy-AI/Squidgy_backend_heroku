@@ -5274,17 +5274,17 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         # )
         
         # Create mock business user response since we're skipping creation
-        # business_user_response = {
-        #     "status": "skipped",
-        #     "message": "Business user creation skipped to avoid conflicts",
-        #     "user_id": f"skipped_business_{location_id[:8]}",
-        #     "details": {
-        #         "name": f"{request.prospect_first_name} {request.prospect_last_name}",
-        #         "email": request.prospect_email,
-        #         "role": "admin",
-        #         "location_ids": [location_id]
-        #     }
-        # }
+        business_user_response = {
+            "status": "skipped",
+            "message": "Business user creation skipped to avoid conflicts",
+            "user_id": f"skipped_business_{location_id[:8]}",
+            "details": {
+                "name": f"{request.prospect_first_name} {request.prospect_last_name}",
+                "email": request.prospect_email,
+                "role": "admin",
+                "location_ids": [location_id]
+            }
+        }
         
         # Second user: Soma Addakula with location-specific email
         # Use location-specific email to avoid conflicts
