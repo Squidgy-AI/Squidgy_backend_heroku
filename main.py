@@ -34,6 +34,7 @@ from safe_agent_selector import SafeAgentSelector, safe_agent_selection_endpoint
 from solar_api_connector import SolarApiConnector, SolarInsightsRequest as SolarInsightsReq, SolarDataLayersRequest as SolarDataLayersReq, get_solar_analysis_for_agent
 from facebook_pages_api_working import FacebookPagesRequest, FacebookPagesResponse, get_facebook_pages
 from email_validation import verify_email_confirmed, require_email_confirmed, check_email_confirmation_status
+from invitation_handler import InvitationHandler
 
 # Handler classes
 
@@ -3764,13 +3765,14 @@ async def get_background_task_result(task_id: str):
 
 @app.post("/api/send-invitation-email")
 async def send_invitation_email(request: dict):
-    """Send invitation email using Supabase Auth"""
+    """Send invitation email using Supabase Auth with profile creation"""
     try:
         email = request.get('email')
         token = request.get('token')
         sender_name = request.get('senderName', 'Someone')
         invite_url = request.get('inviteUrl')
         sender_id = request.get('senderId')
+        sender_email = request.get('senderEmail')
         company_id = request.get('companyId')
         group_id = request.get('groupId')
         
@@ -3781,48 +3783,120 @@ async def send_invitation_email(request: dict):
                 "details": f"Missing: {', '.join([k for k, v in {'email': email, 'token': token, 'invite_url': invite_url}.items() if not v])}"
             }
         
-        logger.info(f"Sending invitation email to: {email}")
-        print(f"Backend: Attempting to send invitation email to {email}")
-        print(f"Backend: Invite URL: {invite_url}")
+        logger.info(f"Creating invitation and sending email to: {email}")
+        print(f"Backend: Creating invitation for {email}")
         
-        # Use magic link OTP for invitations (proper template)
-        try:
-            print(f"Backend: Using magic link OTP for invitation to {email}")
-            
-            # Use signInWithOtp to send magic links (Your Magic Link template)
-            response = supabase.auth.sign_in_with_otp({
-                "email": email.lower(),
-                "options": {
-                    "should_create_user": True,
-                    "email_redirect_to": invite_url
+        # Initialize invitation handler
+        invitation_handler = InvitationHandler(supabase)
+        
+        # Get sender details if not provided
+        if not sender_id or not company_id:
+            if sender_email:
+                sender_result = supabase.from_('profiles').select(
+                    'user_id, company_id, full_name'
+                ).eq('email', sender_email.lower()).single().execute()
+                
+                if sender_result.data:
+                    sender_id = sender_result.data['user_id']
+                    company_id = sender_result.data['company_id']
+                    sender_name = sender_result.data.get('full_name', sender_name)
+                else:
+                    return {
+                        "success": False,
+                        "error": "Sender not found",
+                        "details": f"No profile found for sender email: {sender_email}"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": "Missing sender information",
+                    "details": "Either senderId/companyId or senderEmail must be provided"
                 }
-            })
+        
+        # Create invitation with profile
+        try:
+            print(f"Backend: Creating invitation with profile for {email}")
             
-            logger.info(f"Invitation email sent successfully to {email}")
-            print(f"Backend: Invitation email sent successfully to {email}")
+            # Call the database function through RPC
+            result = supabase.rpc(
+                'create_invitation_with_profile',
+                {
+                    'p_sender_id': sender_id,
+                    'p_recipient_email': email.lower().strip(),
+                    'p_sender_company_id': company_id,
+                    'p_group_id': group_id,
+                    'p_token': token
+                }
+            ).execute()
             
-            return {
-                "success": True,
-                "message": "Invitation email sent successfully!",
-                "details": "Email sent via Supabase Auth invitation system"
-            }
+            # Parse the result
+            invitation_result = result.data
+            if isinstance(invitation_result, list) and len(invitation_result) > 0:
+                invitation_result = invitation_result[0]
             
-        except Exception as auth_error:
-            logger.error(f"Supabase auth invitation error: {str(auth_error)}")
-            print(f"Backend: Supabase auth error: {str(auth_error)}")
+            if not invitation_result or not invitation_result.get('success'):
+                error_msg = invitation_result.get('error', 'Unknown error') if invitation_result else 'No result from database function'
+                return {
+                    "success": False,
+                    "error": "Failed to create invitation",
+                    "details": f"Database error: {error_msg}",
+                    "fallback_url": invite_url
+                }
             
-            # Return error with fallback option
+            print(f"Backend: Invitation created successfully - ID: {invitation_result.get('invitation_id')}")
+            print(f"Backend: Profile ID: {invitation_result.get('profile_id')}, Recipient ID: {invitation_result.get('recipient_id')}")
+            
+            # Now send the email
+            try:
+                response = supabase.auth.admin.invite_user_by_email(
+                    email.lower(),
+                    {
+                        "redirect_to": invite_url,
+                        "data": {
+                            "invitation_token": token,
+                            "sender_name": sender_name,
+                            "invitation_id": str(invitation_result.get('invitation_id')),
+                            "recipient_id": str(invitation_result.get('recipient_id'))
+                        }
+                    }
+                )
+                
+                logger.info(f"Invitation created and email sent successfully to {email}")
+                
+                return {
+                    "success": True,
+                    "message": "Invitation created and email sent successfully!",
+                    "details": invitation_result.get('message', 'Invitation created with profile'),
+                    "invitation_id": str(invitation_result.get('invitation_id')),
+                    "recipient_id": str(invitation_result.get('recipient_id')),
+                    "method": "admin_invite_with_profile"
+                }
+                
+            except Exception as email_error:
+                logger.error(f"Email sending error: {str(email_error)}")
+                # Invitation created but email failed
+                return {
+                    "success": True,
+                    "message": "Invitation created but email sending failed",
+                    "invitation_id": str(invitation_result.get('invitation_id')),
+                    "recipient_id": str(invitation_result.get('recipient_id')),
+                    "fallback_url": invite_url,
+                    "email_error": str(email_error),
+                    "suggestion": "Invitation was created successfully. Share the link manually or retry sending email."
+                }
+                
+        except Exception as db_error:
+            logger.error(f"Database error creating invitation: {str(db_error)}")
             return {
                 "success": False,
-                "error": str(auth_error),
-                "message": "Failed to send invitation email",
-                "fallback_url": invite_url,
-                "suggestion": "Check Supabase SMTP configuration or share the link manually"
+                "error": "Failed to create invitation",
+                "details": f"Database error: {str(db_error)}",
+                "fallback_url": invite_url
             }
             
     except Exception as e:
-        logger.error(f"Invitation email endpoint error: {str(e)}")
-        print(f"Backend: Send invitation email error: {str(e)}")
+        logger.error(f"Invitation endpoint error: {str(e)}")
+        print(f"Backend: Invitation endpoint error: {str(e)}")
         return {
             "success": False,
             "error": "Backend invitation processing failed",
@@ -4479,6 +4553,7 @@ class GHLSubAccountRequest(BaseModel):
     company_id: str
     snapshot_id: str
     agency_token: str
+    user_id: Optional[str] = None  # Add user_id for Facebook automation
     phone: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
@@ -4927,6 +5002,48 @@ async def create_agency_user(
         logger.error(f"Exception in agency user creation: {str(e)}")
         raise HTTPException(status_code=500, detail=f"User creation failed: {str(e)}")
 
+async def wait_for_location_availability(location_id: str, agency_token: str, max_retries: int = 10, delay_seconds: float = 2) -> bool:
+    """Wait for newly created location to become available for user creation"""
+    
+    headers = {
+        "Authorization": f"Bearer {agency_token}",
+        "Version": "2021-07-28",
+        "Accept": "application/json"
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Checking location availability: attempt {attempt + 1}/{max_retries}")
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    "https://services.leadconnectorhq.com/locations/search",
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    locations = data.get('locations', [])
+                    
+                    # Check if our location_id is in the list
+                    for location in locations:
+                        if location.get('id') == location_id:
+                            logger.info(f"✅ Location {location_id} is now available!")
+                            return True
+                    
+                    logger.info(f"Location {location_id} not yet available (attempt {attempt + 1})")
+                else:
+                    logger.warning(f"Failed to check locations: {response.status_code}")
+                    
+        except Exception as e:
+            logger.error(f"Error checking location availability: {e}")
+        
+        if attempt < max_retries - 1:  # Don't sleep on the last attempt
+            await asyncio.sleep(delay_seconds)
+    
+    logger.error(f"❌ Location {location_id} never became available after {max_retries} attempts")
+    return False
+
 @app.post("/api/ghl/create-subaccount-and-user")
 async def create_subaccount_and_user(request: GHLSubAccountRequest):
     """Create both sub-account and user in one call - triggered after Solar setup completion"""
@@ -4961,16 +5078,16 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         # Create TWO users: 1) Business Owner 2) Soma Addakula
         
         # First user: Business Owner with form data
-        business_user_request = GHLUserCreationRequest(
-            company_id=request.company_id,
-            location_id=location_id,
-            agency_token=request.agency_token,
-            first_name=request.prospect_first_name,
-            last_name=request.prospect_last_name,
-            email=request.prospect_email,
-            password="Dummy@123",  # Standard password as requested
-            phone=request.phone
-        )
+        # business_user_request = GHLUserCreationRequest(
+        #     company_id=request.company_id,
+        #     location_id=location_id,
+        #     agency_token=request.agency_token,
+        #     first_name=request.prospect_first_name,
+        #     last_name=request.prospect_last_name,
+        #     email=request.prospect_email,
+        #     password="Dummy@123",  # Standard password as requested
+        #     phone=request.phone
+        # )
         
         # Create users using proper agency-level API with full permissions
         
@@ -5161,23 +5278,27 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         
         # Second user: Soma Addakula with location-specific email
         # Use location-specific email to avoid conflicts
-        soma_email = f"info@squidgy.net"
+        # soma_email = f"info@squidgy.net"
         
-        soma_user_request = GHLUserCreationRequest(
-            company_id=request.company_id,
-            location_id=location_id,
-            agency_token=request.agency_token,
-            first_name="Soma",
-            last_name="Addakula",
-            email=soma_email,  # Use unique email per location
-            password="Dummy@123",
-            phone=request.phone or "+17166044029"  # Use business phone or default
-        )
+        # soma_user_request = GHLUserCreationRequest(
+        #     company_id=request.company_id,
+        #     location_id=location_id,
+        #     agency_token=request.agency_token,
+        #     first_name="Soma",
+        #     last_name="Addakula",
+        #     email=soma_email,  # Use unique email per location
+        #     password="Dummy@123",
+        #     phone=request.phone or "+17166044029"  # Use business phone or default
+        # )
         
         # Create Soma user with UNIQUE email per location to avoid conflicts
         # Use location-specific email to ensure uniqueness
         soma_unique_email = f"somashekhar34+{location_id[:8]}@gmail.com"
         
+        # Add delay to ensure location is propagated in production
+        logger.info(f"Waiting 5 seconds for location {location_id} to propagate...")
+        await asyncio.sleep(5)
+
         soma_user_response = await create_agency_user(
             company_id=request.company_id,
             location_id=location_id,
@@ -5192,6 +5313,89 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
             scopes=location_scopes
         )
         
+        # Save business information to database for automation
+        business_id = str(uuid.uuid4())
+        
+        print(f"[GHL AUTOMATION] 💾 Saving business data to database for automation...")
+        print(f"[GHL AUTOMATION] Business: {request.subaccount_name}")
+        print(f"[GHL AUTOMATION] Location ID: {location_id}")
+        print(f"[GHL AUTOMATION] Automation Email: {soma_unique_email}")
+        
+        try:
+            # Get the actual user_id to use as firm_user_id
+            actual_user_id = request.user_id
+            if not actual_user_id:
+                print(f"[GHL AUTOMATION] ⚠️ No user_id provided, automation cannot be triggered")
+                print(f"[GHL AUTOMATION] Frontend needs to send user_id in the request")
+                raise Exception("user_id is required for automation - frontend must provide current user's ID")
+            
+            print(f"[GHL AUTOMATION] 👤 Using user_id as firm_user_id: {actual_user_id}")
+            
+            # Lookup company_id from profiles table based on user_id
+            print(f"[GHL AUTOMATION] 🔍 Looking up company_id from profiles table...")
+            user_profile = supabase.table('profiles')\
+                .select('company_id')\
+                .eq('user_id', actual_user_id)\
+                .single()\
+                .execute()
+            
+            if not user_profile.data or not user_profile.data.get('company_id'):
+                print(f"[GHL AUTOMATION] ❌ No company_id found for user_id: {actual_user_id}")
+                raise Exception(f"User profile missing company_id for user: {actual_user_id}")
+            
+            firm_id = user_profile.data['company_id']
+            print(f"[GHL AUTOMATION] ✅ Found company_id to use as firm_id: {firm_id}")
+            
+            # Upsert business data for Facebook automation (handle duplicates)
+            # Note: firm_user_id = user_id, and we store company_id for reference
+            supabase.table('squidgy_business_information').upsert({
+                'id': business_id,
+                'firm_user_id': actual_user_id,  # user_id as firm_user_id (always)
+                'agent_id': 'SOLAgent',
+                'business_name': request.subaccount_name,
+                'business_address': request.address,
+                'city': request.city,
+                'state': request.state,
+                'country': request.country,
+                'postal_code': request.postal_code,
+                'ghl_location_id': location_id,
+                'ghl_user_email': soma_unique_email,
+                'ghl_user_password': "Dummy@123",
+                'ghl_user_id': soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None,
+                'setup_status': 'user_created',
+                'updated_at': datetime.now().isoformat()
+            }, on_conflict='firm_user_id,agent_id').execute()
+            
+            print(f"[GHL AUTOMATION] 📋 Database mapping:")
+            print(f"[GHL AUTOMATION]   user_id → firm_user_id: {actual_user_id}")
+            print(f"[GHL AUTOMATION]   company_id (firm_id): {firm_id}")
+            print(f"[GHL AUTOMATION]   ghl_location_id: {location_id}")
+            
+            print(f"[GHL AUTOMATION] ✅ Business data saved successfully!")
+            print(f"[GHL AUTOMATION] Business ID: {business_id}")
+            
+            # Trigger Facebook automation asynchronously
+            print(f"[GHL AUTOMATION] 🚀 Triggering Facebook PIT creation automation...")
+            print(f"[GHL AUTOMATION] This will run in background - check logs for PIT creation progress")
+            
+            # Extract Soma user ID for automation
+            soma_ghl_user_id = soma_user_response.get("user_id") if soma_user_response.get("status") == "success" else None
+            print(f"[GHL AUTOMATION] 👤 Soma GHL User ID: {soma_ghl_user_id}")
+            
+            # Use asyncio to run automation in background (non-blocking)
+            asyncio.create_task(run_facebook_automation_for_business(
+                business_id=business_id,
+                location_id=location_id,
+                email=soma_unique_email,
+                password="Dummy@123",
+                firm_user_id=actual_user_id,
+                ghl_user_id=soma_ghl_user_id
+            ))
+            
+        except Exception as db_error:
+            print(f"[GHL AUTOMATION] ⚠️ Database save failed: {db_error}")
+            print(f"[GHL AUTOMATION] Account created but automation won't trigger")
+
         # Return combined response with SOMA's credentials for downstream Facebook integration
         return {
             "status": "success",
@@ -5213,6 +5417,8 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
                 "email": soma_unique_email,
                 "role": "Admin User"
             },
+            "business_id": business_id,  # Include business_id for tracking
+            "automation_triggered": True,  # Indicate automation was started
             "created_at": datetime.now().isoformat()
         }
         
@@ -5617,6 +5823,105 @@ async def connect_facebook_page(request: dict):
             "message": f"Error connecting page: {str(e)}"
         }
 
+@app.post("/api/facebook/connect-page-enhanced")
+async def connect_facebook_page_enhanced(request: dict):
+    """
+    Enhanced Facebook page connection that uses business setup credentials
+    Uses location_id to get proper business information from squidgy_business_information table
+    """
+    try:
+        location_id = request.get('location_id')
+        page_id = request.get('page_id')
+        jwt_token = request.get('jwt_token')
+        firm_user_id = request.get('firm_user_id')
+        
+        print(f"🔍 Enhanced connection request received:")
+        print(f"   Location ID: {location_id}")
+        print(f"   Page ID: {page_id}")
+        print(f"   Firm User ID: {firm_user_id}")
+        print(f"   JWT Token: {jwt_token[:50] + '...' if jwt_token else 'None'}")
+        
+        if not location_id or not page_id or not jwt_token:
+            missing_fields = []
+            if not location_id: missing_fields.append('location_id')
+            if not page_id: missing_fields.append('page_id')
+            if not jwt_token: missing_fields.append('jwt_token')
+            
+            error_msg = f"Missing required fields: {', '.join(missing_fields)}"
+            print(f"❌ {error_msg}")
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Get business information from database
+        if firm_user_id:
+            business_result = supabase.table('squidgy_business_information').select(
+                'business_name, ghl_user_email, ghl_user_password, firm_user_id'
+            ).eq('ghl_location_id', location_id).eq('firm_user_id', firm_user_id).single().execute()
+        else:
+            business_result = supabase.table('squidgy_business_information').select(
+                'business_name, ghl_user_email, ghl_user_password, firm_user_id'
+            ).eq('ghl_location_id', location_id).single().execute()
+        
+        if not business_result.data:
+            print(f"❌ Business setup not found for location_id: {location_id}")
+            raise HTTPException(status_code=404, detail=f"Business setup not found for location_id: {location_id}")
+        
+        business_data = business_result.data
+        print(f"✅ Found business: {business_data['business_name']}")
+        
+        # Get page details from database
+        page_response = supabase.table('squidgy_facebook_pages').select("*").eq('location_id', location_id).eq('page_id', page_id).execute()
+        
+        if not page_response.data:
+            raise HTTPException(status_code=404, detail=f"Page {page_id} not found in database for location {location_id}")
+        
+        page_data = page_response.data[0]
+        print(f"✅ Found page: {page_data['page_name']}")
+        
+        # Connect page using same logic as original but with enhanced business context
+        ghl_connect_url = f"https://services.leadconnectorhq.com/facebook/app/connect?locationId={location_id}&pageId={page_id}"
+        
+        headers = {
+            'Authorization': f'Bearer {jwt_token}',
+            'Content-Type': 'application/json'
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(ghl_connect_url, headers=headers)
+        
+        if response.status_code == 200:
+            # Update connection status in database
+            supabase.table('squidgy_facebook_pages').update({
+                'is_connected': True,
+                'connected_at': datetime.now().isoformat(),
+                'connection_status': 'active',
+                'business_name': business_data['business_name']
+            }).eq('location_id', location_id).eq('page_id', page_id).execute()
+            
+            print(f"✅ Successfully connected page {page_data['page_name']} to location {location_id}")
+            
+            return {
+                "success": True,
+                "message": f"Successfully connected {page_data['page_name']} to {business_data['business_name']}",
+                "page_name": page_data['page_name'],
+                "business_name": business_data['business_name'],
+                "location_id": location_id,
+                "page_id": page_id
+            }
+        else:
+            print(f"❌ Failed to connect page: {response.status_code} - {response.text}")
+            return {
+                "success": False,
+                "message": f"Failed to connect page to GHL: {response.status_code}",
+                "error": response.text
+            }
+    
+    except Exception as e:
+        print(f"💥 Error in enhanced page connection: {e}")
+        return {
+            "success": False,
+            "message": f"Error connecting page: {str(e)}"
+        }
+
 @app.post("/api/facebook/get-pages", response_model=FacebookPagesResponse)
 async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
     """
@@ -5624,6 +5929,562 @@ async def get_facebook_pages_endpoint(request: FacebookPagesRequest):
     Handles browser automation, JWT extraction, and Facebook pages retrieval
     """
     return await get_facebook_pages(request)
+
+@app.post("/api/facebook/get-pages-simple")
+async def get_facebook_pages_simple(request: dict):
+    """
+    Simple Facebook pages API - uses stored Firebase JWT token from database
+    No browser automation needed - just API calls
+    """
+    try:
+        user_id = request.get('user_id')
+        location_id = request.get('location_id') 
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id is required")
+        
+        print(f"📱 [SIMPLE API] Getting Facebook pages for user: {user_id}")
+        
+        # Get Firebase JWT token from squidgy_agent_business_setup table
+        setup_result = supabase.table('squidgy_agent_business_setup').select(
+            'highlevel_tokens, ghl_location_id, setup_json, facebook_account_id'
+        ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
+        
+        if not setup_result.data:
+            return {
+                "success": False,
+                "message": "No GHL setup found. Please complete GHL setup first.",
+                "pages": [],
+                "total_pages": 0
+            }
+        
+        setup_data = setup_result.data
+        tokens = setup_data.get('highlevel_tokens', {})
+        
+        # Extract both Firebase JWT token and PIT token
+        firebase_token = None
+        pit_token = None
+        if isinstance(tokens, dict):
+            firebase_token = tokens.get('tokens', {}).get('firebase_token')
+            pit_token = tokens.get('tokens', {}).get('private_integration_token')
+        
+        if not firebase_token and not pit_token:
+            return {
+                "success": False, 
+                "message": "No Firebase JWT token or PIT token found. GHL automation may not have completed successfully.",
+                "pages": [],
+                "total_pages": 0
+            }
+        
+        # Use the stored location_id or the provided one
+        target_location_id = setup_data.get('ghl_location_id') or location_id
+        
+        if not target_location_id:
+            return {
+                "success": False,
+                "message": "No location_id found in setup data",
+                "pages": [],
+                "total_pages": 0
+            }
+        
+        print(f"📱 [SIMPLE API] Using tokens - Firebase: {firebase_token[:30] if firebase_token else 'None'}... PIT: {pit_token[:30] if pit_token else 'None'}...")
+        print(f"📱 [SIMPLE API] Target location: {target_location_id}")
+        
+        import httpx
+        
+        # Step 1: Check if we have a stored Facebook account ID
+        facebook_account_id = setup_data.get('facebook_account_id')
+        
+        if not facebook_account_id and pit_token:
+            print(f"📱 [SIMPLE API] No Facebook account ID stored, checking for existing accounts...")
+            
+            # Try to find existing Facebook accounts using PIT token
+            pit_headers = {
+                "Authorization": f"Bearer {pit_token}",
+                "Version": "2021-07-28",
+                "Accept": "application/json"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                try:
+                    accounts_url = f"https://services.leadconnectorhq.com/social-media-posting/{target_location_id}/accounts"
+                    accounts_response = await client.get(accounts_url, headers=pit_headers)
+                    
+                    if accounts_response.status_code == 200:
+                        accounts_data = accounts_response.json()
+                        facebook_accounts = []
+                        
+                        if 'results' in accounts_data and 'accounts' in accounts_data['results']:
+                            facebook_accounts = [acc for acc in accounts_data['results']['accounts'] if acc.get('platform') == 'facebook']
+                        
+                        if facebook_accounts:
+                            facebook_account_id = facebook_accounts[0].get('_id') or facebook_accounts[0].get('id')
+                            print(f"📱 [SIMPLE API] Found existing Facebook account ID: {facebook_account_id}")
+                            
+                            # Store the account ID in database
+                            supabase.table('squidgy_agent_business_setup').update({
+                                'facebook_account_id': facebook_account_id,
+                                'updated_at': 'now()'
+                            }).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
+                            
+                        else:
+                            print(f"📱 [SIMPLE API] No existing Facebook accounts found")
+                    else:
+                        print(f"📱 [SIMPLE API] Failed to check accounts: {accounts_response.text}")
+                except Exception as e:
+                    print(f"📱 [SIMPLE API] Error checking accounts: {e}")
+        
+        # Step 2: Get pages using the appropriate method
+        if facebook_account_id and pit_token:
+            print(f"📱 [SIMPLE API] Using PIT token with account ID: {facebook_account_id}")
+            
+            # Use social-media-posting endpoint with PIT token and account ID
+            pit_headers = {
+                "Authorization": f"Bearer {pit_token}",
+                "Version": "2021-07-28",
+                "Accept": "application/json"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pages_url = f"https://services.leadconnectorhq.com/social-media-posting/oauth/{target_location_id}/facebook/accounts/{facebook_account_id}"
+                response = await client.get(pages_url, headers=pit_headers)
+                
+        elif firebase_token:
+            print(f"📱 [SIMPLE API] Using Firebase JWT token (fallback to integration endpoint)")
+            
+            # Use integration endpoint with Firebase token
+            firebase_headers = {
+                "token-id": firebase_token,
+                "channel": "APP",
+                "source": "WEB_USER",
+                "version": "2021-07-28",
+                "accept": "application/json, text/plain, */*",
+                "origin": "https://app.onetoo.com",
+                "referer": "https://app.onetoo.com/"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                pages_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/allPages?limit=20"
+                response = await client.get(pages_url, headers=firebase_headers)
+        else:
+            return {
+                "success": False,
+                "message": "No valid authentication method available",
+                "pages": [],
+                "total_pages": 0
+            }
+        
+        # Step 3: Process the response
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Handle different response formats
+            pages = []
+            if facebook_account_id and pit_token:
+                # Social-media-posting endpoint response format
+                if 'results' in data and 'pages' in data['results']:
+                    pages = data['results']['pages']
+                elif 'pages' in data:
+                    pages = data['pages']
+            else:
+                # Integration endpoint response format
+                pages = data.get('pages', [])
+            
+            print(f"📱 [SIMPLE API] ✅ Found {len(pages)} Facebook pages")
+            
+            # Format pages for frontend
+            formatted_pages = []
+            for page in pages:
+                # Handle different page formats
+                page_id = page.get("facebookPageId") or page.get("id", "unknown")
+                page_name = page.get("facebookPageName") or page.get("name", "Unknown Page")
+                
+                formatted_pages.append({
+                    "page_id": page_id,
+                    "page_name": page_name,
+                    "is_connected": page.get("isConnected", False),
+                    "instagram_available": page.get("isInstagramAvailable", False),
+                    "avatar": page.get("avatar", "")
+                })
+            
+            return {
+                "success": True,
+                "message": f"Successfully retrieved {len(pages)} Facebook pages",
+                "pages": formatted_pages,
+                "total_pages": len(pages),
+                "location_id": target_location_id,
+                "facebook_account_id": facebook_account_id
+            }
+        else:
+            print(f"📱 [SIMPLE API] ❌ Facebook API error: {response.status_code}")
+            return {
+                "success": False,
+                "message": f"Facebook API returned {response.status_code}: {response.text}",
+                "pages": [],
+                "total_pages": 0
+            }
+                
+    except Exception as e:
+        print(f"📱 [SIMPLE API] ❌ Error: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "pages": [],
+            "total_pages": 0
+        }
+
+@app.post("/api/facebook/connect-pages-simple")
+async def connect_facebook_pages_simple(request: dict):
+    """
+    Simple Facebook pages connection API - just updates database
+    No browser automation needed - just API calls
+    """
+    try:
+        user_id = request.get('user_id')
+        selected_page_ids = request.get('selected_page_ids', [])
+        location_id = request.get('location_id')
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id is required")
+        
+        if not selected_page_ids:
+            raise HTTPException(status_code=400, detail="selected_page_ids is required")
+        
+        print(f"📱 [SIMPLE CONNECT] Connecting {len(selected_page_ids)} pages for user: {user_id}")
+        
+        # Get existing setup data including Facebook account ID
+        setup_result = supabase.table('squidgy_agent_business_setup').select(
+            'highlevel_tokens, ghl_location_id, setup_json, facebook_account_id'
+        ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
+        
+        if not setup_result.data:
+            return {
+                "success": False,
+                "message": "No Facebook setup found. Please run GHL setup first.",
+                "connected_pages": []
+            }
+        
+        setup_data = setup_result.data
+        target_location_id = setup_data.get('ghl_location_id') or location_id
+        facebook_account_id = setup_data.get('facebook_account_id')
+        
+        # Get both Firebase and PIT tokens
+        tokens = setup_data.get('highlevel_tokens', {})
+        firebase_token = None
+        pit_token = None
+        if isinstance(tokens, dict):
+            firebase_token = tokens.get('tokens', {}).get('firebase_token')
+            pit_token = tokens.get('tokens', {}).get('private_integration_token')
+        
+        if not firebase_token and not pit_token:
+            return {
+                "success": False,
+                "message": "No authentication tokens found",
+                "connected_pages": []
+            }
+        
+        # Connect pages via GHL API
+        import httpx
+        connected_pages = []
+        
+        if facebook_account_id and pit_token:
+            print(f"📱 [SIMPLE CONNECT] Using PIT token with account ID: {facebook_account_id}")
+            
+            # Use social-media-posting endpoint to attach pages
+            headers = {
+                "Authorization": f"Bearer {pit_token}",
+                "Version": "2021-07-28",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                attach_url = f"https://services.leadconnectorhq.com/social-media-posting/oauth/{target_location_id}/facebook/accounts/{facebook_account_id}"
+                
+                # Attach each page individually
+                for page_id in selected_page_ids:
+                    attach_body = {
+                        "type": "page",
+                        "originId": page_id,
+                        "name": f"Page {page_id}",
+                        "avatar": "",
+                        "companyId": "lp2p1q27DrdGta1qGDJd"
+                    }
+                    
+                    try:
+                        response = await client.post(attach_url, headers=headers, json=attach_body)
+                        
+                        if response.status_code in [200, 201]:
+                            print(f"📱 [SIMPLE CONNECT] ✅ Attached page {page_id}")
+                            connected_pages.append({
+                                "page_id": page_id,
+                                "status": "connected",
+                                "location_id": target_location_id
+                            })
+                        else:
+                            print(f"📱 [SIMPLE CONNECT] ❌ Failed to attach page {page_id}: {response.text}")
+                            
+                    except Exception as e:
+                        print(f"📱 [SIMPLE CONNECT] ❌ Error attaching page {page_id}: {e}")
+            
+        elif firebase_token:
+            print(f"📱 [SIMPLE CONNECT] Using Firebase token (integration endpoint)")
+            
+            # Use integration endpoint
+            headers = {
+                "token-id": firebase_token,
+                "channel": "APP",
+                "source": "WEB_USER",
+                "version": "2021-07-28",
+                "accept": "application/json, text/plain, */*",
+                "content-type": "application/json",
+                "origin": "https://app.onetoo.com",
+                "referer": "https://app.onetoo.com/"
+            }
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                connect_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages"
+                
+                # Format pages array to match browser request
+                pages_data = []
+                for page_id in selected_page_ids:
+                    # Find the page details from available pages
+                    page_info = None
+                    for page in pages:
+                        if page.get('facebookPageId') == page_id:
+                            page_info = page
+                            break
+                    
+                    if page_info:
+                        pages_data.append({
+                            "facebookPageId": page_info.get('facebookPageId'),
+                            "facebookPageName": page_info.get('facebookPageName', ''),
+                            "facebookIgnoreMessages": page_info.get('facebookIgnoreMessages', False),
+                            "facebookUrl": page_info.get('facebookUrl', f"https://www.facebook.com/{page_id}"),
+                            "isInstagramAvailable": page_info.get('isInstagramAvailable', False),
+                            "syncType": "ALL_LEADS",
+                            "instagramIgnoreMessages": False
+                        })
+                
+                body = {
+                    "pages": pages_data
+                }
+                
+                try:
+                    response = await client.post(connect_url, headers=headers, json=body)
+                    
+                    if response.status_code in [200, 201]:
+                        print(f"📱 [SIMPLE CONNECT] ✅ Successfully connected pages via integration endpoint")
+                        for page_id in selected_page_ids:
+                            connected_pages.append({
+                                "page_id": page_id,
+                                "status": "connected",
+                                "location_id": target_location_id
+                            })
+                    else:
+                        print(f"📱 [SIMPLE CONNECT] ❌ Integration API error: {response.status_code} - {response.text}")
+                        return {
+                            "success": False,
+                            "message": f"Failed to connect pages: {response.text}",
+                            "connected_pages": []
+                        }
+                        
+                except Exception as e:
+                    print(f"📱 [SIMPLE CONNECT] ❌ Error connecting pages: {e}")
+                    return {
+                        "success": False,
+                        "message": f"Error connecting pages: {e}",
+                        "connected_pages": []
+                    }
+        else:
+            return {
+                "success": False,
+                "message": "No valid authentication method for connecting pages",
+                "connected_pages": []
+            }
+        
+        print(f"📱 [SIMPLE CONNECT] ✅ Connected {len(connected_pages)} pages")
+        
+        return {
+            "success": True,
+            "message": f"Successfully connected {len(connected_pages)} Facebook pages",
+            "connected_pages": connected_pages,
+            "location_id": target_location_id
+        }
+        
+    except Exception as e:
+        print(f"📱 [SIMPLE CONNECT] ❌ Error: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "connected_pages": []
+        }
+
+@app.post("/api/facebook/check-accounts-after-oauth")
+async def check_facebook_accounts_after_oauth(request: dict):
+    """
+    Check for newly created Facebook accounts after OAuth completion
+    This is called when user clicks 'I Completed Facebook OAuth'
+    """
+    try:
+        user_id = request.get('user_id')
+        
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id is required")
+        
+        print(f"📱 [OAUTH CHECK] Checking for Facebook accounts after OAuth for user: {user_id}")
+        
+        # Get setup data
+        setup_result = supabase.table('squidgy_agent_business_setup').select(
+            'highlevel_tokens, ghl_location_id, facebook_account_id'
+        ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
+        
+        if not setup_result.data:
+            return {
+                "success": False,
+                "message": "No GHL setup found",
+                "facebook_account_id": None
+            }
+        
+        setup_data = setup_result.data
+        tokens = setup_data.get('highlevel_tokens', {})
+        target_location_id = setup_data.get('ghl_location_id')
+        existing_account_id = setup_data.get('facebook_account_id')
+        
+        # If we already have an account ID, return it
+        if existing_account_id:
+            print(f"📱 [OAUTH CHECK] Found existing account ID: {existing_account_id}")
+            return {
+                "success": True,
+                "message": "Facebook account already registered",
+                "facebook_account_id": existing_account_id
+            }
+        
+        # Check for PIT token
+        pit_token = None
+        if isinstance(tokens, dict):
+            pit_token = tokens.get('tokens', {}).get('private_integration_token')
+        
+        if not pit_token or not target_location_id:
+            return {
+                "success": False,
+                "message": "Missing PIT token or location ID",
+                "facebook_account_id": None
+            }
+        
+        print(f"📱 [OAUTH CHECK] Checking for new Facebook accounts with PIT token...")
+        
+        # Check for Facebook accounts using PIT token
+        import httpx
+        headers = {
+            "Authorization": f"Bearer {pit_token}",
+            "Version": "2021-07-28",
+            "Accept": "application/json"
+        }
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            accounts_url = f"https://services.leadconnectorhq.com/social-media-posting/{target_location_id}/accounts"
+            response = await client.get(accounts_url, headers=headers)
+            
+            if response.status_code == 200:
+                accounts_data = response.json()
+                facebook_accounts = []
+                
+                if 'results' in accounts_data and 'accounts' in accounts_data['results']:
+                    facebook_accounts = [acc for acc in accounts_data['results']['accounts'] if acc.get('platform') == 'facebook']
+                
+                if facebook_accounts:
+                    # Found Facebook account(s)! Store the first one
+                    facebook_account_id = facebook_accounts[0].get('_id') or facebook_accounts[0].get('id')
+                    
+                    print(f"📱 [OAUTH CHECK] ✅ Found new Facebook account: {facebook_account_id}")
+                    
+                    # Store the account ID in database
+                    supabase.table('squidgy_agent_business_setup').update({
+                        'facebook_account_id': facebook_account_id,
+                        'updated_at': 'now()'
+                    }).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
+                    
+                    return {
+                        "success": True,
+                        "message": f"Facebook account registered successfully",
+                        "facebook_account_id": facebook_account_id,
+                        "total_accounts": len(facebook_accounts)
+                    }
+                else:
+                    print(f"📱 [OAUTH CHECK] No Facebook accounts found yet")
+                    return {
+                        "success": False,
+                        "message": "No Facebook accounts found. OAuth may still be processing.",
+                        "facebook_account_id": None
+                    }
+            else:
+                print(f"📱 [OAUTH CHECK] ❌ API error: {response.status_code} - {response.text}")
+                return {
+                    "success": False,
+                    "message": f"API error: {response.status_code}",
+                    "facebook_account_id": None
+                }
+                
+    except Exception as e:
+        print(f"📱 [OAUTH CHECK] ❌ Error: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error: {str(e)}",
+            "facebook_account_id": None
+        }
+
+@app.post("/api/facebook/get-pages-by-location", response_model=FacebookPagesResponse)
+async def get_facebook_pages_by_location(request: dict):
+    """
+    Enhanced Facebook integration endpoint that uses business setup credentials
+    Uses location_id to fetch credentials from squidgy_business_information table
+    """
+    try:
+        location_id = request.get('location_id')
+        firm_user_id = request.get('firm_user_id')
+        agent_id = request.get('agent_id', 'SOLAgent')
+        
+        if not location_id:
+            raise HTTPException(status_code=400, detail="location_id is required")
+        
+        if not firm_user_id:
+            raise HTTPException(status_code=400, detail="firm_user_id is required")
+        
+        print(f"🔍 Getting Facebook pages for location: {location_id}")
+        
+        # Get business information and GHL credentials from database
+        business_result = supabase.table('squidgy_business_information').select(
+            'ghl_user_email, ghl_user_password, business_name, firm_user_id'
+        ).eq('ghl_location_id', location_id).eq('firm_user_id', firm_user_id).single().execute()
+        
+        if not business_result.data:
+            raise HTTPException(status_code=404, detail=f"Business setup not found for location_id: {location_id}")
+        
+        business_data = business_result.data
+        
+        print(f"✅ Found business: {business_data['business_name']}")
+        print(f"   Email: {business_data['ghl_user_email']}")
+        
+        # Create FacebookPagesRequest with business credentials
+        fb_request = FacebookPagesRequest(
+            location_id=location_id,
+            user_id=f"business_user_{location_id}",  # Generate user_id from location
+            email=business_data['ghl_user_email'],
+            password=business_data['ghl_user_password'],
+            firm_user_id=business_data['firm_user_id']
+        )
+        
+        # Call the main Facebook pages function
+        result = await get_facebook_pages(fb_request)
+        
+        print(f"🎯 Facebook pages result for location {location_id}: {result.success}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error getting Facebook pages by location: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # =============================================================================
 # BUSINESS PROFILE ENDPOINTS
@@ -5633,16 +6494,16 @@ class BusinessProfileRequest(BaseModel):
     firm_user_id: str
     business_name: str
     business_email: str
-    phone: str = None
-    website: str = None
-    address: str = None
-    city: str = None
-    state: str = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
     country: str = "US"
-    postal_code: str = None
-    logo_url: str = None
-    screenshot_url: str = None
-    favicon_url: str = None
+    postal_code: Optional[str] = None
+    logo_url: Optional[str] = None
+    screenshot_url: Optional[str] = None
+    favicon_url: Optional[str] = None
 
 @app.post("/api/business/upload-logo")
 async def upload_business_logo(
@@ -5751,9 +6612,9 @@ async def save_business_profile(request: BusinessProfileRequest):
     Save business profile information to database
     """
     try:
-        # Get user name and email from profiles table
+        # Get user name, email, and company_id from profiles table
         user_profile = supabase.table('profiles')\
-            .select('full_name, email')\
+            .select('full_name, email, company_id')\
             .eq('user_id', request.firm_user_id)\
             .single()\
             .execute()
@@ -5763,9 +6624,19 @@ async def save_business_profile(request: BusinessProfileRequest):
         
         profile_data = user_profile.data
         
+        # Ensure company_id exists for firm_id
+        print(f"[BUSINESS PROFILE] User profile data: {profile_data}")
+        
+        if not profile_data.get('company_id'):
+            print(f"[BUSINESS PROFILE] ❌ Missing company_id in profile for user: {request.firm_user_id}")
+            raise HTTPException(status_code=400, detail="User profile missing company_id - required for business profile")
+        
+        print(f"[BUSINESS PROFILE] ✅ Using company_id as firm_id: {profile_data['company_id']}")
+        
         # Prepare business profile data
         business_data = {
             'firm_user_id': request.firm_user_id,
+            'firm_id': profile_data['company_id'],  # Use company_id from profiles as firm_id
             'business_name': request.business_name,
             'business_email': request.business_email,
             'phone': request.phone,
@@ -5782,12 +6653,18 @@ async def save_business_profile(request: BusinessProfileRequest):
         }
         
         # Upsert business profile
-        result = supabase.table('business_profiles')\
-            .upsert(business_data, on_conflict='firm_user_id')\
-            .execute()
-        
-        if result.error:
-            raise HTTPException(status_code=500, detail=f"Database error: {result.error}")
+        try:
+            result = supabase.table('business_profiles')\
+                .upsert(business_data, on_conflict='firm_user_id')\
+                .execute()
+            
+            print(f"[BUSINESS PROFILE] ✅ Successfully saved business profile")
+            print(f"[BUSINESS PROFILE] Business: {request.business_name}")
+            print(f"[BUSINESS PROFILE] Firm ID: {profile_data['company_id']}")
+            
+        except Exception as e:
+            print(f"[BUSINESS PROFILE] ❌ Database error: {e}")
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
         
         return {
             "status": "success",
@@ -5837,6 +6714,386 @@ async def get_business_profile(firm_user_id: str):
 # =============================================================================
 
 # CORS middleware
+# ============================================================================
+# BUSINESS SETUP WORKFLOW ENDPOINTS
+# ============================================================================
+
+import secrets
+import string
+from typing import Optional
+from fastapi import BackgroundTasks
+
+# Business Setup Models
+class BusinessInformationRequest(BaseModel):
+    firm_user_id: str
+    agent_id: str
+    business_name: str
+    business_address: str
+    city: str
+    state: str
+    country: str = "United States"
+    postal_code: str
+    business_logo_url: Optional[str] = None
+    snapshot_id: str  # HighLevel snapshot ID for location creation
+
+class BusinessSetupResponse(BaseModel):
+    success: bool
+    message: str
+    business_id: Optional[str] = None
+    status: str
+    ghl_location_id: Optional[str] = None
+    ghl_user_email: Optional[str] = None
+    automation_started: bool = False
+
+# Business Setup Utility Functions
+def generate_secure_password(length: int = 12) -> str:
+    """Generate a secure random password"""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+def generate_user_email(business_name: str, location_id: str) -> str:
+    """Generate a unique email for the HighLevel user"""
+    clean_name = ''.join(c.lower() for c in business_name if c.isalnum())[:10]
+    return f"{clean_name}+{location_id}@squidgyai.com"
+
+async def create_ghl_location_sim(snapshot_id: str, business_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Simulate creating a HighLevel location (replace with real API call)"""
+    try:
+        print(f"[GHL API] Creating location with snapshot: {snapshot_id}")
+        print(f"[GHL API] Business: {business_info['business_name']}")
+        
+        # Generate location ID (replace with actual API call)
+        location_id = f"LOC_{uuid.uuid4().hex[:16].upper()}"
+        
+        return {
+            "success": True,
+            "location_id": location_id,
+            "location_name": business_info['business_name'],
+            "address": business_info['business_address']
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Location creation failed: {e}")
+        return {"success": False, "error": str(e)}
+
+async def create_ghl_user_sim(location_id: str, email: str, password: str, business_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Simulate creating a HighLevel user (replace with real API call)"""
+    try:
+        print(f"[GHL API] Creating user for location: {location_id}")
+        print(f"[GHL API] Email: {email}")
+        
+        # Generate user ID (replace with actual API call)
+        user_id = f"USER_{uuid.uuid4().hex[:16].upper()}"
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "email": email,
+            "location_id": location_id
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] User creation failed: {e}")
+        return {"success": False, "error": str(e)}
+
+async def run_facebook_automation_for_business(business_id: str, location_id: str, email: str, password: str, firm_user_id: str, ghl_user_id: str = None):
+    """Run Facebook automation specifically for GHL subaccount creation - with enhanced logging"""
+    try:
+        print(f"[FACEBOOK AUTOMATION] 🎯 Starting Facebook PIT creation for business: {business_id}")
+        print(f"[FACEBOOK AUTOMATION] 📍 Location ID: {location_id}")
+        print(f"[FACEBOOK AUTOMATION] 👤 Email: {email}")
+        print(f"[FACEBOOK AUTOMATION] 🏢 Firm User ID: {firm_user_id}")
+        print(f"[FACEBOOK AUTOMATION] 👤 GHL User ID (Soma): {ghl_user_id}")
+        
+        # Update status to automation_running
+        supabase.table('squidgy_business_information').update({
+            'setup_status': 'automation_running',
+            'automation_started_at': datetime.now().isoformat()
+        }).eq('id', business_id).execute()
+        
+        print(f"[FACEBOOK AUTOMATION] ✅ Updated database status to 'automation_running'")
+        
+        # Import and run the Playwright automation
+        try:
+            print(f"[FACEBOOK AUTOMATION] 📦 Loading Playwright automation module...")
+            from ghl_automation_complete_playwright import HighLevelCompleteAutomationPlaywright
+            
+            print(f"[FACEBOOK AUTOMATION] 🚀 Initializing automation (headless mode)...")
+            automation = HighLevelCompleteAutomationPlaywright(headless=True)
+            
+            print(f"[FACEBOOK AUTOMATION] ▶️ Starting automation workflow...")
+            success = await automation.run_automation(
+                email=email, 
+                password=password, 
+                location_id=location_id, 
+                firm_user_id=firm_user_id, 
+                agent_id='SOLAgent', 
+                ghl_user_id=ghl_user_id
+            )
+            
+            if success:
+                # Update status to completed and save PIT token
+                pit_token = automation.pit_token if hasattr(automation, 'pit_token') else None
+                
+                supabase.table('squidgy_business_information').update({
+                    'setup_status': 'completed',
+                    'automation_completed_at': datetime.now().isoformat(),
+                    'pit_token': pit_token,
+                    'access_token_expires_at': automation.token_expiry.isoformat() if automation.token_expiry else None,
+                    'firebase_token_available': bool(automation.firebase_token)
+                }).eq('id', business_id).execute()
+                
+                print(f"[FACEBOOK AUTOMATION] ✅ AUTOMATION SUCCESSFUL!")
+                print(f"[FACEBOOK AUTOMATION] 🎉 PIT Token created: {pit_token[:30] if pit_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 🔑 Access Token: {'✅ Captured' if automation.access_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION] 🔥 Firebase Token: {'✅ Captured' if automation.firebase_token else '❌ Missing'}")
+                
+            else:
+                # Update status to failed
+                supabase.table('squidgy_business_information').update({
+                    'setup_status': 'failed',
+                    'automation_completed_at': datetime.now().isoformat(),
+                    'automation_error': "Automation workflow failed - check detailed logs above"
+                }).eq('id', business_id).execute()
+                
+                print(f"[FACEBOOK AUTOMATION] ❌ AUTOMATION FAILED!")
+                print(f"[FACEBOOK AUTOMATION] Check the detailed logs above for specific failure points")
+                
+        except ImportError as import_error:
+            error_msg = f"Could not import automation module: {import_error}"
+            print(f"[FACEBOOK AUTOMATION] ❌ IMPORT ERROR: {error_msg}")
+            
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': error_msg
+            }).eq('id', business_id).execute()
+            
+        except Exception as automation_error:
+            error_msg = f"Automation execution failed: {automation_error}"
+            print(f"[FACEBOOK AUTOMATION] ❌ EXECUTION ERROR: {error_msg}")
+            
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': error_msg
+            }).eq('id', business_id).execute()
+            
+    except Exception as e:
+        error_msg = f"Background automation failed: {e}"
+        print(f"[FACEBOOK AUTOMATION] ❌ BACKGROUND ERROR: {error_msg}")
+        
+        # Update status to failed with error
+        try:
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': error_msg
+            }).eq('id', business_id).execute()
+        except:
+            print(f"[FACEBOOK AUTOMATION] ❌ Could not update database with error status")
+
+async def run_playwright_automation_background(business_id: str, email: str, password: str, location_id: str, firm_user_id: str, agent_id: str, ghl_user_id: str = None):
+    """Run the Playwright automation in the background (NON-BLOCKING)"""
+    try:
+        print(f"[AUTOMATION] Starting background automation for business: {business_id}")
+        
+        # Update status to automation_running
+        supabase.table('squidgy_business_information').update({
+            'setup_status': 'automation_running',
+            'automation_started_at': datetime.now().isoformat()
+        }).eq('id', business_id).execute()
+        
+        # Import and run the Playwright automation
+        try:
+            from ghl_automation_complete_playwright import HighLevelCompleteAutomationPlaywright
+            automation = HighLevelCompleteAutomationPlaywright(headless=True)
+            success = await automation.run_automation(email, password, location_id, firm_user_id, agent_id, ghl_user_id)
+            
+            if success:
+                # Update status to completed and save PIT token
+                pit_token = automation.pit_token if hasattr(automation, 'pit_token') else None
+                
+                supabase.table('squidgy_business_information').update({
+                    'setup_status': 'completed',
+                    'automation_completed_at': datetime.now().isoformat(),
+                    'pit_token': pit_token,
+                    'access_token_expires_at': automation.token_expiry.isoformat() if automation.token_expiry else None,
+                    'firebase_token_available': bool(automation.firebase_token)
+                }).eq('id', business_id).execute()
+                
+                print(f"[AUTOMATION] Completed successfully for business: {business_id}")
+                print(f"[AUTOMATION] PIT Token: {pit_token}")
+                
+            else:
+                # Update status to failed
+                supabase.table('squidgy_business_information').update({
+                    'setup_status': 'failed',
+                    'automation_completed_at': datetime.now().isoformat(),
+                    'automation_error': "Automation workflow failed"
+                }).eq('id', business_id).execute()
+                
+                print(f"[AUTOMATION] Failed for business: {business_id}")
+                
+        except ImportError:
+            print("[ERROR] Playwright automation not available")
+            supabase.table('squidgy_business_information').update({
+                'setup_status': 'failed',
+                'automation_completed_at': datetime.now().isoformat(),
+                'automation_error': "Playwright automation not available"
+            }).eq('id', business_id).execute()
+            
+    except Exception as e:
+        print(f"[ERROR] Automation failed: {e}")
+        
+        # Update status to failed with error
+        supabase.table('squidgy_business_information').update({
+            'setup_status': 'failed',
+            'automation_completed_at': datetime.now().isoformat(),
+            'automation_error': str(e)
+        }).eq('id', business_id).execute()
+
+# Business Setup API Endpoints
+@app.post("/api/business/setup", response_model=BusinessSetupResponse)
+async def setup_business_complete(request: BusinessInformationRequest, background_tasks: BackgroundTasks):
+    """
+    Complete Business Setup Workflow - Integrated into main.py
+    1. Save business information
+    2. Create HighLevel location (based on snapshot_id)
+    3. Create HighLevel user
+    4. Start automation in background (NON-BLOCKING)
+    5. Return immediately so user can continue
+    """
+    
+    try:
+        print(f"🚀 Starting business setup for: {request.business_name}")
+        
+        # Step 1: Generate credentials
+        business_id = str(uuid.uuid4())
+        user_password = generate_secure_password()
+        
+        # Step 2: Create HighLevel location
+        print(f"[STEP 1] Creating HighLevel location...")
+        location_result = await create_ghl_location_sim(request.snapshot_id, request.dict())
+        
+        if not location_result["success"]:
+            raise HTTPException(status_code=400, detail=f"Location creation failed: {location_result.get('error')}")
+        
+        location_id = location_result["location_id"]
+        user_email = generate_user_email(request.business_name, location_id)
+        
+        # Step 3: Create HighLevel user
+        print(f"[STEP 2] Creating HighLevel user...")
+        user_result = await create_ghl_user_sim(location_id, user_email, user_password, request.dict())
+        
+        if not user_result["success"]:
+            raise HTTPException(status_code=400, detail=f"User creation failed: {user_result.get('error')}")
+        
+        user_id = user_result["user_id"]
+        
+        # Step 4: Save business information to database (upsert to handle duplicates)
+        print(f"[STEP 3] Saving to database...")
+        supabase.table('squidgy_business_information').upsert({
+            'id': business_id,
+            'firm_user_id': request.firm_user_id,
+            'agent_id': request.agent_id,
+            'business_name': request.business_name,
+            'business_address': request.business_address,
+            'city': request.city,
+            'state': request.state,
+            'country': request.country,
+            'postal_code': request.postal_code,
+            'business_logo_url': request.business_logo_url,
+            'snapshot_id': request.snapshot_id,
+            'ghl_location_id': location_id,
+            'ghl_user_email': user_email,
+            'ghl_user_password': user_password,
+            'ghl_user_id': user_id,
+            'setup_status': 'user_created',
+            'updated_at': datetime.now().isoformat()
+        }, on_conflict='firm_user_id,agent_id').execute()
+        
+        # Step 5: Start automation in background (NON-BLOCKING!)
+        print(f"[STEP 4] Starting background automation...")
+        background_tasks.add_task(
+            run_playwright_automation_background,
+            business_id, user_email, user_password, location_id, 
+            request.firm_user_id, request.agent_id, user_id
+        )
+        
+        # Step 6: Return immediately (don't wait for automation)
+        print(f"✅ Business setup initiated successfully!")
+        print(f"   Business ID: {business_id}")
+        print(f"   Location ID: {location_id}")
+        print(f"   User Email: {user_email}")
+        print(f"   🔄 Automation running in background...")
+        
+        return BusinessSetupResponse(
+            success=True,
+            message=f"Business setup initiated successfully. Automation running in background.",
+            business_id=business_id,
+            status="user_created",
+            ghl_location_id=location_id,
+            ghl_user_email=user_email,
+            automation_started=True
+        )
+        
+    except Exception as e:
+        print(f"💥 Business setup failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/business/status/{business_id}")
+async def get_business_status(business_id: str):
+    """Get the current status of business setup and automation"""
+    try:
+        result = supabase.table('squidgy_business_information').select(
+            'id, business_name, setup_status, ghl_location_id, ghl_user_email, '
+            'pit_token, automation_started_at, automation_completed_at, automation_error, '
+            'access_token_expires_at, firebase_token_available, created_at'
+        ).eq('id', business_id).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Business not found")
+        
+        business = result.data[0]
+        return {
+            "business_id": business["id"],
+            "business_name": business["business_name"],
+            "status": business["setup_status"],
+            "location_id": business["ghl_location_id"],
+            "user_email": business["ghl_user_email"],
+            "has_pit_token": bool(business["pit_token"]),
+            "automation_started_at": business["automation_started_at"],
+            "automation_completed_at": business["automation_completed_at"],
+            "automation_error": business["automation_error"],
+            "token_expires_at": business["access_token_expires_at"],
+            "has_firebase_token": business["firebase_token_available"],
+            "created_at": business["created_at"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/business/list/{firm_user_id}/{agent_id}")
+async def list_business_setups(firm_user_id: str, agent_id: str):
+    """List all business setups for a firm_user_id and agent_id"""
+    try:
+        results = supabase.table('squidgy_business_information').select('*').eq(
+            'firm_user_id', firm_user_id
+        ).eq('agent_id', agent_id).order('created_at', desc=True).execute()
+        
+        return {
+            "businesses": results.data,
+            "total": len(results.data)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# END BUSINESS SETUP WORKFLOW
+# ============================================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

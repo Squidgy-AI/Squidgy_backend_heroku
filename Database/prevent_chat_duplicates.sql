@@ -46,7 +46,8 @@ CREATE OR REPLACE FUNCTION safe_insert_chat_history(
     p_user_id text,
     p_sender text,
     p_message text,
-    p_timestamp timestamp with time zone DEFAULT now()
+    p_timestamp timestamp with time zone DEFAULT now(),
+    p_agent_id text DEFAULT 'SOLAgent'
 )
 RETURNS uuid AS $$
 DECLARE
@@ -64,8 +65,8 @@ BEGIN
     
     -- If no duplicate found, insert new message
     IF new_id IS NULL THEN
-        INSERT INTO chat_history (session_id, user_id, sender, message, timestamp)
-        VALUES (p_session_id, p_user_id, p_sender, p_message, p_timestamp)
+        INSERT INTO chat_history (session_id, user_id, sender, message, timestamp, agent_id)
+        VALUES (p_session_id, p_user_id, p_sender, p_message, p_timestamp, p_agent_id)
         RETURNING id INTO new_id;
     END IF;
     
