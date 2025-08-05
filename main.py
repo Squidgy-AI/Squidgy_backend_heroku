@@ -35,6 +35,7 @@ from solar_api_connector import SolarApiConnector, SolarInsightsRequest as Solar
 from facebook_pages_api_working import FacebookPagesRequest, FacebookPagesResponse, get_facebook_pages
 from email_validation import verify_email_confirmed, require_email_confirmed, check_email_confirmation_status
 from invitation_handler import InvitationHandler
+from performance_monitor import PerformanceMonitor, monitor_performance, PerformanceMiddleware
 
 # Handler classes
 
@@ -1212,7 +1213,21 @@ conversational_handler = ConversationalHandler(
 client_kb_manager = ClientKBManager(supabase_client=supabase)
 dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
 
-print("Application initialized")
+# Initialize performance monitoring system
+performance_monitor = PerformanceMonitor()
+
+print("Application initialized with performance monitoring")
+
+# Add performance monitoring middleware
+app.add_middleware(PerformanceMiddleware, monitor=performance_monitor)
+
+# Add shutdown event handler for performance monitoring
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean shutdown of performance monitoring"""
+    print("🔄 Shutting down performance monitoring...")
+    performance_monitor.stop()
+    print("✅ Performance monitoring stopped")
 
 background_results = {}
 running_tasks: Dict[str, Dict[str, Any]] = {}
@@ -2010,6 +2025,7 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
             logger.error(f"Failed to send error response: {send_error}")
 
 # Helper functions for optimized client context aggregation
+@monitor_performance
 async def get_optimized_client_context(user_id: str, query_embedding: List[float]) -> Dict[str, Any]:
     """Get comprehensive client context using optimized database functions"""
     try:
@@ -2060,6 +2076,7 @@ async def get_optimized_client_context(user_id: str, query_embedding: List[float
         # Fallback to legacy method
         return await dynamic_agent_kb_handler.get_client_industry_context(user_id)
 
+@monitor_performance
 async def get_optimized_agent_knowledge(agent_name: str, query_embedding: List[float]) -> Dict[str, Any]:
     """Get agent knowledge using optimized database function with usage tracking"""
     try:
@@ -2097,6 +2114,7 @@ async def get_optimized_agent_knowledge(agent_name: str, query_embedding: List[f
         # Fallback to legacy method
         return await dynamic_agent_kb_handler.get_agent_context_from_kb(agent_name)
 
+@monitor_performance
 async def build_enhanced_kb_context(user_id: str, client_context: Dict, agent_knowledge: Dict) -> Dict[str, Any]:
     """Build comprehensive KB context from multiple optimized sources"""
     try:
@@ -2190,6 +2208,7 @@ async def build_enhanced_kb_context(user_id: str, client_context: Dict, agent_kn
         logger.error(f"Error building enhanced KB context: {e}")
         return {}
 
+@monitor_performance
 async def check_missing_must_info(must_questions: List[str], kb_context: Dict, client_context: Dict) -> List[str]:
     """Check for missing must-have information using enhanced context"""
     missing_info = []
@@ -2757,6 +2776,7 @@ async def receive_stream_update(update: StreamUpdate):
         return {"status": "error", "error": str(e)}
     
 @app.post("/api/website/analyze")
+@monitor_performance
 async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
     """
     Endpoint 1: Analyze website using Perplexity AI - NO TIMEOUTS
@@ -2846,6 +2866,7 @@ async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
         }
 
 @app.post("/api/website/screenshot")
+@monitor_performance
 async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest):
     """
     Endpoint 2: Capture full website screenshot
@@ -2888,6 +2909,7 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
         }
 
 @app.post("/api/website/favicon")
+@monitor_performance
 async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
     """
     Endpoint 3: Extract and save website favicon/logo
@@ -2930,6 +2952,7 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
         }
     
 @app.post("/api/website/full-analysis-async")
+@monitor_performance
 async def full_website_analysis_async(request: WebsiteAnalysisRequest):
     """
     Fire-and-forget endpoint that starts all operations and returns immediately
@@ -3012,6 +3035,7 @@ async def full_website_analysis_async(request: WebsiteAnalysisRequest):
 
 # Add this endpoint to main.py if it doesn't exist
 @app.get("/chat-history")
+@monitor_performance
 async def get_chat_history(session_id: str):
     """Get chat history for a session"""
     try:
@@ -3060,6 +3084,7 @@ memory_handler.setLevel(logging.INFO)
 logger.addHandler(memory_handler)
 
 @app.get("/logs")
+@monitor_performance
 async def get_application_logs(limit: int = 50):
     """Get recent application logs"""
     try:
@@ -3093,6 +3118,7 @@ async def get_application_logs(limit: int = 50):
 
 # Combined endpoint that runs all three tools
 @app.post("/api/website/full-analysis")
+@monitor_performance
 async def full_website_analysis(request: WebsiteAnalysisRequest):
     """
     Optimized for Heroku's 30-second limit
@@ -3185,6 +3211,7 @@ async def full_website_analysis(request: WebsiteAnalysisRequest):
 
 # WebSocket endpoint
 @app.websocket("/ws/{user_id}/{session_id}")
+@monitor_performance
 async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str):
     """WebSocket endpoint that routes through n8n with streaming support"""
     connection_id = f"{user_id}_{session_id}"
@@ -3332,6 +3359,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
 
 
 @app.get("/api/agents/config")
+@monitor_performance
 async def get_all_agent_configs():
     """Get all agent configurations"""
     return {
@@ -3339,6 +3367,7 @@ async def get_all_agent_configs():
     }
 
 @app.get("/api/agents/config/{agent_name}")
+@monitor_performance
 async def get_agent_config_endpoint(agent_name: str):
     """Get specific agent configuration"""
     agent = get_agent_config(agent_name)
@@ -4260,6 +4289,7 @@ async def email_confirmation_page():
 # =============================================================================
 
 @app.get("/api/solar/insights")
+@monitor_performance
 async def solar_insights_endpoint(address: str):
     """Get solar insights for an address using RealWave API"""
     try:
@@ -4270,6 +4300,7 @@ async def solar_insights_endpoint(address: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/solar/data-layers")
+@monitor_performance
 async def solar_data_layers_endpoint(address: str):
     """Get solar data layers for visualization"""
     try:
@@ -4280,6 +4311,7 @@ async def solar_data_layers_endpoint(address: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/solar/report")
+@monitor_performance
 async def solar_report_endpoint(address: str):
     """Generate comprehensive solar report"""
     try:
@@ -4353,6 +4385,7 @@ class AgentStatusRequest(BaseModel):
     setup_type: str = "agent_config"  # agent_config, SolarSetup, CalendarSetup, NotificationSetup, SOLAgent
 
 @app.get("/api/agents/setup/{user_id}")
+@monitor_performance
 async def get_user_agents(user_id: str):
     """Get all agent setups for a user"""
     try:
@@ -4380,6 +4413,7 @@ async def get_user_agents(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/agents/setup/{user_id}/{agent_id}")
+@monitor_performance
 async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
     """Get specific agent setup for a user, optionally filtered by setup_type"""
     try:
@@ -4418,6 +4452,7 @@ async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str]
         }
 
 @app.post("/api/agents/setup")
+@monitor_performance
 async def create_or_update_agent_setup(request: AgentSetupRequest):
     """Create or update agent setup for a user"""
     try:
@@ -4446,6 +4481,7 @@ async def create_or_update_agent_setup(request: AgentSetupRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/agents/status")
+@monitor_performance
 async def update_agent_status(request: AgentStatusRequest):
     """Update agent enabled/disabled status"""
     try:
@@ -4478,6 +4514,7 @@ async def update_agent_status(request: AgentStatusRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/agents/setup/{user_id}/{agent_id}")
+@monitor_performance
 async def delete_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
     """Delete agent setup for a user, optionally filtered by setup_type"""
     try:
@@ -4504,6 +4541,7 @@ async def delete_agent_setup(user_id: str, agent_id: str, setup_type: Optional[s
 
 # Progressive Setup Convenience Endpoints
 @app.get("/api/agents/setup/{user_id}/{agent_id}/progress")
+@monitor_performance
 async def get_agent_setup_progress(user_id: str, agent_id: str):
     """Get setup progress for SOL Agent progressive setup"""
     try:
@@ -4608,6 +4646,7 @@ class GHLUserCreationRequest(BaseModel):
 last_created_location_id = None
 
 @app.post("/api/ghl/create-subaccount")
+@monitor_performance
 async def create_ghl_subaccount(request: SecureGHLSubAccountRequest):
     """Create a GoHighLevel sub-account with solar snapshot"""
     global last_created_location_id
