@@ -524,17 +524,20 @@ class HighLevelCompleteAutomationPlaywright:
         except Exception as e:
             print(f"[DEBUG] Frame check error: {e}")
         
-        # Better wait strategy for dynamic content
-        print("[⏳ WAIT] Waiting for page to be fully loaded...")
-        await self.page.wait_for_load_state('networkidle', timeout=30000)
-        await asyncio.sleep(3)  # Additional wait for dynamic content
+        # Simpler wait strategy to avoid timeouts
+        print("[⏳ WAIT] Waiting for page content to load...")
+        try:
+            await self.page.wait_for_load_state('domcontentloaded', timeout=10000)
+        except:
+            print("[⚠️ TIMEOUT] DOM load timeout, continuing anyway...")
+        await asyncio.sleep(5)  # Simple wait for dynamic content
         
         # Check if we're on the right page by looking for key elements
         try:
-            await self.page.wait_for_selector("text=Private Integrations", timeout=5000)
+            await self.page.wait_for_selector("text=Private Integrations", timeout=3000)
             print("✅ Confirmed on Private Integrations page")
         except:
-            print("⚠️ May not be on the correct page")
+            print("⚠️ May not be on the correct page, continuing anyway...")
         
         for retry in range(max_retries):
             print(f"\n[🔄 RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
@@ -589,8 +592,8 @@ class HighLevelCompleteAutomationPlaywright:
                             
                         print(f"[BUTTON] Trying selector in {('main frame' if frame == self.page else 'iframe')}: {selector}")
                         
-                        # First check if element exists in this frame
-                        element = await frame.locator(selector).first.element_handle(timeout=2000)
+                        # First check if element exists in this frame (shorter timeout)
+                        element = await frame.locator(selector).first.element_handle(timeout=1000)
                         if element:
                             # Scroll element into view
                             await element.scroll_into_view_if_needed()
