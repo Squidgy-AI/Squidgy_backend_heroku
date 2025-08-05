@@ -280,6 +280,35 @@ class HighLevelCompleteAutomationPlaywright:
             # Check localStorage
             local_storage = await self.page.evaluate("() => window.localStorage")
             for key, value in local_storage.items():
+                # Check for GHL's Base64 encoded token storage (key "a")
+                if key == "a" and value:
+                    try:
+                        import base64
+                        # Decode the Base64 value
+                        decoded_bytes = base64.b64decode(value + '==')  # Add padding if needed
+                        decoded_str = decoded_bytes.decode('utf-8')
+                        token_data = json.loads(decoded_str)
+                        
+                        if isinstance(token_data, dict):
+                            # Look for refresh tokens in various formats
+                            if 'refreshToken' in token_data:
+                                self.refresh_token = token_data['refreshToken']
+                                print(f"[✅ REFRESH] Found refreshToken in Base64 storage: {self.refresh_token[:30]}...")
+                            if 'refreshJwt' in token_data:
+                                if not self.refresh_token:  # Use as backup
+                                    self.refresh_token = token_data['refreshJwt']
+                                    print(f"[✅ REFRESH] Found refreshJwt in Base64 storage: {self.refresh_token[:30]}...")
+                            if 'authToken' in token_data:
+                                self.access_token = token_data['authToken']
+                                print(f"[✅ ACCESS] Found authToken in Base64 storage: {self.access_token[:30]}...")
+                            if 'jwt' in token_data:
+                                if not self.access_token:  # Use as backup
+                                    self.access_token = token_data['jwt']
+                                    print(f"[✅ ACCESS] Found jwt in Base64 storage: {self.access_token[:30]}...")
+                    except Exception as e:
+                        print(f"[⚠️ DECODE] Could not decode Base64 token storage: {e}")
+                
+                # Original token checking logic
                 if 'token' in key.lower() or 'access' in key.lower():
                     try:
                         # Try to parse as JSON
