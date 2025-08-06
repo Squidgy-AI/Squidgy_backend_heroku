@@ -6102,31 +6102,117 @@ async def get_facebook_pages_simple(request: dict):
             
             print(f"📱 [SIMPLE API] ✅ Found {len(pages)} Facebook pages")
             
-            # Format pages for frontend
+            # Store/Update pages in database and format for frontend
             formatted_pages = []
             for page in pages:
                 # Handle different page formats
                 page_id = page.get("facebookPageId") or page.get("id", "unknown")
                 page_name = page.get("facebookPageName") or page.get("name", "Unknown Page")
+                page_url = page.get("facebookUrl", f"https://www.facebook.com/{page_id}")
+                
+                # Store/Update page in database
+                try:
+                    # Check if page already exists
+                    existing_page = supabase.table('squidgy_facebook_pages').select('*').eq(
+                        'firm_user_id', user_id
+                    ).eq('page_id', page_id).execute()
+                    
+                    page_data = {
+                        "firm_user_id": user_id,
+                        "location_id": target_location_id,
+                        "user_id": user_id,  # Same as firm_user_id for now
+                        "page_id": page_id,
+                        "page_name": page_name,
+                        "page_category": page.get("category", ""),
+                        "instagram_business_account_id": page.get("instagram_business_account", {}).get("id"),
+                        "is_instagram_available": page.get("isInstagramAvailable", False),
+                        "raw_page_data": page,
+                        "ghl_location_id": target_location_id,
+                        "ghl_user_id": user_id,
+                        "updated_at": "now()"
+                    }
+                    
+                    if existing_page.data:
+                        # Update existing page
+                        supabase.table('squidgy_facebook_pages').update(page_data).eq(
+                            'firm_user_id', user_id
+                        ).eq('page_id', page_id).execute()
+                        print(f"📱 [SIMPLE API] Updated page {page_name} in database")
+                    else:
+                        # Insert new page
+                        page_data["created_at"] = "now()"
+                        supabase.table('squidgy_facebook_pages').insert(page_data).execute()
+                        print(f"📱 [SIMPLE API] Stored page {page_name} in database")
+                        
+                except Exception as db_error:
+                    print(f"📱 [SIMPLE API] ⚠️ Database error for page {page_name}: {db_error}")
+                
+                # Check if page is connected from database
+                is_connected = False
+                try:
+                    db_page = supabase.table('squidgy_facebook_pages').select('is_connected_to_ghl').eq(
+                        'firm_user_id', user_id
+                    ).eq('page_id', page_id).single().execute()
+                    if db_page.data:
+                        is_connected = db_page.data.get('is_connected_to_ghl', False)
+                except:
+                    pass
                 
                 formatted_pages.append({
                     "page_id": page_id,
                     "page_name": page_name,
-                    "is_connected": page.get("isConnected", False),
+                    "is_connected": is_connected,
                     "instagram_available": page.get("isInstagramAvailable", False),
-                    "avatar": page.get("avatar", "")
+                    "avatar": page.get("avatar", ""),
+                    "page_url": page_url
                 })
             
             return {
                 "success": True,
-                "message": f"Successfully retrieved {len(pages)} Facebook pages",
+                "message": f"Successfully retrieved {len(pages)} Facebook pages from API and stored in database",
                 "pages": formatted_pages,
                 "total_pages": len(pages),
                 "location_id": target_location_id,
                 "facebook_account_id": facebook_account_id
             }
         else:
-            print(f"📱 [SIMPLE API] ❌ Facebook API error: {response.status_code}")
+            print(f"📱 [SIMPLE API] ❌ Facebook API error: {response.status_code}, trying database fallback")
+            
+            # Fallback: Try to get pages from database if API fails
+            try:
+                db_pages = supabase.table('squidgy_facebook_pages').select('*').eq(
+                    'firm_user_id', user_id
+                ).order('created_at', desc=False).execute()
+                
+                if db_pages.data:
+                    print(f"📱 [SIMPLE API] 📄 Found {len(db_pages.data)} pages in database")
+                    
+                    formatted_pages = []
+                    for db_page in db_pages.data:
+                        formatted_pages.append({
+                            "page_id": db_page['page_id'],
+                            "page_name": db_page['page_name'],
+                            "is_connected": db_page.get('is_connected_to_ghl', False),
+                            "instagram_available": db_page.get('is_instagram_available', False),
+                            "avatar": "",
+                            "page_url": f"https://www.facebook.com/{db_page['page_id']}"
+                        })
+                    
+                    return {
+                        "success": True,
+                        "message": f"Retrieved {len(db_pages.data)} Facebook pages from database (API unavailable)",
+                        "pages": formatted_pages,
+                        "total_pages": len(db_pages.data),
+                        "location_id": target_location_id,
+                        "facebook_account_id": facebook_account_id,
+                        "source": "database"
+                    }
+                else:
+                    print(f"📱 [SIMPLE API] ❌ No pages in database either")
+                    
+            except Exception as db_error:
+                print(f"📱 [SIMPLE API] ❌ Database fallback error: {db_error}")
+            
             return {
                 "success": False,
                 "message": f"Facebook API returned {response.status_code}: {response.text}",
@@ -6252,29 +6338,51 @@ async def connect_facebook_pages_simple(request: dict):
                 "referer": "https://app.onetoo.com/"
             }
             
+            # Get page details from database first  
+            try:
+                db_pages_result = supabase.table('squidgy_facebook_pages').select('*').eq(
+                    'firm_user_id', user_id
+                ).in_('page_id', selected_page_ids).execute()
+                
+                db_pages = {page['page_id']: page for page in db_pages_result.data} if db_pages_result.data else {}
+                print(f"📱 [SIMPLE CONNECT] Found {len(db_pages)} pages in database")
+                
+            except Exception as db_error:
+                print(f"📱 [SIMPLE CONNECT] Database error: {db_error}")
+                db_pages = {}
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 connect_url = f"https://backend.leadconnectorhq.com/integrations/facebook/{target_location_id}/pages"
                 
-                # Format pages array to match browser request
+                # Format pages array using database data
                 pages_data = []
                 for page_id in selected_page_ids:
-                    # Find the page details from available pages
-                    page_info = None
-                    for page in pages:
-                        if page.get('facebookPageId') == page_id:
-                            page_info = page
-                            break
+                    # Get page info from database
+                    db_page = db_pages.get(page_id)
                     
-                    if page_info:
+                    if db_page:
                         pages_data.append({
-                            "facebookPageId": page_info.get('facebookPageId'),
-                            "facebookPageName": page_info.get('facebookPageName', ''),
-                            "facebookIgnoreMessages": page_info.get('facebookIgnoreMessages', False),
-                            "facebookUrl": page_info.get('facebookUrl', f"https://www.facebook.com/{page_id}"),
-                            "isInstagramAvailable": page_info.get('isInstagramAvailable', False),
+                            "facebookPageId": db_page['page_id'],
+                            "facebookPageName": db_page['page_name'],
+                            "facebookIgnoreMessages": False,
+                            "facebookUrl": f"https://www.facebook.com/{db_page['page_id']}",
+                            "isInstagramAvailable": db_page.get('is_instagram_available', False),
                             "syncType": "ALL_LEADS",
                             "instagramIgnoreMessages": False
                         })
+                        print(f"📱 [SIMPLE CONNECT] Using database data for page: {db_page['page_name']}")
+                    else:
+                        # Fallback: Create minimal data if not in database
+                        pages_data.append({
+                            "facebookPageId": page_id,
+                            "facebookPageName": f"Page {page_id}",
+                            "facebookIgnoreMessages": False,
+                            "facebookUrl": f"https://www.facebook.com/{page_id}",
+                            "isInstagramAvailable": False,
+                            "syncType": "ALL_LEADS",
+                            "instagramIgnoreMessages": False
+                        })
+                        print(f"📱 [SIMPLE CONNECT] Using fallback data for page: {page_id}")
                 
                 body = {
                     "pages": pages_data
@@ -6285,12 +6393,34 @@ async def connect_facebook_pages_simple(request: dict):
                     
                     if response.status_code in [200, 201]:
                         print(f"📱 [SIMPLE CONNECT] ✅ Successfully connected pages via integration endpoint")
+                        
+                        # Update database to mark pages as connected
                         for page_id in selected_page_ids:
-                            connected_pages.append({
-                                "page_id": page_id,
-                                "status": "connected",
-                                "location_id": target_location_id
-                            })
+                            try:
+                                # Update database record
+                                supabase.table('squidgy_facebook_pages').update({
+                                    "is_connected_to_ghl": True,
+                                    "connected_at": "now()",
+                                    "updated_at": "now()"
+                                }).eq('firm_user_id', user_id).eq('page_id', page_id).execute()
+                                
+                                print(f"📱 [SIMPLE CONNECT] ✅ Marked page {page_id} as connected in database")
+                                
+                                connected_pages.append({
+                                    "page_id": page_id,
+                                    "status": "connected",
+                                    "location_id": target_location_id,
+                                    "connected_at": "now()"
+                                })
+                                
+                            except Exception as db_error:
+                                print(f"📱 [SIMPLE CONNECT] ⚠️ Database update error for page {page_id}: {db_error}")
+                                # Still add to connected_pages even if database update fails
+                                connected_pages.append({
+                                    "page_id": page_id,
+                                    "status": "connected",
+                                    "location_id": target_location_id
+                                })
                     else:
                         print(f"📱 [SIMPLE CONNECT] ❌ Integration API error: {response.status_code} - {response.text}")
                         return {
@@ -6315,11 +6445,21 @@ async def connect_facebook_pages_simple(request: dict):
         
         print(f"📱 [SIMPLE CONNECT] ✅ Connected {len(connected_pages)} pages")
         
+        # Get page names for better message
+        page_names = []
+        for page_data in pages_data:
+            page_names.append(page_data.get('facebookPageName', 'Unknown Page'))
+        
+        message = f"Successfully connected {len(connected_pages)} Facebook page(s)"
+        if page_names:
+            message = f"Successfully connected: {', '.join(page_names)}"
+        
         return {
             "success": True,
-            "message": f"Successfully connected {len(connected_pages)} Facebook pages",
+            "message": message,
             "connected_pages": connected_pages,
-            "location_id": target_location_id
+            "location_id": target_location_id,
+            "page_names": page_names
         }
         
     except Exception as e:
