@@ -1150,6 +1150,22 @@ class DynamicAgentKBHandler:
 load_dotenv()
 # Initialize FastAPI app
 app = FastAPI()
+
+# Add CORS middleware to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://squidgy-frontend.vercel.app",
+        "https://squidgy.vercel.app",
+        "*"  # Allow all origins for development - restrict in production
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 logger = logging.getLogger(__name__)
 import threading
 
@@ -3092,7 +3108,7 @@ class InMemoryLogHandler(logging.Handler):
 
 # Add the handler to the logger
 memory_handler = InMemoryLogHandler()
-memory_handler.setLevel(logging.INFO)
+memory_handler.setLevel(logging.DEBUG)
 logger.addHandler(memory_handler)
 
 @app.get("/logs")
@@ -6182,7 +6198,6 @@ async def get_facebook_pages_simple(request: dict):
                 # Store/Update page in database
                 try:
                     # Convert string UUIDs to proper UUID format for database
-                    import uuid
                     try:
                         firm_user_uuid = str(uuid.UUID(user_id)) if isinstance(user_id, str) else user_id
                         location_uuid = str(uuid.UUID(target_location_id)) if isinstance(target_location_id, str) else target_location_id
@@ -7077,21 +7092,72 @@ async def run_facebook_automation_for_business(business_id: str, location_id: st
             )
             
             if success:
-                # Update status to completed and save PIT token
+                # Extract all tokens from automation response
                 pit_token = automation.pit_token if hasattr(automation, 'pit_token') else None
+                firebase_token = automation.firebase_token if hasattr(automation, 'firebase_token') else None
+                access_token = automation.access_token if hasattr(automation, 'access_token') else None
                 
+                print(f"[FACEBOOK AUTOMATION] 📋 DETAILED TOKEN ANALYSIS:")
+                print(f"[FACEBOOK AUTOMATION] 🔑 PIT Token: {pit_token[:50] if pit_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 🔥 Firebase Token: {firebase_token[:50] if firebase_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 🎫 Access Token: {access_token[:50] if access_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 📊 Token Availability:")
+                print(f"[FACEBOOK AUTOMATION]   - PIT Token: {'✅ Available' if pit_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION]   - Firebase Token: {'✅ Available' if firebase_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION]   - Access Token: {'✅ Available' if access_token else '❌ Missing'}")
+                
+                # Update squidgy_business_information table
                 supabase.table('squidgy_business_information').update({
                     'setup_status': 'completed',
                     'automation_completed_at': datetime.now().isoformat(),
                     'pit_token': pit_token,
-                    'access_token_expires_at': automation.token_expiry.isoformat() if automation.token_expiry else None,
-                    'firebase_token_available': bool(automation.firebase_token)
+                    'firebase_token': firebase_token,
+                    'access_token': access_token,
+                    'access_token_expires_at': automation.token_expiry.isoformat() if hasattr(automation, 'token_expiry') and automation.token_expiry else None,
+                    'firebase_token_available': bool(firebase_token)
                 }).eq('id', business_id).execute()
                 
+                print(f"[FACEBOOK AUTOMATION] 💾 Updated squidgy_business_information table with tokens")
+                
+                # CRITICAL: Also store tokens in squidgy_agent_business_setup table (where Facebook pages function looks)
+                try:
+                    # Prepare tokens in the format expected by Facebook pages function
+                    highlevel_tokens = {
+                        "tokens": {
+                            "firebase_token": firebase_token,
+                            "private_integration_token": pit_token,
+                            "access_token": access_token
+                        },
+                        "token_expiry": automation.token_expiry.isoformat() if hasattr(automation, 'token_expiry') and automation.token_expiry else None,
+                        "created_at": datetime.now().isoformat()
+                    }
+                    
+                    print(f"[FACEBOOK AUTOMATION] 🔄 Storing tokens in squidgy_agent_business_setup table...")
+                    print(f"[FACEBOOK AUTOMATION] 📋 Token structure for Facebook pages:")
+                    print(f"[FACEBOOK AUTOMATION]   - Firebase Token: {'✅' if firebase_token else '❌'}")
+                    print(f"[FACEBOOK AUTOMATION]   - PIT Token: {'✅' if pit_token else '❌'}")
+                    
+                    # Store/update in squidgy_agent_business_setup table
+                    supabase.table('squidgy_agent_business_setup').upsert({
+                        'firm_user_id': firm_user_id,
+                        'agent_id': 'SOLAgent',
+                        'setup_type': 'GHLSetup',
+                        'ghl_location_id': location_id,
+                        'ghl_user_id': ghl_user_id,
+                        'highlevel_tokens': highlevel_tokens,
+                        'setup_status': 'completed',
+                        'updated_at': datetime.now().isoformat()
+                    }).execute()
+                    
+                    print(f"[FACEBOOK AUTOMATION] ✅ Successfully stored tokens in squidgy_agent_business_setup table")
+                    print(f"[FACEBOOK AUTOMATION] 🎯 Facebook pages function should now find required tokens")
+                    
+                except Exception as token_storage_error:
+                    print(f"[FACEBOOK AUTOMATION] ❌ Failed to store tokens in agent_business_setup: {token_storage_error}")
+                    print(f"[FACEBOOK AUTOMATION] ⚠️ Facebook pages function may not work without these tokens")
+                
                 print(f"[FACEBOOK AUTOMATION] ✅ AUTOMATION SUCCESSFUL!")
-                print(f"[FACEBOOK AUTOMATION] 🎉 PIT Token created: {pit_token[:30] if pit_token else 'None'}...")
-                print(f"[FACEBOOK AUTOMATION] 🔑 Access Token: {'✅ Captured' if automation.access_token else '❌ Missing'}")
-                print(f"[FACEBOOK AUTOMATION] 🔥 Firebase Token: {'✅ Captured' if automation.firebase_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION] 🎉 All tokens processed and stored in both tables")
                 
             else:
                 # Update status to failed
