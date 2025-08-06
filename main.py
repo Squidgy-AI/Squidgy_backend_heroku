@@ -4366,9 +4366,15 @@ class AgentStatusRequest(BaseModel):
 async def get_user_agents(user_id: str):
     """Get all agent setups for a user"""
     try:
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(user_id))  # Validates and formats UUID
+        except ValueError:
+            firm_user_uuid = user_id  # Keep as string if not valid UUID
+        
         result = supabase.table('squidgy_agent_business_setup')\
             .select('*')\
-            .eq('firm_user_id', user_id)\
+            .eq('firm_user_id', firm_user_uuid)\
             .order('agent_id')\
             .execute()
         
@@ -4393,9 +4399,15 @@ async def get_user_agents(user_id: str):
 async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
     """Get specific agent setup for a user, optionally filtered by setup_type"""
     try:
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(user_id))  # Validates and formats UUID
+        except ValueError:
+            firm_user_uuid = user_id  # Keep as string if not valid UUID
+        
         query = supabase.table('squidgy_agent_business_setup')\
             .select('*')\
-            .eq('firm_user_id', user_id)\
+            .eq('firm_user_id', firm_user_uuid)\
             .eq('agent_id', agent_id)
         
         # If setup_type is provided, filter by it
@@ -4491,9 +4503,15 @@ async def update_agent_status(request: AgentStatusRequest):
 async def delete_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
     """Delete agent setup for a user, optionally filtered by setup_type"""
     try:
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(user_id))  # Validates and formats UUID
+        except ValueError:
+            firm_user_uuid = user_id  # Keep as string if not valid UUID
+        
         query = supabase.table('squidgy_agent_business_setup')\
             .delete()\
-            .eq('firm_user_id', user_id)\
+            .eq('firm_user_id', firm_user_uuid)\
             .eq('agent_id', agent_id)
         
         # If setup_type is provided, filter by it
@@ -4517,10 +4535,16 @@ async def delete_agent_setup(user_id: str, agent_id: str, setup_type: Optional[s
 async def get_agent_setup_progress(user_id: str, agent_id: str):
     """Get setup progress for SOL Agent progressive setup"""
     try:
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(user_id))  # Validates and formats UUID
+        except ValueError:
+            firm_user_uuid = user_id  # Keep as string if not valid UUID
+        
         # Get all setup types for this agent
         result = supabase.table('squidgy_agent_business_setup')\
             .select('setup_type, is_enabled, created_at, updated_at')\
-            .eq('firm_user_id', user_id)\
+            .eq('firm_user_id', firm_user_uuid)\
             .eq('agent_id', agent_id)\
             .in_('setup_type', ['SolarSetup', 'CalendarSetup', 'NotificationSetup'])\
             .execute()
@@ -5755,7 +5779,7 @@ async def connect_facebook_page(request: dict):
         # Get page details from database
         page_response = supabase_client.table('squidgy_facebook_pages')\
             .select("*")\
-            .eq('location_id', location_id)\
+            .eq('ghl_location_id', location_id)\
             .eq('page_id', page_id)\
             .execute()
         
@@ -5808,7 +5832,7 @@ async def connect_facebook_page(request: dict):
                     'connected_at': datetime.now(timezone.utc).isoformat(),
                     'updated_at': datetime.now(timezone.utc).isoformat()
                 })\
-                .eq('location_id', location_id)\
+                .eq('ghl_location_id', location_id)\
                 .eq('page_id', page_id)\
                 .execute()
             
@@ -5879,7 +5903,7 @@ async def connect_facebook_page_enhanced(request: dict):
         print(f"✅ Found business: {business_data['business_name']}")
         
         # Get page details from database
-        page_response = supabase.table('squidgy_facebook_pages').select("*").eq('location_id', location_id).eq('page_id', page_id).execute()
+        page_response = supabase.table('squidgy_facebook_pages').select("*").eq('ghl_location_id', location_id).eq('page_id', page_id).execute()
         
         if not page_response.data:
             raise HTTPException(status_code=404, detail=f"Page {page_id} not found in database for location {location_id}")
@@ -5901,11 +5925,9 @@ async def connect_facebook_page_enhanced(request: dict):
         if response.status_code == 200:
             # Update connection status in database
             supabase.table('squidgy_facebook_pages').update({
-                'is_connected': True,
-                'connected_at': datetime.now().isoformat(),
-                'connection_status': 'active',
-                'business_name': business_data['business_name']
-            }).eq('location_id', location_id).eq('page_id', page_id).execute()
+                'is_connected_to_ghl': True,
+                'connected_at': datetime.now().isoformat()
+            }).eq('ghl_location_id', location_id).eq('page_id', page_id).execute()
             
             print(f"✅ Successfully connected page {page_data['page_name']} to location {location_id}")
             
@@ -5955,10 +5977,16 @@ async def get_facebook_pages_simple(request: dict):
         
         print(f"📱 [SIMPLE API] Getting Facebook pages for user: {user_id}")
         
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(user_id))  # Validates and formats UUID
+        except ValueError:
+            firm_user_uuid = user_id  # Keep as string if not valid UUID
+        
         # Get Firebase JWT token from squidgy_agent_business_setup table
         setup_result = supabase.table('squidgy_agent_business_setup').select(
             'highlevel_tokens, ghl_location_id, setup_json, facebook_account_id'
-        ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
+        ).eq('firm_user_id', firm_user_uuid).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
         
         if not setup_result.data:
             return {
@@ -6035,7 +6063,7 @@ async def get_facebook_pages_simple(request: dict):
                             supabase.table('squidgy_agent_business_setup').update({
                                 'facebook_account_id': facebook_account_id,
                                 'updated_at': 'now()'
-                            }).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
+                            }).eq('firm_user_id', firm_user_uuid).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
                             
                         else:
                             print(f"📱 [SIMPLE API] No existing Facebook accounts found")
@@ -6112,30 +6140,38 @@ async def get_facebook_pages_simple(request: dict):
                 
                 # Store/Update page in database
                 try:
+                    # Convert string UUIDs to proper UUID format for database
+                    import uuid
+                    try:
+                        firm_user_uuid = str(uuid.UUID(user_id)) if isinstance(user_id, str) else user_id
+                        location_uuid = str(uuid.UUID(target_location_id)) if isinstance(target_location_id, str) else target_location_id
+                    except ValueError:
+                        # If conversion fails, use original values
+                        firm_user_uuid = user_id
+                        location_uuid = target_location_id
+                    
                     # Check if page already exists
                     existing_page = supabase.table('squidgy_facebook_pages').select('*').eq(
-                        'firm_user_id', user_id
+                        'firm_user_id', firm_user_uuid
                     ).eq('page_id', page_id).execute()
                     
                     page_data = {
-                        "firm_user_id": user_id,
-                        "location_id": target_location_id,
-                        "user_id": user_id,  # Same as firm_user_id for now
+                        "firm_user_id": firm_user_uuid,
+                        "ghl_location_id": location_uuid,
+                        "ghl_user_id": firm_user_uuid,  # ghl_user_id is same as firm_user_id (GHL user)
                         "page_id": page_id,
                         "page_name": page_name,
                         "page_category": page.get("category", ""),
                         "instagram_business_account_id": page.get("instagram_business_account", {}).get("id"),
                         "is_instagram_available": page.get("isInstagramAvailable", False),
                         "raw_page_data": page,
-                        "ghl_location_id": target_location_id,
-                        "ghl_user_id": user_id,
                         "updated_at": "now()"
                     }
                     
                     if existing_page.data:
                         # Update existing page
                         supabase.table('squidgy_facebook_pages').update(page_data).eq(
-                            'firm_user_id', user_id
+                            'firm_user_id', firm_user_uuid
                         ).eq('page_id', page_id).execute()
                         print(f"📱 [SIMPLE API] Updated page {page_name} in database")
                     else:
@@ -6150,12 +6186,16 @@ async def get_facebook_pages_simple(request: dict):
                 # Check if page is connected from database
                 is_connected = False
                 try:
+                    # Use the same UUID conversion for consistency
+                    firm_user_uuid = str(uuid.UUID(user_id)) if isinstance(user_id, str) else user_id
+                    
                     db_page = supabase.table('squidgy_facebook_pages').select('is_connected_to_ghl').eq(
-                        'firm_user_id', user_id
+                        'firm_user_id', firm_user_uuid
                     ).eq('page_id', page_id).single().execute()
                     if db_page.data:
                         is_connected = db_page.data.get('is_connected_to_ghl', False)
-                except:
+                except Exception as e:
+                    print(f"📱 [SIMPLE API] ⚠️ Connection status check error: {e}")
                     pass
                 
                 formatted_pages.append({
@@ -6181,7 +6221,7 @@ async def get_facebook_pages_simple(request: dict):
             # Fallback: Try to get pages from database if API fails
             try:
                 db_pages = supabase.table('squidgy_facebook_pages').select('*').eq(
-                    'firm_user_id', user_id
+                    'firm_user_id', firm_user_uuid
                 ).order('created_at', desc=False).execute()
                 
                 if db_pages.data:
@@ -6249,9 +6289,15 @@ async def connect_facebook_pages_simple(request: dict):
         print(f"📱 [SIMPLE CONNECT] Connecting {len(selected_page_ids)} pages for user: {user_id}")
         
         # Get existing setup data including Facebook account ID
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(user_id))  # Validates and formats UUID
+        except ValueError:
+            firm_user_uuid = user_id  # Keep as string if not valid UUID
+            
         setup_result = supabase.table('squidgy_agent_business_setup').select(
             'highlevel_tokens, ghl_location_id, setup_json, facebook_account_id'
-        ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
+        ).eq('firm_user_id', firm_user_uuid).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
         
         if not setup_result.data:
             return {
@@ -6341,7 +6387,7 @@ async def connect_facebook_pages_simple(request: dict):
             # Get page details from database first  
             try:
                 db_pages_result = supabase.table('squidgy_facebook_pages').select('*').eq(
-                    'firm_user_id', user_id
+                    'firm_user_id', firm_user_uuid
                 ).in_('page_id', selected_page_ids).execute()
                 
                 db_pages = {page['page_id']: page for page in db_pages_result.data} if db_pages_result.data else {}
@@ -6402,7 +6448,7 @@ async def connect_facebook_pages_simple(request: dict):
                                     "is_connected_to_ghl": True,
                                     "connected_at": "now()",
                                     "updated_at": "now()"
-                                }).eq('firm_user_id', user_id).eq('page_id', page_id).execute()
+                                }).eq('firm_user_id', firm_user_uuid).eq('page_id', page_id).execute()
                                 
                                 print(f"📱 [SIMPLE CONNECT] ✅ Marked page {page_id} as connected in database")
                                 
@@ -6484,10 +6530,16 @@ async def check_facebook_accounts_after_oauth(request: dict):
         
         print(f"📱 [OAUTH CHECK] Checking for Facebook accounts after OAuth for user: {user_id}")
         
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(user_id))  # Validates and formats UUID
+        except ValueError:
+            firm_user_uuid = user_id  # Keep as string if not valid UUID
+        
         # Get setup data
         setup_result = supabase.table('squidgy_agent_business_setup').select(
             'highlevel_tokens, ghl_location_id, facebook_account_id'
-        ).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
+        ).eq('firm_user_id', firm_user_uuid).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').single().execute()
         
         if not setup_result.data:
             return {
@@ -6553,7 +6605,7 @@ async def check_facebook_accounts_after_oauth(request: dict):
                     supabase.table('squidgy_agent_business_setup').update({
                         'facebook_account_id': facebook_account_id,
                         'updated_at': 'now()'
-                    }).eq('firm_user_id', user_id).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
+                    }).eq('firm_user_id', firm_user_uuid).eq('agent_id', 'SOLAgent').eq('setup_type', 'GHLSetup').execute()
                     
                     return {
                         "success": True,
