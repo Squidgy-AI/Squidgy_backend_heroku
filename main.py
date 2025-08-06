@@ -2882,12 +2882,24 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
         # If successful and user_id provided, update business profile
         if result['status'] == 'success' and request.user_id:
             try:
-                supabase.table('business_profiles').upsert({
-                    'firm_user_id': request.user_id,
-                    'screenshot_url': result.get('public_url'),
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }, on_conflict='firm_user_id').execute()
-                logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
+                # Get user profile to retrieve company_id (firm_id)
+                user_profile = supabase.table('profiles')\
+                    .select('company_id')\
+                    .eq('user_id', request.user_id)\
+                    .execute()
+                
+                if user_profile.data and len(user_profile.data) > 0:
+                    firm_id = user_profile.data[0].get('company_id')
+                    
+                    supabase.table('business_profiles').upsert({
+                        'firm_id': firm_id,
+                        'firm_user_id': request.user_id,
+                        'screenshot_url': result.get('public_url'),
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }, on_conflict='firm_user_id').execute()
+                    logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
+                else:
+                    logger.warning(f"User profile not found for user_id: {request.user_id}, skipping business profile update")
             except Exception as profile_error:
                 logger.error(f"Error updating business profile with screenshot: {profile_error}")
         
