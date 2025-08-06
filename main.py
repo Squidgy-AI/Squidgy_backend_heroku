@@ -6727,23 +6727,25 @@ async def get_business_profile(firm_user_id: str):
     Get business profile by user ID
     """
     try:
+        # Use .execute() without .single() to avoid errors when no rows exist
         result = supabase.table('business_profiles')\
             .select('*')\
             .eq('firm_user_id', firm_user_id)\
-            .single()\
             .execute()
         
-        if not result.data:
+        # Check if any data was returned
+        if not result.data or len(result.data) == 0:
             return {
                 "status": "not_found",
                 "message": "Business profile not found",
                 "business_profile": None
             }
         
+        # Return the first (and should be only) business profile
         return {
             "status": "success",
             "message": "Business profile found",
-            "business_profile": result.data
+            "business_profile": result.data[0]
         }
         
     except Exception as e:

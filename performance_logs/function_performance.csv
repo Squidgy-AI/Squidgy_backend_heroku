@@ -1,3 +1,0 @@
-timestamp,function_name,module,duration_ms,cpu_percent_start,cpu_percent_end,cpu_percent_avg,memory_mb_start,memory_mb_end,memory_mb_delta,memory_percent_start,memory_percent_end,args_count,kwargs_count,return_size_bytes,exception_occurred,exception_type
-2025-08-05T18:16:01.608112+00:00,get_agent_setup,__main__,235.94,21.4,26.8,24.1,12161.02,12158.82,-2.21,74.6,74.6,0,3,0,False,
-2025-08-05T18:16:02.324952+00:00,get_user_agents,__main__,167.98,19.6,14.3,16.95,12207.48,12212.66,5.18,74.9,74.9,0,1,0,False,

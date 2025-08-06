@@ -1,3 +1,0 @@
-timestamp,endpoint,method,status_code,duration_ms,cpu_percent_start,cpu_percent_end,cpu_percent_avg,memory_mb_start,memory_mb_end,memory_mb_peak,memory_percent_start,memory_percent_end,memory_percent_peak,request_size_bytes,response_size_bytes,user_id,session_id
-2025-08-05T18:16:01.727990+00:00,/api/agents/setup/c41831a7-fa38-4489-8239-90ed70b76391/PersonalAssistant,GET,200,476.45,30.6,21.4,26.0,12161.79,12158.31,12161.79,74.6,74.6,74.6,0,595,,
-2025-08-05T18:16:02.441757+00:00,/api/agents/setup/c41831a7-fa38-4489-8239-90ed70b76391,GET,200,404.55,23.2,14.6,18.9,12206.65,12211.84,12211.84,74.9,74.9,74.9,0,1381,,
