@@ -40,6 +40,7 @@ class HighLevelCompleteAutomationPlaywright:
         }
         self.pit_token = None
         self.playwright = None
+        self.logged_tokens = set()  # Track already logged tokens to prevent spam
         
     async def setup_browser(self):
         """Initialize Playwright browser with network logging enabled"""
@@ -88,14 +89,20 @@ class HighLevelCompleteAutomationPlaywright:
                 if token and len(token) > 20:
                     self.access_token = token
                     self.api_tokens['authorization'] = token
-                    print(f"[✅ TOKENS] Found Authorization Bearer token: {token[:20]}...")
+                    # Only log if we haven't seen this token before
+                    if token[:20] not in self.logged_tokens:
+                        self.logged_tokens.add(token[:20])
+                        print(f"[✅ TOKENS] Found Authorization Bearer token: {token[:20]}...")
             
             # Check for token-id header (Firebase ID token)
             token_id = headers.get('token-id', '')
             if token_id and len(token_id) > 20:
                 self.firebase_token = token_id
                 self.api_tokens['token-id'] = token_id
-                print(f"[✅ TOKENS] Found token-id (Firebase): {token_id[:20]}...")
+                # Only log if we haven't seen this token before
+                if token_id[:20] not in self.logged_tokens:
+                    self.logged_tokens.add(token_id[:20])
+                    print(f"[✅ TOKENS] Found token-id (Firebase): {token_id[:20]}...")
             
             # Continue with the request
             await route.continue_()
@@ -569,13 +576,13 @@ class HighLevelCompleteAutomationPlaywright:
             print("⚠️ May not be on the correct page, continuing anyway...")
         
         for retry in range(max_retries):
-            print(f"\n[🔄 RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
-            print(f"[PIT CREATION] 🎯 Step 3.{retry + 1}: Searching for integration creation button")
+            print(f"\n[ RETRY] Attempt {retry + 1}/{max_retries} to find integration button...")
+            print(f"[PIT CREATION]  Step 3.{retry + 1}: Searching for integration creation button")
             
             # Try multiple selectors for the button
             button_selectors = [
-                # PRIMARY METHOD: User-provided XPath (most reliable)
-                "xpath=/html/body/div[1]/div[1]/div[4]/section/div/section/div/div/div/div[2]/div/div/div[2]/button[2]/span",
+                # PRIMARY METHOD: User-provided XPath for button (most reliable)
+                "xpath=/html/body/div[1]/div[1]/div[4]/section/div/section/div/div/div/div[2]/div/div/div[2]/button[2]",
                 
                 # Most generic - just find the text and click its container
                 "text=Create new integration",
@@ -1262,14 +1269,13 @@ class HighLevelCompleteAutomationPlaywright:
                            firm_user_id: str = None, agent_id: str = None, ghl_user_id: str = None):
         """Run the complete automation workflow with automatic email verification - Playwright version"""
         try:
-            # Always use agency credentials from environment variables
-            import os
-            agency_email = os.getenv('HIGHLEVEL_EMAIL')
-            agency_password = os.getenv('HIGHLEVEL_PASSWORD')
+            # Use the passed credentials (email and password parameters)
+            agency_email = email
+            agency_password = password
             
             if not agency_email or not agency_password:
-                print("[ERROR] Agency credentials not found in environment variables!")
-                print("Required: HIGHLEVEL_EMAIL and HIGHLEVEL_PASSWORD")
+                print("[ERROR] Agency credentials not provided!")
+                print("Required: email and password parameters must be provided")
                 return False
             
             print("="*80)
