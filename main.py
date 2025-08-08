@@ -5358,7 +5358,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         business_user_response = {
             "status": "skipped",
             "message": "Business user creation skipped to avoid conflicts",
-            "user_id": f"skipped_business_{location_id[:8]}",
+            "user_id": location_id,
             "details": {
                 "name": f"{request.prospect_first_name} {request.prospect_last_name}",
                 "email": request.prospect_email,
@@ -7265,6 +7265,96 @@ async def run_playwright_automation_background(business_id: str, email: str, pas
         }).eq('id', business_id).execute()
 
 # Business Setup API Endpoints
+
+@app.get("/api/business/facebook-status/{firm_user_id}")
+async def get_facebook_unlock_status(firm_user_id: str):
+    """Check if Facebook integration is unlocked for a user based on business setup completion"""
+    try:
+        # Convert user_id to UUID format for database query
+        try:
+            firm_user_uuid = str(uuid.UUID(firm_user_id))
+        except ValueError:
+            firm_user_uuid = firm_user_id
+        
+        # Get the latest business setup record for this user
+        business_result = supabase.table('squidgy_business_information').select(
+            'setup_status, automation_completed_at, created_at'
+        ).eq('firm_user_id', firm_user_uuid).eq('agent_id', 'SOLAgent').order(
+            'created_at', desc=True
+        ).limit(1).execute()
+        
+        if not business_result.data:
+            return {
+                "facebook_unlocked": False,
+                "reason": "no_business_setup",
+                "message": "Complete business setup first to unlock Facebook integration",
+                "setup_status": None,
+                "time_remaining": None
+            }
+        
+        business = business_result.data[0]
+        setup_status = business.get('setup_status')
+        completed_at = business.get('automation_completed_at')
+        
+        # Check if setup is completed
+        if setup_status != 'completed' or not completed_at:
+            return {
+                "facebook_unlocked": False,
+                "reason": "setup_not_completed", 
+                "message": f"Business setup status: {setup_status}. Complete the automation to unlock Facebook integration.",
+                "setup_status": setup_status,
+                "time_remaining": None
+            }
+        
+        # Calculate time remaining (55 minutes from completion)
+        from datetime import datetime, timedelta
+        try:
+            # Parse completion timestamp
+            if isinstance(completed_at, str):
+                completion_time = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+            else:
+                completion_time = completed_at
+            
+            # 55 minutes unlock window
+            unlock_duration = timedelta(minutes=55)
+            unlock_expires_at = completion_time + unlock_duration
+            current_time = datetime.now(completion_time.tzinfo if completion_time.tzinfo else None)
+            
+            time_remaining = unlock_expires_at - current_time
+            minutes_remaining = max(0, int(time_remaining.total_seconds() / 60))
+            
+            if minutes_remaining > 0:
+                return {
+                    "facebook_unlocked": True,
+                    "reason": "setup_completed",
+                    "message": f"Facebook integration unlocked! {minutes_remaining} minutes remaining.",
+                    "setup_status": setup_status,
+                    "time_remaining": minutes_remaining,
+                    "expires_at": unlock_expires_at.isoformat()
+                }
+            else:
+                return {
+                    "facebook_unlocked": False,
+                    "reason": "unlock_expired",
+                    "message": "Facebook unlock window has expired. Complete business setup again to unlock.",
+                    "setup_status": setup_status,
+                    "time_remaining": 0
+                }
+                
+        except Exception as time_error:
+            print(f"Error calculating time remaining: {time_error}")
+            return {
+                "facebook_unlocked": False,
+                "reason": "time_calculation_error",
+                "message": "Error calculating unlock time remaining",
+                "setup_status": setup_status,
+                "time_remaining": None
+            }
+            
+    except Exception as e:
+        print(f"Error checking Facebook unlock status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/business/setup", response_model=BusinessSetupResponse)
 async def setup_business_complete(request: BusinessInformationRequest, background_tasks: BackgroundTasks):
     """
