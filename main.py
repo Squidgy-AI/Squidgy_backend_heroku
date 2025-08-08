@@ -6141,7 +6141,6 @@ async def get_facebook_pages_simple(request: dict):
                 # Store/Update page in database
                 try:
                     # Convert string UUIDs to proper UUID format for database
-                    import uuid
                     try:
                         firm_user_uuid = str(uuid.UUID(user_id)) if isinstance(user_id, str) else user_id
                         location_uuid = str(uuid.UUID(target_location_id)) if isinstance(target_location_id, str) else target_location_id
