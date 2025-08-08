@@ -5301,7 +5301,7 @@ async def create_subaccount_and_user(request: GHLSubAccountRequest):
         business_user_response = {
             "status": "skipped",
             "message": "Business user creation skipped to avoid conflicts",
-            "user_id": f"skipped_business_{location_id[:8]}",
+            "user_id": location_id,
             "details": {
                 "name": f"{request.prospect_first_name} {request.prospect_last_name}",
                 "email": request.prospect_email,
