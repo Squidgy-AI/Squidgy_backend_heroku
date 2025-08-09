@@ -4379,16 +4379,25 @@ async def get_user_agents(user_id: str):
             .execute()
         
         if result.data:
+            # Extract ghl_location_id from GHLSetup record if available
+            ghl_location_id = None
+            for agent_data in result.data:
+                if agent_data.get('setup_type') == 'GHLSetup' and agent_data.get('ghl_location_id'):
+                    ghl_location_id = agent_data.get('ghl_location_id')
+                    break
+            
             return {
                 "status": "success",
                 "agents": result.data,
-                "count": len(result.data)
+                "count": len(result.data),
+                "ghl_location_id": ghl_location_id
             }
         else:
             return {
                 "status": "success", 
                 "agents": [],
-                "count": 0
+                "count": 0,
+                "ghl_location_id": None
             }
             
     except Exception as e:
@@ -4419,16 +4428,25 @@ async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str]
             result = query.execute()
         
         if result.data:
+            # Extract ghl_location_id from the agent data
+            ghl_location_id = None
+            for agent_data in result.data:
+                if agent_data.get('ghl_location_id'):
+                    ghl_location_id = agent_data.get('ghl_location_id')
+                    break
+            
             return {
                 "status": "success",
                 "agent": result.data,
-                "exists": True
+                "exists": True,
+                "ghl_location_id": ghl_location_id
             }
         else:
             return {
                 "status": "success",
                 "agent": None,
-                "exists": False
+                "exists": False,
+                "ghl_location_id": None
             }
             
     except Exception as e:
@@ -4436,7 +4454,8 @@ async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str]
         return {
             "status": "success",
             "agent": None,
-            "exists": False
+            "exists": False,
+            "ghl_location_id": None
         }
 
 @app.post("/api/agents/setup")
@@ -4457,10 +4476,16 @@ async def create_or_update_agent_setup(request: AgentSetupRequest):
             }, on_conflict='firm_user_id,agent_id,setup_type')\
             .execute()
         
+        # Extract ghl_location_id from the saved data
+        ghl_location_id = None
+        if result.data and result.data[0]:
+            ghl_location_id = result.data[0].get('ghl_location_id')
+        
         return {
             "status": "success",
             "action": "upserted",
-            "agent": result.data[0] if result.data else None
+            "agent": result.data[0] if result.data else None,
+            "ghl_location_id": ghl_location_id
         }
             
     except Exception as e:
@@ -5993,7 +6018,8 @@ async def get_facebook_pages_simple(request: dict):
                 "success": False,
                 "message": "No GHL setup found. Please complete GHL setup first.",
                 "pages": [],
-                "total_pages": 0
+                "total_pages": 0,
+                "ghl_location_id": location_id or None
             }
         
         setup_data = setup_result.data
@@ -6011,7 +6037,8 @@ async def get_facebook_pages_simple(request: dict):
                 "success": False, 
                 "message": "No Firebase JWT token or PIT token found. GHL automation may not have completed successfully.",
                 "pages": [],
-                "total_pages": 0
+                "total_pages": 0,
+                "ghl_location_id": setup_data.get('ghl_location_id') or location_id
             }
         
         # Use the stored location_id or the provided one
@@ -6212,6 +6239,7 @@ async def get_facebook_pages_simple(request: dict):
                 "pages": formatted_pages,
                 "total_pages": len(pages),
                 "location_id": target_location_id,
+                "ghl_location_id": target_location_id,
                 "facebook_account_id": facebook_account_id
             }
         else:
@@ -6243,6 +6271,7 @@ async def get_facebook_pages_simple(request: dict):
                         "pages": formatted_pages,
                         "total_pages": len(db_pages.data),
                         "location_id": target_location_id,
+                        "ghl_location_id": target_location_id,
                         "facebook_account_id": facebook_account_id,
                         "source": "database"
                     }
@@ -6256,7 +6285,8 @@ async def get_facebook_pages_simple(request: dict):
                 "success": False,
                 "message": f"Facebook API returned {response.status_code}: {response.text}",
                 "pages": [],
-                "total_pages": 0
+                "total_pages": 0,
+                "ghl_location_id": target_location_id
             }
                 
     except Exception as e:
@@ -6265,7 +6295,8 @@ async def get_facebook_pages_simple(request: dict):
             "success": False,
             "message": f"Error: {str(e)}",
             "pages": [],
-            "total_pages": 0
+            "total_pages": 0,
+            "ghl_location_id": request.get('location_id')
         }
 
 @app.post("/api/facebook/connect-pages-simple")
