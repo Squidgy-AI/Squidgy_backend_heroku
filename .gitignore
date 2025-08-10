@@ -144,3 +144,5 @@ static/favicons/*
 !static/screenshots/.gitkeep
 !static/favicons/.gitkeep
 virtual_back/*
+
+performance_logs/*

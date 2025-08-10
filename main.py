@@ -35,6 +35,7 @@ from solar_api_connector import SolarApiConnector, SolarInsightsRequest as Solar
 from facebook_pages_api_working import FacebookPagesRequest, FacebookPagesResponse, get_facebook_pages
 from email_validation import verify_email_confirmed, require_email_confirmed, check_email_confirmation_status
 from invitation_handler import InvitationHandler
+from performance_monitor import PerformanceMonitor, monitor_performance, PerformanceMiddleware
 
 # Handler classes
 
@@ -1149,6 +1150,22 @@ class DynamicAgentKBHandler:
 load_dotenv()
 # Initialize FastAPI app
 app = FastAPI()
+
+# Add CORS middleware to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://squidgy-frontend.vercel.app",
+        "https://squidgy.vercel.app",
+        "*"  # Allow all origins for development - restrict in production
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 logger = logging.getLogger(__name__)
 import threading
 
@@ -1212,7 +1229,21 @@ conversational_handler = ConversationalHandler(
 client_kb_manager = ClientKBManager(supabase_client=supabase)
 dynamic_agent_kb_handler = DynamicAgentKBHandler(supabase_client=supabase)
 
-print("Application initialized")
+# Initialize performance monitoring system
+performance_monitor = PerformanceMonitor()
+
+print("Application initialized with performance monitoring")
+
+# Add performance monitoring middleware
+app.add_middleware(PerformanceMiddleware, monitor=performance_monitor)
+
+# Add shutdown event handler for performance monitoring
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean shutdown of performance monitoring"""
+    print("🔄 Shutting down performance monitoring...")
+    performance_monitor.stop()
+    print("✅ Performance monitoring stopped")
 
 background_results = {}
 running_tasks: Dict[str, Dict[str, Any]] = {}
@@ -2010,6 +2041,7 @@ async def process_websocket_message_with_n8n(request_data: Dict[str, Any], webso
             logger.error(f"Failed to send error response: {send_error}")
 
 # Helper functions for optimized client context aggregation
+@monitor_performance
 async def get_optimized_client_context(user_id: str, query_embedding: List[float]) -> Dict[str, Any]:
     """Get comprehensive client context using optimized database functions"""
     try:
@@ -2060,6 +2092,7 @@ async def get_optimized_client_context(user_id: str, query_embedding: List[float
         # Fallback to legacy method
         return await dynamic_agent_kb_handler.get_client_industry_context(user_id)
 
+@monitor_performance
 async def get_optimized_agent_knowledge(agent_name: str, query_embedding: List[float]) -> Dict[str, Any]:
     """Get agent knowledge using optimized database function with usage tracking"""
     try:
@@ -2097,6 +2130,7 @@ async def get_optimized_agent_knowledge(agent_name: str, query_embedding: List[f
         # Fallback to legacy method
         return await dynamic_agent_kb_handler.get_agent_context_from_kb(agent_name)
 
+@monitor_performance
 async def build_enhanced_kb_context(user_id: str, client_context: Dict, agent_knowledge: Dict) -> Dict[str, Any]:
     """Build comprehensive KB context from multiple optimized sources"""
     try:
@@ -2190,6 +2224,7 @@ async def build_enhanced_kb_context(user_id: str, client_context: Dict, agent_kn
         logger.error(f"Error building enhanced KB context: {e}")
         return {}
 
+@monitor_performance
 async def check_missing_must_info(must_questions: List[str], kb_context: Dict, client_context: Dict) -> List[str]:
     """Check for missing must-have information using enhanced context"""
     missing_info = []
@@ -2757,6 +2792,7 @@ async def receive_stream_update(update: StreamUpdate):
         return {"status": "error", "error": str(e)}
     
 @app.post("/api/website/analyze")
+@monitor_performance
 async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
     """
     Endpoint 1: Analyze website using Perplexity AI - NO TIMEOUTS
@@ -2846,6 +2882,7 @@ async def analyze_website_endpoint(request: WebsiteAnalysisRequest):
         }
 
 @app.post("/api/website/screenshot")
+@monitor_performance
 async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest):
     """
     Endpoint 2: Capture full website screenshot
@@ -2861,12 +2898,24 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
         # If successful and user_id provided, update business profile
         if result['status'] == 'success' and request.user_id:
             try:
-                supabase.table('business_profiles').upsert({
-                    'firm_user_id': request.user_id,
-                    'screenshot_url': result.get('public_url'),
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }, on_conflict='firm_user_id').execute()
-                logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
+                # Get user profile to retrieve company_id (firm_id)
+                user_profile = supabase.table('profiles')\
+                    .select('company_id')\
+                    .eq('user_id', request.user_id)\
+                    .execute()
+                
+                if user_profile.data and len(user_profile.data) > 0:
+                    firm_id = user_profile.data[0].get('company_id')
+                    
+                    supabase.table('business_profiles').upsert({
+                        'firm_id': firm_id,
+                        'firm_user_id': request.user_id,
+                        'screenshot_url': result.get('public_url'),
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }, on_conflict='firm_user_id').execute()
+                    logger.info(f"Business profile updated with screenshot for user: {request.user_id}")
+                else:
+                    logger.warning(f"User profile not found for user_id: {request.user_id}, skipping business profile update")
             except Exception as profile_error:
                 logger.error(f"Error updating business profile with screenshot: {profile_error}")
         
@@ -2888,6 +2937,7 @@ async def capture_website_screenshot_endpoint(request: WebsiteScreenshotRequest)
         }
 
 @app.post("/api/website/favicon")
+@monitor_performance
 async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
     """
     Endpoint 3: Extract and save website favicon/logo
@@ -2930,6 +2980,7 @@ async def get_website_favicon_endpoint(request: WebsiteFaviconRequest):
         }
     
 @app.post("/api/website/full-analysis-async")
+@monitor_performance
 async def full_website_analysis_async(request: WebsiteAnalysisRequest):
     """
     Fire-and-forget endpoint that starts all operations and returns immediately
@@ -3012,6 +3063,7 @@ async def full_website_analysis_async(request: WebsiteAnalysisRequest):
 
 # Add this endpoint to main.py if it doesn't exist
 @app.get("/chat-history")
+@monitor_performance
 async def get_chat_history(session_id: str):
     """Get chat history for a session"""
     try:
@@ -3056,10 +3108,11 @@ class InMemoryLogHandler(logging.Handler):
 
 # Add the handler to the logger
 memory_handler = InMemoryLogHandler()
-memory_handler.setLevel(logging.INFO)
+memory_handler.setLevel(logging.DEBUG)
 logger.addHandler(memory_handler)
 
 @app.get("/logs")
+@monitor_performance
 async def get_application_logs(limit: int = 50):
     """Get recent application logs"""
     try:
@@ -3093,6 +3146,7 @@ async def get_application_logs(limit: int = 50):
 
 # Combined endpoint that runs all three tools
 @app.post("/api/website/full-analysis")
+@monitor_performance
 async def full_website_analysis(request: WebsiteAnalysisRequest):
     """
     Optimized for Heroku's 30-second limit
@@ -3185,6 +3239,7 @@ async def full_website_analysis(request: WebsiteAnalysisRequest):
 
 # WebSocket endpoint
 @app.websocket("/ws/{user_id}/{session_id}")
+@monitor_performance
 async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str):
     """WebSocket endpoint that routes through n8n with streaming support"""
     connection_id = f"{user_id}_{session_id}"
@@ -3332,6 +3387,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
 
 
 @app.get("/api/agents/config")
+@monitor_performance
 async def get_all_agent_configs():
     """Get all agent configurations"""
     return {
@@ -3339,6 +3395,7 @@ async def get_all_agent_configs():
     }
 
 @app.get("/api/agents/config/{agent_name}")
+@monitor_performance
 async def get_agent_config_endpoint(agent_name: str):
     """Get specific agent configuration"""
     agent = get_agent_config(agent_name)
@@ -4260,6 +4317,7 @@ async def email_confirmation_page():
 # =============================================================================
 
 @app.get("/api/solar/insights")
+@monitor_performance
 async def solar_insights_endpoint(address: str):
     """Get solar insights for an address using RealWave API"""
     try:
@@ -4270,6 +4328,7 @@ async def solar_insights_endpoint(address: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/solar/data-layers")
+@monitor_performance
 async def solar_data_layers_endpoint(address: str):
     """Get solar data layers for visualization"""
     try:
@@ -4280,6 +4339,7 @@ async def solar_data_layers_endpoint(address: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/solar/report")
+@monitor_performance
 async def solar_report_endpoint(address: str):
     """Generate comprehensive solar report"""
     try:
@@ -4287,16 +4347,6 @@ async def solar_report_endpoint(address: str):
         return result
     except Exception as e:
         logger.error(f"Error in solar report endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/website/screenshot")
-async def website_screenshot_endpoint(url: str, session_id: str = None):
-    """Capture website screenshot"""
-    try:
-        result = await tools.capture_website_screenshot_async(url, session_id)
-        return result
-    except Exception as e:
-        logger.error(f"Error in website screenshot endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/website/favicon")
@@ -4363,6 +4413,7 @@ class AgentStatusRequest(BaseModel):
     setup_type: str = "agent_config"  # agent_config, SolarSetup, CalendarSetup, NotificationSetup, SOLAgent
 
 @app.get("/api/agents/setup/{user_id}")
+@monitor_performance
 async def get_user_agents(user_id: str):
     """Get all agent setups for a user"""
     try:
@@ -4405,6 +4456,7 @@ async def get_user_agents(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/agents/setup/{user_id}/{agent_id}")
+@monitor_performance
 async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
     """Get specific agent setup for a user, optionally filtered by setup_type"""
     try:
@@ -4459,6 +4511,7 @@ async def get_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str]
         }
 
 @app.post("/api/agents/setup")
+@monitor_performance
 async def create_or_update_agent_setup(request: AgentSetupRequest):
     """Create or update agent setup for a user"""
     try:
@@ -4493,6 +4546,7 @@ async def create_or_update_agent_setup(request: AgentSetupRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/agents/status")
+@monitor_performance
 async def update_agent_status(request: AgentStatusRequest):
     """Update agent enabled/disabled status"""
     try:
@@ -4525,6 +4579,7 @@ async def update_agent_status(request: AgentStatusRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/agents/setup/{user_id}/{agent_id}")
+@monitor_performance
 async def delete_agent_setup(user_id: str, agent_id: str, setup_type: Optional[str] = None):
     """Delete agent setup for a user, optionally filtered by setup_type"""
     try:
@@ -4557,6 +4612,7 @@ async def delete_agent_setup(user_id: str, agent_id: str, setup_type: Optional[s
 
 # Progressive Setup Convenience Endpoints
 @app.get("/api/agents/setup/{user_id}/{agent_id}/progress")
+@monitor_performance
 async def get_agent_setup_progress(user_id: str, agent_id: str):
     """Get setup progress for SOL Agent progressive setup"""
     try:
@@ -4667,6 +4723,7 @@ class GHLUserCreationRequest(BaseModel):
 last_created_location_id = None
 
 @app.post("/api/ghl/create-subaccount")
+@monitor_performance
 async def create_ghl_subaccount(request: SecureGHLSubAccountRequest):
     """Create a GoHighLevel sub-account with solar snapshot"""
     global last_created_location_id
@@ -6920,23 +6977,25 @@ async def get_business_profile(firm_user_id: str):
     Get business profile by user ID
     """
     try:
+        # Use .execute() without .single() to avoid errors when no rows exist
         result = supabase.table('business_profiles')\
             .select('*')\
             .eq('firm_user_id', firm_user_id)\
-            .single()\
             .execute()
         
-        if not result.data:
+        # Check if any data was returned
+        if not result.data or len(result.data) == 0:
             return {
                 "status": "not_found",
                 "message": "Business profile not found",
                 "business_profile": None
             }
         
+        # Return the first (and should be only) business profile
         return {
             "status": "success",
             "message": "Business profile found",
-            "business_profile": result.data
+            "business_profile": result.data[0]
         }
         
     except Exception as e:
@@ -7064,21 +7123,72 @@ async def run_facebook_automation_for_business(business_id: str, location_id: st
             )
             
             if success:
-                # Update status to completed and save PIT token
+                # Extract all tokens from automation response
                 pit_token = automation.pit_token if hasattr(automation, 'pit_token') else None
+                firebase_token = automation.firebase_token if hasattr(automation, 'firebase_token') else None
+                access_token = automation.access_token if hasattr(automation, 'access_token') else None
                 
+                print(f"[FACEBOOK AUTOMATION] 📋 DETAILED TOKEN ANALYSIS:")
+                print(f"[FACEBOOK AUTOMATION] 🔑 PIT Token: {pit_token[:50] if pit_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 🔥 Firebase Token: {firebase_token[:50] if firebase_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 🎫 Access Token: {access_token[:50] if access_token else 'None'}...")
+                print(f"[FACEBOOK AUTOMATION] 📊 Token Availability:")
+                print(f"[FACEBOOK AUTOMATION]   - PIT Token: {'✅ Available' if pit_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION]   - Firebase Token: {'✅ Available' if firebase_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION]   - Access Token: {'✅ Available' if access_token else '❌ Missing'}")
+                
+                # Update squidgy_business_information table
                 supabase.table('squidgy_business_information').update({
                     'setup_status': 'completed',
                     'automation_completed_at': datetime.now().isoformat(),
                     'pit_token': pit_token,
-                    'access_token_expires_at': automation.token_expiry.isoformat() if automation.token_expiry else None,
-                    'firebase_token_available': bool(automation.firebase_token)
+                    'firebase_token': firebase_token,
+                    'access_token': access_token,
+                    'access_token_expires_at': automation.token_expiry.isoformat() if hasattr(automation, 'token_expiry') and automation.token_expiry else None,
+                    'firebase_token_available': bool(firebase_token)
                 }).eq('id', business_id).execute()
                 
+                print(f"[FACEBOOK AUTOMATION] 💾 Updated squidgy_business_information table with tokens")
+                
+                # CRITICAL: Also store tokens in squidgy_agent_business_setup table (where Facebook pages function looks)
+                try:
+                    # Prepare tokens in the format expected by Facebook pages function
+                    highlevel_tokens = {
+                        "tokens": {
+                            "firebase_token": firebase_token,
+                            "private_integration_token": pit_token,
+                            "access_token": access_token
+                        },
+                        "token_expiry": automation.token_expiry.isoformat() if hasattr(automation, 'token_expiry') and automation.token_expiry else None,
+                        "created_at": datetime.now().isoformat()
+                    }
+                    
+                    print(f"[FACEBOOK AUTOMATION] 🔄 Storing tokens in squidgy_agent_business_setup table...")
+                    print(f"[FACEBOOK AUTOMATION] 📋 Token structure for Facebook pages:")
+                    print(f"[FACEBOOK AUTOMATION]   - Firebase Token: {'✅' if firebase_token else '❌'}")
+                    print(f"[FACEBOOK AUTOMATION]   - PIT Token: {'✅' if pit_token else '❌'}")
+                    
+                    # Store/update in squidgy_agent_business_setup table
+                    supabase.table('squidgy_agent_business_setup').upsert({
+                        'firm_user_id': firm_user_id,
+                        'agent_id': 'SOLAgent',
+                        'setup_type': 'GHLSetup',
+                        'ghl_location_id': location_id,
+                        'ghl_user_id': ghl_user_id,
+                        'highlevel_tokens': highlevel_tokens,
+                        'setup_status': 'completed',
+                        'updated_at': datetime.now().isoformat()
+                    }).execute()
+                    
+                    print(f"[FACEBOOK AUTOMATION] ✅ Successfully stored tokens in squidgy_agent_business_setup table")
+                    print(f"[FACEBOOK AUTOMATION] 🎯 Facebook pages function should now find required tokens")
+                    
+                except Exception as token_storage_error:
+                    print(f"[FACEBOOK AUTOMATION] ❌ Failed to store tokens in agent_business_setup: {token_storage_error}")
+                    print(f"[FACEBOOK AUTOMATION] ⚠️ Facebook pages function may not work without these tokens")
+                
                 print(f"[FACEBOOK AUTOMATION] ✅ AUTOMATION SUCCESSFUL!")
-                print(f"[FACEBOOK AUTOMATION] 🎉 PIT Token created: {pit_token[:30] if pit_token else 'None'}...")
-                print(f"[FACEBOOK AUTOMATION] 🔑 Access Token: {'✅ Captured' if automation.access_token else '❌ Missing'}")
-                print(f"[FACEBOOK AUTOMATION] 🔥 Firebase Token: {'✅ Captured' if automation.firebase_token else '❌ Missing'}")
+                print(f"[FACEBOOK AUTOMATION] 🎉 All tokens processed and stored in both tables")
                 
             else:
                 # Update status to failed
