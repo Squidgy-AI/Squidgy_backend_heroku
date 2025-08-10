@@ -4688,23 +4688,29 @@ async def create_ghl_subaccount(request: SecureGHLSubAccountRequest):
         timestamp = datetime.now().strftime("%H%M%S")
         subaccount_name = request.subaccount_name or f"SolarSetup_Clone_{timestamp}"
 
-        # Import and use the working GoHighLevel API credentials from constants
+        # Get GoHighLevel API credentials from environment variables or constants
         try:
-            from GHL.environment.constant import Constant
-            constants = Constant()
-            company_id = constants.Company_Id
-            # Try Agency_Access_Key as it might be a non-expiring access key
-            agency_token = constants.Agency_Access_Key
-            # OLD: snapshot_id = "7oAH6Cmto5ZcWAaEsrrq"  # Updated snapshot ID (2024-11-04)
-            snapshot_id = "bInwX5BtZM6oEepAsUwo"  # SOL - Solar Assistant (2025-07-06) - UPDATED
-            logger.info(f"Using Agency_Access_Key for authentication")
+            # First try environment variables
+            company_id = os.getenv("GHL_COMPANY_ID")
+            agency_token = os.getenv("GHL_AGENCY_TOKEN")
+            snapshot_id = os.getenv("GHL_SNAPSHOT_ID")
+            
+            if not all([company_id, agency_token, snapshot_id]):
+                # Fall back to constants if env vars not set
+                from GHL.environment.constant import Constant
+                constants = Constant()
+                company_id = company_id or constants.Company_Id
+                agency_token = agency_token or constants.Agency_Access_Key
+                snapshot_id = snapshot_id or "bInwX5BtZM6oEepAsUwo"  # SOL - Solar Assistant
+                logger.info(f"Using constants for missing environment variables")
+            else:
+                logger.info(f"Using environment variables for GHL authentication")
         except ImportError:
-            # Fallback to hardcoded values if import fails
-            company_id = "lp2p1q27DrdGta1qGDJd"
-            agency_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb2NhdGlvbl9pZCI6ImxCUHFnQm93WDFDc2pIYXkxMkxZIiwidmVyc2lvbiI6MSwiaWF0IjoxNzMxOTkyNDg3MDU0LCJzdWIiOiJhWjBuNGV0ck5DRUIyOXNvbmE4TSJ9.czCh27fEwqxW4KzDx0gVbYcpdtcChy_31h9SoQuptAA"
-            # OLD: snapshot_id = "7oAH6Cmto5ZcWAaEsrrq" (2024-11-04)
-            snapshot_id = "bInwX5BtZM6oEepAsUwo"  # SOL - Solar Assistant (2025-07-06) - UPDATED
-            logger.info(f"Using fallback Nestle_Api_Key for authentication")
+            # Final fallback if both env vars and constants fail
+            company_id = os.getenv("GHL_COMPANY_ID", "lp2p1q27DrdGta1qGDJd")
+            agency_token = os.getenv("GHL_AGENCY_TOKEN", "pit-e3d8d384-00cb-4744-8213-b1ab06ae71fe")
+            snapshot_id = os.getenv("GHL_SNAPSHOT_ID", "bInwX5BtZM6oEepAsUwo")
+            logger.info(f"Using environment variables with defaults")
         
         # Prepare headers
         headers = {
