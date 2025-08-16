@@ -144,3 +144,4 @@ static/favicons/*
 !static/screenshots/.gitkeep
 !static/favicons/.gitkeep
 virtual_back/*
+cloned_workflow_info.json
