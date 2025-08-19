@@ -60,10 +60,11 @@ class N8NWorkflowCloner:
         if 'nodes' in cleaned:
             for node in cleaned['nodes']:
                 node_metadata_keys = [
-                    'webhookId', 'disabled', 'notesInFlow', 'notes',
+                    'webhookId', 'disabled', 'notesInFlow',
                     'executeOnce', 'alwaysOutputData', 'retryOnFail',
                     'maxTries', 'waitBetweenTries', 'continueOnFail', 'onError'
                 ]
+                # Keep 'notes' field for AI analysis injection
                 
                 for key in node_metadata_keys:
                     node.pop(key, None)
@@ -111,7 +112,7 @@ class N8NWorkflowCloner:
                             clean_node[field] = node[field]
                     
                     # Optional node fields that are allowed
-                    optional_node_fields = ['credentials', 'webhookId']
+                    optional_node_fields = ['credentials', 'webhookId', 'notes']
                     for field in optional_node_fields:
                         if field in node:
                             clean_node[field] = node[field]
@@ -346,6 +347,13 @@ class N8NWorkflowCloner:
             # Parse JSON response
             try:
                 recommendations = json.loads(ai_response)
+                
+                # Add AI analysis notes to the recommendations for later injection
+                recommendations["ai_analysis_notes"] = {
+                    "analysis_summary": ai_response[:500] + "..." if len(ai_response) > 500 else ai_response,
+                    "timestamp": f"AI Analysis - {json.dumps({'date': 'auto-generated'})}"
+                }
+                
                 return recommendations
             except json.JSONDecodeError:
                 print("❌ Failed to parse AI response as JSON")
@@ -355,6 +363,84 @@ class N8NWorkflowCloner:
             print(f"❌ Error calling OpenAI API: {e}")
             print("⚠️ Proceeding without AI analysis - keeping all original tools")
             return {"keep_tools": available_tools, "remove_tools": [], "add_tools": []}
+    
+    def inject_ai_analysis_notes(self, workflow_data: Dict, ai_recommendations: Dict):
+        """
+        Inject AI analysis notes into workflow nodes.
+        
+        Args:
+            workflow_data (Dict): Workflow data to modify
+            ai_recommendations (Dict): AI analysis recommendations
+        """
+        if "nodes" not in workflow_data or "ai_analysis_notes" not in ai_recommendations:
+            return
+        
+        analysis_summary = ai_recommendations["ai_analysis_notes"]["analysis_summary"]
+        timestamp = ai_recommendations["ai_analysis_notes"]["timestamp"]
+        
+        # Find tool nodes and add AI analysis notes
+        for node in workflow_data["nodes"]:
+            node_name = node.get("name", "")
+            node_type = node.get("type", "")
+            
+            # Only add notes to AI agent-usable tool nodes
+            if ("tool" in node_name.lower() or 
+                "tool" in node_type.lower() or
+                node_type in ["@n8n/n8n-nodes-langchain.toolHttpRequest", 
+                             "n8n-nodes-base.supabaseTool",
+                             "@n8n/n8n-nodes-langchain.toolCalculator",
+                             "@n8n/n8n-nodes-langchain.toolCode",
+                             "@n8n/n8n-nodes-langchain.toolWebScraper",
+                             "@n8n/n8n-nodes-langchain.toolWorkflowTool",
+                             "n8n-nodes-base.httpRequest",
+                             "n8n-nodes-base.googleSheets",
+                             "n8n-nodes-base.airtable",
+                             "n8n-nodes-base.slack",
+                             "n8n-nodes-base.gmail"]):
+                
+                # Find specific analysis for this node
+                node_analysis = ""
+                # Check both direct structure and nested structure
+                tool_mods = ai_recommendations.get("tool_modifications", {})
+                keep_tools = tool_mods.get("keep_tools", ai_recommendations.get("keep_tools", []))
+                remove_tools = tool_mods.get("remove_tools", ai_recommendations.get("remove_tools", []))
+                
+                # Check if this node is in keep_tools
+                for keep_tool in keep_tools:
+                    if isinstance(keep_tool, dict) and keep_tool.get("name", "") == node_name:
+                        # Try both 'reason' and 'reasoning' field names
+                        reason = keep_tool.get('reason', keep_tool.get('reasoning', 'No reasoning provided'))
+                        node_analysis = f"✅ KEEP: {reason}"
+                        break
+                    elif isinstance(keep_tool, str) and keep_tool == node_name:
+                        node_analysis = "✅ KEEP: Recommended by AI analysis"
+                        break
+                
+                # Check if this node is in remove_tools
+                for remove_tool in remove_tools:
+                    if isinstance(remove_tool, dict) and remove_tool.get("name", "") == node_name:
+                        # Try both 'reason' and 'reasoning' field names
+                        reason = remove_tool.get('reason', remove_tool.get('reasoning', 'No reasoning provided'))
+                        node_analysis = f"❌ REMOVE: {reason}"
+                        break
+                    elif isinstance(remove_tool, str) and remove_tool == node_name:
+                        node_analysis = "❌ REMOVE: Flagged for removal by AI analysis"
+                        break
+                
+                # If no specific analysis found, add general note
+                if not node_analysis:
+                    node_analysis = "🔍 ANALYZED: Included in AI business analysis"
+                
+                # Add the analysis note to the node
+                existing_notes = node.get("notes", "")
+                ai_note = f"\n\n--- AI ANALYSIS ---\n{node_analysis}\n{timestamp}"
+                
+                if existing_notes:
+                    node["notes"] = existing_notes + ai_note
+                else:
+                    node["notes"] = ai_note.strip()
+                
+                print(f"📝 Added AI analysis note to '{node_name}': {node_analysis[:50]}...")
     
     def get_tool_description(self, tool) -> str:
         """
@@ -928,6 +1014,16 @@ class N8NWorkflowCloner:
         if not template_data:
             return None
         
+        # Debug: Check actual node structure to find notes field
+        print(f"\n🔍 DEBUG: Examining node structure for notes field...")
+        for i, node in enumerate(template_data.get('nodes', [])[:2]):  # Check first 2 nodes
+            print(f"Node {i+1} fields: {list(node.keys())}")
+            if any(field for field in node.keys() if 'note' in field.lower()):
+                print(f"Found note-related field: {[field for field in node.keys() if 'note' in field.lower()]}")
+            # Show full node structure for first node
+            if i == 0:
+                print(f"Full node structure: {json.dumps(node, indent=2)[:500]}...")
+        
         # Step 3: Read business description
         business_description = self.read_business_description(business_description_file)
         
@@ -943,7 +1039,11 @@ class N8NWorkflowCloner:
         print(f"\n🔧 Customizing workflow based on AI analysis...")
         customized_workflow = self.modify_workflow_tools(template_data, ai_recommendations)
         
-        # Step 6.5: Ensure the workflow name is set correctly
+        # Step 6.5: Inject AI analysis notes into workflow nodes
+        print(f"\n📝 Adding AI analysis notes to workflow nodes...")
+        self.inject_ai_analysis_notes(customized_workflow, ai_recommendations)
+        
+        # Step 6.6: Ensure the workflow name is set correctly
         customized_workflow['name'] = new_name
         
         # Step 7: Update the new workflow with customized data
