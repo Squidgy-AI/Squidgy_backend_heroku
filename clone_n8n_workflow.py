@@ -179,52 +179,164 @@ class N8NWorkflowCloner:
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
         
-        # Prepare tool descriptions for AI analysis
+        # Filter and prepare only actual tools for AI analysis (nodes with "tool" in their name)
         tool_descriptions = []
-        for tool in available_tools:
-            tool_info = {
-                "name": tool.get("name", "Unknown"),
-                "type": tool.get("type", "Unknown"),
-                "description": self.get_tool_description(tool)
-            }
-            tool_descriptions.append(tool_info)
+        actual_tools = []
         
+
+        for node in available_tools:
+            node_name = node.get("name", "").lower()
+            node_type = node.get("type", "")
+            
+            # Only include nodes that are AI agent-usable tools (API calls, external integrations, functional tools)
+            if ("tool" in node_name or 
+                "tool" in node_type.lower() or
+                node_type in ["@n8n/n8n-nodes-langchain.toolHttpRequest", 
+                             "n8n-nodes-base.supabaseTool",
+                             "@n8n/n8n-nodes-langchain.toolCalculator",
+                             "@n8n/n8n-nodes-langchain.toolCode",
+                             "@n8n/n8n-nodes-langchain.toolWebScraper",
+                             "@n8n/n8n-nodes-langchain.toolWorkflowTool",
+                             "n8n-nodes-base.httpRequest",
+                             "n8n-nodes-base.googleSheets",
+                             "n8n-nodes-base.airtable",
+                             "n8n-nodes-base.slack",
+                             "n8n-nodes-base.gmail"]):
+                
+                actual_tools.append(node)
+                
+                # Extract actual description from node parameters
+                parameters = node.get("parameters", {})
+                actual_description = (
+                    parameters.get("toolDescription", "") or
+                    parameters.get("description", "") or
+                    self.get_tool_description(node_type)
+                )
+                
+                tool_info = {
+                    "name": node.get("name", "Unknown"),
+                    "type": node_type,
+                    "description": actual_description
+                }
+                tool_descriptions.append(tool_info)
+        
+        print(f"📋 Found {len(actual_tools)} AI agent-usable tools out of {len(available_tools)} total nodes")
+        
+        # Log all nodes found in workflow with their descriptions
+        print(f"📋 Found {len(actual_tools)} total nodes in workflow:")
+        for i, node in enumerate(actual_tools, 1):
+            node_name = node.get("name", "Unknown")
+            node_type = node.get("type", "")
+            
+            # Extract actual description from node parameters
+            parameters = node.get("parameters", {})
+            node_description = (
+                parameters.get("toolDescription", "") or
+                parameters.get("description", "") or
+                self.get_tool_description(node_type)
+            )
+            
+            print(f"   {i}. {node_name} ({node_type})")
+            print(f"      Description: {node_description}")
+        
+
         # Create AI prompt
         prompt = f"""
-        Analyze the following business description and determine which n8n workflow tools are most relevant:
+        Analyze the business information and determine which AI agent tools should be kept, removed, or added for optimal user assistance or customer services:
 
-        BUSINESS DESCRIPTION:
+        BUSINESS CONTEXT:
         {business_description}
 
-        AVAILABLE TOOLS:
+        CURRENT AI AGENT TOOLS:
         {json.dumps(tool_descriptions, indent=2)}
 
-        Please provide recommendations in JSON format:
+        IMPORTANT: These tools will be used by an AI CUSTOMER SERVICE AGENT to help this business's customers. The agent needs tools to provide helpful, accurate, and timely assistance.
+
+        CRITICAL ANALYSIS REQUIREMENTS:
+        1. Think from a CUSTOMER SERVICE perspective - what do customers typically ask about?
+        2. Consider tools that help the AI agent provide better customer support
+        3. Keep tools that enable the agent to give accurate, up-to-date information
+        4. Remove tools only if they provide NO value for customer interactions
+        5. Consider common customer scenarios: questions about products, services, orders, store hours, etc.
+
+        TOOL EVALUATION CRITERIA FOR CUSTOMER SERVICE:
+        - Can this tool help the AI agent answer customer questions more accurately?
+        - Does this tool provide real-time or current information customers need?
+        - Can this tool help with common customer service scenarios?
+        - Does this tool enable the agent to provide personalized assistance?
+
+        EXAMPLES OF CUSTOMER SERVICE VALUE:
+        ✅ "Current time/date tool helps agent provide accurate business hours and delivery estimates"
+        ✅ "Website analysis helps agent understand company services to better assist customers"
+        ✅ "Database tools help agent check customer orders, account status, or inventory"
+        ✅ "Screenshot tools help agent see what customers see for better troubleshooting"
+
+        EXAMPLES OF POOR REASONING TO AVOID:
+        ❌ "Customers don't need screenshots" (ignores that AGENT needs tools to help customers)
+        ❌ "Time is not relevant" (ignores business hours, delivery times, appointment scheduling)
+        ❌ "Website analysis is for internal use" (ignores that agent needs to understand business to help customers)
+        ✅ "Order tracking API for e-commerce business to check customer order status"
+        ✅ "Inventory check tool for retail business to provide real-time stock information"
+        ✅ "Appointment booking API for service business to schedule customer appointments"
+
+        Provide recommendations in JSON format:
         {{
-            "analysis": "Brief analysis of the business type and needs",
-            "keep_tools": ["list of tool names that are relevant"],
-            "remove_tools": ["list of tool names that should be removed"],
-            "add_tools": [
-                {{
-                    "name": "suggested tool name",
-                    "type": "n8n node type",
-                    "reason": "why this tool would be beneficial"
-                }}
-            ]
+            "business_analysis": {{
+                "company_name": "extracted company name",
+                "industry_type": "specific industry classification",
+                "target_audience": "identified customer base",
+                "key_services": ["list of main services/products"],
+                "user_interaction_needs": ["what THIS company's users specifically ask for"],
+                "agent_response_requirements": ["what tools agents need for THIS business's user queries"]
+            }},
+            "tool_modifications": {{
+                "keep_tools": [
+                    {{
+                        "name": "tool name",
+                        "reason": "SPECIFIC reason why THIS business's customers need this tool",
+                        "use_cases": ["ACTUAL scenarios where THIS company's users would benefit"],
+                        "customization": "how to configure specifically for THIS business"
+                    }}
+                ],
+                "remove_tools": [
+                    {{
+                        "name": "tool name",
+                        "reason": "SPECIFIC reason why THIS business's customers don't need this tool"
+                    }}
+                ],
+                "add_tools": [
+                    {{
+                        "name": "specific tool name",
+                        "type": "exact n8n node type",
+                        "purpose": "SPECIFIC user requests for THIS business this tool handles",
+                        "api_endpoint": "if applicable, the API endpoint or service",
+                        "user_scenarios": ["SPECIFIC questions THIS company's customers would ask"],
+                        "parameters": {{
+                            "key_settings": "configuration specific to THIS business"
+                        }},
+                        "response_enhancement": "how this improves responses for THIS company's users"
+                    }}
+                ]
+            }},
+            "agent_capabilities": {{
+                "enhanced_responses": ["new user queries specific to THIS business"],
+                "business_specific_features": ["tools providing THIS company's information"],
+                "integration_opportunities": ["external services THIS business's customers use"]
+            }}
         }}
 
-        Focus on tools that would be most valuable for this specific business type.
+        REMEMBER: Every recommendation must be justified by actual customer needs for THIS specific business, not generic use cases.
         """
         
         try:
             response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are an expert n8n workflow consultant who helps businesses optimize their automation tools based on their specific needs."},
+                    {"role": "system", "content": "You are an expert AI agent tool consultant who makes business-specific recommendations. You must provide concrete, contextual reasoning for every tool decision. Avoid generic explanations like 'helps with user queries' or 'provides visual representation'. Instead, focus on specific customer scenarios and actual business needs. Be critical - most generic tools should be removed unless they serve a clear, specific purpose for that exact business type."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1500,
-                temperature=0.3
+                max_tokens=2000,
+                temperature=0.1
             )
             
             ai_response = response.choices[0].message.content.strip()
@@ -244,29 +356,45 @@ class N8NWorkflowCloner:
             print("⚠️ Proceeding without AI analysis - keeping all original tools")
             return {"keep_tools": available_tools, "remove_tools": [], "add_tools": []}
     
-    def get_tool_description(self, tool: Dict) -> str:
+    def get_tool_description(self, tool) -> str:
         """
-        Extract a meaningful description from a tool node.
+        Extract a meaningful description from a tool node or node type.
         
         Args:
-            tool (Dict): Tool node data
+            tool: Tool node data (Dict) or node type string
             
         Returns:
             str: Tool description
         """
-        tool_type = tool.get("type", "")
-        tool_name = tool.get("name", "")
+        # Handle both string (node_type) and dict (tool object) inputs
+        if isinstance(tool, str):
+            tool_type = tool
+            tool_name = ""
+        else:
+            tool_type = tool.get("type", "")
+            tool_name = tool.get("name", "")
         
-        # Map common n8n node types to descriptions
+        # Map n8n node types to descriptions - focus on AI agent-usable tools
         descriptions = {
-            "@n8n/n8n-nodes-langchain.toolHttpRequest": "HTTP API request tool",
-            "n8n-nodes-base.supabaseTool": "Supabase database operations",
-            "n8n-nodes-base.webhook": "Webhook trigger for external requests",
-            "@n8n/n8n-nodes-langchain.agent": "AI agent for processing requests",
-            "@n8n/n8n-nodes-langchain.lmChatOpenAi": "OpenAI chat model integration",
-            "@n8n/n8n-nodes-langchain.memoryBufferWindow": "Conversation memory management",
-            "n8n-nodes-base.respondToWebhook": "Webhook response handler",
-            "n8n-nodes-base.stickyNote": "Documentation/notes"
+            # AI Agent Tools - tools that agents can use to respond to users
+            "@n8n/n8n-nodes-langchain.toolHttpRequest": "HTTP API request tool - enables agents to call external APIs for user queries",
+            "n8n-nodes-base.supabaseTool": "Supabase database tool - allows agents to query/update business data for users",
+            "@n8n/n8n-nodes-langchain.toolCalculator": "Calculator tool - enables agents to perform calculations for users",
+            "@n8n/n8n-nodes-langchain.toolCode": "Code execution tool - allows agents to run code and process data for users",
+            "@n8n/n8n-nodes-langchain.toolWebScraper": "Web scraping tool - enables agents to fetch live web data for users",
+            "@n8n/n8n-nodes-langchain.toolWorkflowTool": "Workflow execution tool - allows agents to trigger other workflows",
+            "n8n-nodes-base.httpRequest": "HTTP request tool - enables agents to integrate with external services",
+            "n8n-nodes-base.googleSheets": "Google Sheets tool - allows agents to read/write spreadsheet data",
+            "n8n-nodes-base.airtable": "Airtable tool - enables agents to access database records",
+            "n8n-nodes-base.slack": "Slack integration tool - allows agents to send messages/notifications",
+            "n8n-nodes-base.gmail": "Gmail tool - enables agents to send emails on behalf of users",
+            # Non-agent tools for reference
+            "n8n-nodes-base.webhook": "Webhook trigger (workflow component, not agent tool)",
+            "@n8n/n8n-nodes-langchain.agent": "AI agent (the agent itself, not a tool)",
+            "@n8n/n8n-nodes-langchain.lmChatOpenAi": "OpenAI chat model (agent brain, not a tool)",
+            "@n8n/n8n-nodes-langchain.memoryBufferWindow": "Memory management (agent component, not a tool)",
+            "n8n-nodes-base.respondToWebhook": "Webhook response (workflow component, not agent tool)",
+            "n8n-nodes-base.stickyNote": "Documentation (workflow note, not agent tool)"
         }
         
         description = descriptions.get(tool_type, f"Tool type: {tool_type}")
@@ -283,23 +411,47 @@ class N8NWorkflowCloner:
     
     def modify_workflow_tools(self, workflow_data: Dict, recommendations: Dict) -> Dict:
         """
-        Modify workflow tools based on AI recommendations.
+        Modify workflow tools based on detailed AI recommendations from business analysis.
         
         Args:
             workflow_data (Dict): Original workflow data
-            recommendations (Dict): AI recommendations
+            recommendations (Dict): Detailed AI recommendations with business analysis
             
         Returns:
-            Dict: Modified workflow data
+            Dict: Modified workflow data with precise customizations
         """
-        if not recommendations or "remove_tools" not in recommendations:
-            print("⚠️ No valid recommendations provided, keeping original workflow")
+        if not recommendations:
+            print("⚠️ No recommendations provided, keeping original workflow")
             return workflow_data
         
         modified_workflow = workflow_data.copy()
         
-        # Remove unwanted tools
-        tools_to_remove = recommendations.get("remove_tools", [])
+        # Extract tool modifications from nested structure
+        tool_mods = recommendations.get("tool_modifications", {})
+        if not tool_mods:
+            # Fallback to old format
+            tool_mods = recommendations
+        
+        # Process business analysis
+        business_analysis = recommendations.get("business_analysis", {})
+        if business_analysis:
+            company_name = business_analysis.get("company_name", "Unknown")
+            industry = business_analysis.get("industry_type", "Unknown")
+            print(f"🏢 Customizing workflow for: {company_name} ({industry})")
+        
+        # Remove tools that don't fit the business model
+        tools_to_remove = []
+        remove_tools_data = tool_mods.get("remove_tools", [])
+        
+        for remove_item in remove_tools_data:
+            if isinstance(remove_item, dict):
+                tool_name = remove_item.get("name", "")
+                reason = remove_item.get("reason", "Not specified")
+                tools_to_remove.append(tool_name)
+                print(f"❌ Removing '{tool_name}': {reason}")
+            elif isinstance(remove_item, str):
+                tools_to_remove.append(remove_item)
+        
         if tools_to_remove and "nodes" in modified_workflow:
             original_count = len(modified_workflow["nodes"])
             modified_workflow["nodes"] = [
@@ -308,25 +460,292 @@ class N8NWorkflowCloner:
             ]
             removed_count = original_count - len(modified_workflow["nodes"])
             if removed_count > 0:
-                print(f"✅ Removed {removed_count} tools: {', '.join(tools_to_remove)}")
+                print(f"✅ Removed {removed_count} tools based on business analysis")
         
         # Update connections to remove references to deleted nodes
         if "connections" in modified_workflow and tools_to_remove:
             self.clean_connections(modified_workflow, tools_to_remove)
         
-        # Log kept tools
-        kept_tools = recommendations.get("keep_tools", [])
-        if kept_tools:
-            print(f"✅ Keeping {len(kept_tools)} relevant tools")
+        # Process kept tools with customizations
+        keep_tools_data = tool_mods.get("keep_tools", [])
+        for keep_item in keep_tools_data:
+            if isinstance(keep_item, dict):
+                tool_name = keep_item.get("name", "")
+                customization = keep_item.get("customization", "")
+                if customization:
+                    print(f"🔧 Customizing '{tool_name}': {customization}")
         
-        # Log suggested additions (for manual implementation)
-        add_tools = recommendations.get("add_tools", [])
+        # Actually add new tools to the workflow
+        add_tools = tool_mods.get("add_tools", [])
         if add_tools:
-            print(f"💡 AI suggests adding {len(add_tools)} additional tools:")
+            print(f"🔧 Adding {len(add_tools)} AI-recommended tools to workflow:")
             for tool in add_tools:
-                print(f"   - {tool.get('name', 'Unknown')}: {tool.get('reason', 'No reason provided')}")
+                name = tool.get('name', 'Unknown')
+                tool_type = tool.get('type', '@n8n/n8n-nodes-langchain.toolHttpRequest')
+                purpose = tool.get('purpose', 'No purpose specified')
+                api_endpoint = tool.get('api_endpoint', '')
+                parameters = tool.get('parameters', {})
+                
+                print(f"   + Adding {name}: {purpose}")
+                
+                # Create new tool node with proper positioning and AI reasoning
+                existing_nodes = modified_workflow.get("nodes", [])
+                new_tool_node = self.create_tool_node(name, tool_type, api_endpoint, parameters, existing_nodes, tool)
+                
+                # Add to workflow nodes
+                if "nodes" in modified_workflow:
+                    modified_workflow["nodes"].append(new_tool_node)
+                    print(f"     ✅ Added {name} to workflow")
+                else:
+                    modified_workflow["nodes"] = [new_tool_node]
+                
+                # Connect new tool to AI agent
+                self.connect_tool_to_agent(modified_workflow, new_tool_node["name"])
+        
+        # Log workflow enhancements
+        enhancements = recommendations.get("workflow_enhancements", {})
+        if enhancements:
+            optimizations = enhancements.get("optimization_areas", [])
+            if optimizations:
+                print(f"⚡ Optimization opportunities: {', '.join(optimizations)}")
         
         return modified_workflow
+    
+    def create_tool_node(self, name: str, tool_type: str, api_endpoint: str = "", parameters: Dict = None, existing_nodes: List = None, ai_reasoning: Dict = None) -> Dict:
+        """
+        Create a new tool node for the workflow.
+        
+        Args:
+            name (str): Name of the tool
+            tool_type (str): N8N node type
+            api_endpoint (str): API endpoint if applicable
+            parameters (Dict): Additional parameters
+            existing_nodes (list): Existing nodes to calculate positioning
+            ai_reasoning (Dict): AI analysis reasoning for this tool
+            
+        Returns:
+            Dict: New tool node configuration
+        """
+        import uuid
+        
+        if parameters is None:
+            parameters = {}
+        
+        if existing_nodes is None:
+            existing_nodes = []
+        
+        # Generate unique ID
+        node_id = str(uuid.uuid4())
+        
+        # Calculate position based on existing tool nodes
+        tool_positions = []
+        for node in existing_nodes:
+            node_name = node.get("name", "").lower()
+            node_type = node.get("type", "")
+            # Find existing tools (same logic as filtering)
+            if ("tool" in node_name or 
+                "tool" in node_type.lower() or
+                node_type in ["@n8n/n8n-nodes-langchain.toolHttpRequest", 
+                             "n8n-nodes-base.supabaseTool",
+                             "@n8n/n8n-nodes-langchain.toolCalculator",
+                             "@n8n/n8n-nodes-langchain.toolCode",
+                             "@n8n/n8n-nodes-langchain.toolWebScraper",
+                             "@n8n/n8n-nodes-langchain.toolWorkflowTool",
+                             "n8n-nodes-base.httpRequest",
+                             "n8n-nodes-base.googleSheets",
+                             "n8n-nodes-base.airtable",
+                             "n8n-nodes-base.slack",
+                             "n8n-nodes-base.gmail"]):
+                position = node.get("position", [0, 0])
+                if len(position) >= 2:
+                    tool_positions.append(position)
+        
+        # Position new tool in same row as existing tools, 300 units to the right
+        if tool_positions:
+            # Find the rightmost tool position
+            max_x = max(pos[0] for pos in tool_positions)
+            # Use the Y position of the first tool for consistent row alignment
+            base_y = tool_positions[0][1]
+            position_x = max_x + 300
+            position_y = base_y
+        else:
+            # Default position if no existing tools found
+            position_x = 500
+            position_y = 400
+        
+        # Create detailed notes from AI reasoning
+        notes = self.create_tool_notes(name, ai_reasoning, parameters)
+        
+        # Base tool node structure
+        tool_node = {
+            "id": node_id,
+            "name": name,
+            "type": tool_type,
+            "typeVersion": 1,
+            "position": [position_x, position_y],
+            "parameters": {}
+        }
+        
+        # Add notes if they exist (n8n uses 'notes' field)
+        if notes and notes.strip():
+            tool_node["notes"] = notes
+            print(f"     📝 Added notes to {name} (length: {len(notes)})")
+        
+        # Configure based on tool type
+        if tool_type == "@n8n/n8n-nodes-langchain.toolHttpRequest":
+            key_settings = parameters.get("key_settings", {})
+            if isinstance(key_settings, dict):
+                tool_node["parameters"] = {
+                    "name": name,
+                    "description": f"Tool for {name.lower()} operations",
+                    "method": "GET",
+                    "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
+                    "options": {},
+                    **key_settings
+                }
+            else:
+                tool_node["parameters"] = {
+                    "name": name,
+                    "description": f"Tool for {name.lower()} operations",
+                    "method": "GET",
+                    "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
+                    "options": {}
+                }
+        elif "supabase" in tool_type.lower():
+            key_settings = parameters.get("key_settings", {})
+            if isinstance(key_settings, dict):
+                tool_node["parameters"] = {
+                    "name": name,
+                    "description": f"Database tool for {name.lower()}",
+                    **key_settings
+                }
+            else:
+                tool_node["parameters"] = {
+                    "name": name,
+                    "description": f"Database tool for {name.lower()}"
+                }
+        else:
+            # Generic tool configuration
+            key_settings = parameters.get("key_settings", {})
+            if isinstance(key_settings, dict):
+                tool_node["parameters"] = {
+                    "name": name,
+                    "description": f"Tool for {name.lower()}",
+                    **key_settings
+                }
+            else:
+                tool_node["parameters"] = {
+                    "name": name,
+                    "description": f"Tool for {name.lower()}"
+                }
+        
+        return tool_node
+    
+    def create_tool_notes(self, name: str, ai_reasoning: Dict = None, parameters: Dict = None) -> str:
+        """
+        Create detailed notes for the tool node explaining the business reasoning and implementation ideas.
+        
+        Args:
+            name (str): Tool name
+            ai_reasoning (Dict): AI analysis data for this tool
+            parameters (Dict): Tool parameters
+            
+        Returns:
+            str: Formatted notes for the node
+        """
+        notes_sections = []
+        
+        # Debug logging
+        print(f"🔍 Creating notes for tool: {name}")
+        print(f"   AI reasoning keys: {list(ai_reasoning.keys()) if ai_reasoning else 'None'}")
+        print(f"   Parameters keys: {list(parameters.keys()) if parameters else 'None'}")
+        
+        # Business Purpose Section
+        if ai_reasoning:
+            purpose = ai_reasoning.get("purpose", "")
+            user_scenarios = ai_reasoning.get("user_scenarios", [])
+            response_enhancement = ai_reasoning.get("response_enhancement", "")
+            
+            if purpose:
+                notes_sections.append(f"🎯 **Business Purpose:**\n{purpose}")
+            
+            if user_scenarios:
+                scenarios_text = "\n".join([f"• {scenario}" for scenario in user_scenarios])
+                notes_sections.append(f"👥 **Customer Scenarios:**\n{scenarios_text}")
+            
+            if response_enhancement:
+                notes_sections.append(f"⚡ **Response Enhancement:**\n{response_enhancement}")
+        
+        # Technical Implementation Section
+        if parameters:
+            api_endpoint = parameters.get("api_endpoint", "")
+            key_settings = parameters.get("key_settings", "")
+            
+            if api_endpoint:
+                notes_sections.append(f"🔗 **API Endpoint:**\n{api_endpoint}")
+            
+            if key_settings and isinstance(key_settings, str):
+                notes_sections.append(f"⚙️ **Configuration:**\n{key_settings}")
+        
+        # N8N Best Practices Section
+        best_practices = [
+            "• Configure proper error handling for API failures",
+            "• Set appropriate timeout values for external calls", 
+            "• Use environment variables for sensitive data",
+            "• Test with sample data before production use",
+            "• Monitor API rate limits and usage"
+        ]
+        notes_sections.append(f"📋 **Implementation Notes:**\n" + "\n".join(best_practices))
+        
+        # AI Analysis Timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        notes_sections.append(f"🤖 **AI Analysis Generated:** {timestamp}")
+        
+        final_notes = "\n\n".join(notes_sections)
+        print(f"   Generated notes length: {len(final_notes)}")
+        print(f"   Notes preview: {final_notes[:100]}...")
+        
+        return final_notes
+    
+    def connect_tool_to_agent(self, workflow_data: Dict, tool_name: str):
+        """
+        Connect a new tool to the AI agent in the workflow connections.
+        
+        Args:
+            workflow_data (Dict): Workflow data containing connections
+            tool_name (str): Name of the tool to connect
+        """
+        if "connections" not in workflow_data:
+            workflow_data["connections"] = {}
+        
+        # Find the AI agent node
+        agent_node_name = None
+        for node in workflow_data.get("nodes", []):
+            if node.get("type") == "@n8n/n8n-nodes-langchain.agent":
+                agent_node_name = node.get("name")
+                break
+        
+        if agent_node_name:
+            # Add tool to agent's connections
+            if agent_node_name not in workflow_data["connections"]:
+                workflow_data["connections"][agent_node_name] = {}
+            
+            if "ai_tool" not in workflow_data["connections"][agent_node_name]:
+                workflow_data["connections"][agent_node_name]["ai_tool"] = []
+            
+            # Add connection to the new tool
+            workflow_data["connections"][agent_node_name]["ai_tool"].append([
+                {
+                    "node": tool_name,
+                    "type": "ai_tool",
+                    "index": 0
+                }
+            ])
+            
+            print(f"     🔗 Connected {tool_name} to AI agent")
+        else:
+            print(f"     ⚠️ Could not find AI agent to connect {tool_name}")
     
     def clean_connections(self, workflow_data: Dict, removed_tools: List[str]):
         """
@@ -513,12 +932,12 @@ class N8NWorkflowCloner:
         business_description = self.read_business_description(business_description_file)
         
         # Step 4: Extract available tools from template
-        available_tools = template_data.get('nodes', [])
-        print(f"📋 Found {len(available_tools)} tools in template workflow")
+        all_nodes = template_data.get('nodes', [])
+        print(f"📋 Found {len(all_nodes)} total nodes in template workflow")
         
         # Step 5: Analyze with AI and get tool recommendations
         print(f"\n🤖 Analyzing business needs with AI...")
-        ai_recommendations = self.analyze_business_with_ai(business_description, available_tools)
+        ai_recommendations = self.analyze_business_with_ai(business_description, all_nodes)
         
         # Step 6: Modify workflow tools based on AI recommendations
         print(f"\n🔧 Customizing workflow based on AI analysis...")
@@ -535,21 +954,35 @@ class N8NWorkflowCloner:
             # Step 8: Save AI analysis report
             try:
                 report_filename = f"ai_analysis_report_{new_workflow_id}.json"
+                
+                # Ensure we have valid data to save
+                if not ai_recommendations:
+                    ai_recommendations = {"error": "AI analysis failed or returned empty response"}
+                
+                report_data = {
+                    "workflow_id": new_workflow_id,
+                    "workflow_name": new_name,
+                    "template_id": template_id,
+                    "business_description_file": business_description_file,
+                    "business_description": business_description,
+                    "ai_recommendations": ai_recommendations,
+                    "original_node_count": len(all_nodes),
+                    "final_node_count": len(customized_workflow.get('nodes', [])),
+                    "timestamp": __import__('time').time(),
+                    "analysis_status": "completed" if ai_recommendations and "error" not in ai_recommendations else "failed"
+                }
+                
                 with open(report_filename, 'w', encoding='utf-8') as f:
-                    json.dump({
-                        "workflow_id": new_workflow_id,
-                        "workflow_name": new_name,
-                        "template_id": template_id,
-                        "business_description_file": business_description_file,
-                        "business_description": business_description,
-                        "ai_recommendations": ai_recommendations,
-                        "original_tool_count": len(available_tools),
-                        "final_tool_count": len(customized_workflow.get('nodes', [])),
-                        "timestamp": json.dumps({"$date": {"$numberLong": str(int(__import__('time').time() * 1000))}})
-                    }, f, indent=2)
+                    json.dump(report_data, f, indent=2)
                 print(f"✅ AI analysis report saved: {report_filename}")
             except Exception as e:
                 print(f"⚠️ Could not save AI analysis report: {e}")
+                # Create minimal report even if there's an error
+                try:
+                    with open(f"ai_analysis_report_{new_workflow_id}.json", 'w') as f:
+                        json.dump({"error": str(e), "workflow_id": new_workflow_id}, f, indent=2)
+                except:
+                    pass
             
             return new_workflow_id
         else:
@@ -570,7 +1003,7 @@ def main():
     N8N_BASE_URL = os.getenv("N8N_BASE_URL")
     API_TOKEN = os.getenv("N8N_API")
     TEMPLATE_WORKFLOW_ID = os.getenv("N8N_TEMPLATE_WORKFLOW_ID")
-    NEW_WORKFLOW_NAME = "Farzin | testing creating new agent"
+    NEW_WORKFLOW_NAME = "FK_Squidgy_Testing_Creating_New_Agent_Workflow"
     BUSINESS_DESCRIPTION_FILE = "business_description.txt"
     
     # Validate configuration

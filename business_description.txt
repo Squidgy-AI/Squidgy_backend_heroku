@@ -1,26 +1,18 @@
-Solar Energy Solutions Company
+Here’s the information I gathered from the Nike UK website:
 
-We are a leading solar energy solutions provider specializing in residential and commercial solar panel installations. Our company offers comprehensive services including:
+Company name: Nike Retail BV 
 
-- Solar panel system design and installation
-- Energy efficiency consultations
-- Solar financing options and incentives guidance
-- Maintenance and monitoring services
-- Battery storage solutions
-- Grid-tie and off-grid systems
+Website: https://www.nike.com/gb/
 
-Our target customers include homeowners looking to reduce electricity bills, commercial businesses seeking sustainable energy solutions, and property developers incorporating green building practices.
+Contact Information: Not available on website (specific contact details not found)
 
-We serve clients across multiple states and have partnerships with major solar equipment manufacturers. Our sales process typically involves initial consultations, site assessments, custom proposals, financing discussions, permitting assistance, professional installation, and ongoing support.
+Description: Nike is focused on delivering innovative products, experiences, and services to inspire athletes and the world's athletes. They offer lifestyle and activewear products, including footwear and apparel for all levels of activity. 
 
-Key services we need to automate:
-- Lead capture from website inquiries
-- Initial customer screening and qualification
-- Appointment scheduling for consultations
-- Follow-up communications
-- Proposal generation and delivery
-- Customer education about solar benefits
-- Integration with CRM systems
-- Social media management for lead generation
+Tags: Athletics. Sports. Footwear. Apparel. Accessories 
 
-Our business operates primarily through digital channels with a strong focus on educational content, customer testimonials, and local community engagement.
+Takeaways: 
+- Nike Membership benefits include free shipping & returns and first access to exclusive events.
+- Free delivery and returns on products.
+- Services include gift cards, store locator, Nike journal, student discount, and order status tracking.
+
+Niche: Athletes and sports enthusiasts at all levels, with a mission to inspire athletes everywhere along their sport journey. 
