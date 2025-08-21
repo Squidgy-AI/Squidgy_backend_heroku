@@ -13,6 +13,7 @@ Requirements:
     - json library: pip install json
     - logging library: pip install logging
     - datetime library: pip install datetime
+    - time library: pip install time
     - Valid n8n API token
 """
 
@@ -21,6 +22,7 @@ import requests
 import json
 import os
 import logging
+import time
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
@@ -706,68 +708,140 @@ class N8NWorkflowCloner:
         
         # Load existing report if it exists (for Phase 2 update)
         if phase == "2_configuration_complete" and os.path.exists(report_filename):
-            with open(report_filename, 'r') as f:
-                report = json.load(f)
+            try:
+                with open(report_filename, 'r') as f:
+                    report = json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                print(f"⚠️ Error loading existing report: {e}. Creating new report.")
+                report = {}
         else:
             # Create new report (Phase 1)
-            report = {
-                "workflow_id": workflow_id,
-                "workflow_name": workflow_name,
-                "template_id": template_id,
-                "business_description_file": business_description_file,
-                "business_description": business_description,
-                "ai_recommendations": ai_recommendations,
-                "agent_capabilities": {
-                    "enhanced_responses": ai_recommendations.get("enhanced_responses", []),
-                    "business_specific_features": ai_recommendations.get("business_specific_features", []),
-                    "integration_opportunities": ai_recommendations.get("integration_opportunities", [])
-                },
-                "ai_analysis_notes": {
-                    "analysis_summary": json.dumps(ai_recommendations.get("business_analysis", {}), indent=4),
-                    "timestamp": f"AI Analysis - {json.dumps({'date': 'auto-generated'})}"
-                },
-                "original_node_count": len(all_nodes),
-                "final_node_count": len(customized_workflow.get("nodes", [])),
-                "analysis_status": "completed"
+            report = {}
+        
+        # Ensure all required fields exist
+        report.update({
+            "workflow_id": workflow_id,
+            "workflow_name": workflow_name,
+            "template_id": template_id,
+            "business_description_file": business_description_file,
+            "business_description": business_description,
+            "ai_recommendations": ai_recommendations or {},
+            "original_node_count": len(all_nodes) if all_nodes else 0,
+            "final_node_count": len(customized_workflow.get("nodes", [])) if customized_workflow else 0,
+            "analysis_status": "completed"
+        })
+        
+        # Safely handle agent_capabilities
+        if ai_recommendations:
+            report["agent_capabilities"] = {
+                "enhanced_responses": ai_recommendations.get("enhanced_responses", []),
+                "business_specific_features": ai_recommendations.get("business_specific_features", []),
+                "integration_opportunities": ai_recommendations.get("integration_opportunities", [])
+            }
+        else:
+            report["agent_capabilities"] = {
+                "enhanced_responses": [],
+                "business_specific_features": [],
+                "integration_opportunities": []
+            }
+        
+        # Safely handle ai_analysis_notes
+        if ai_recommendations:
+            report["ai_analysis_notes"] = {
+                "analysis_summary": json.dumps(ai_recommendations.get("business_analysis", {}), indent=4),
+                "timestamp": f"AI Analysis - {json.dumps({'date': 'auto-generated'})}"
+            }
+        else:
+            report["ai_analysis_notes"] = {
+                "analysis_summary": "{}",
+                "timestamp": f"AI Analysis - {json.dumps({'date': 'auto-generated'})}"
             }
         
         # Update phase and configuration status
         report["phase"] = phase
         report["timestamp"] = time.time()
         
+        # Ensure missing_config_log exists
+        if not hasattr(self, 'missing_config_log'):
+            self.missing_config_log = []
+        
         if phase == "1_detection_complete":
-            report["missing_configuration"] = {
-                "tools_requiring_config": [entry["tool_name"] for entry in self.missing_config_log],
-                "total_missing_fields": sum(len(entry["missing_fields"]) for entry in self.missing_config_log),
-                "configuration_status": "incomplete" if self.missing_config_log else "complete",
-                "user_action_required": bool(self.missing_config_log),
-                "available_auth_types": self.get_n8n_auth_types(),
-                "configuration_summary": {
-                    "message": "Configuration required for tools" if self.missing_config_log else "All tools are properly configured",
-                    "required_actions": [f"Configure {entry['tool_name']}" for entry in self.missing_config_log]
+            try:
+                report["missing_configuration"] = {
+                    "tools_requiring_config": [entry["tool_name"] for entry in self.missing_config_log if "tool_name" in entry],
+                    "total_missing_fields": sum(len(entry.get("missing_fields", [])) for entry in self.missing_config_log),
+                    "configuration_status": "incomplete" if self.missing_config_log else "complete",
+                    "user_action_required": bool(self.missing_config_log),
+                    "configuration_summary": {
+                        "message": "Configuration required for tools" if self.missing_config_log else "All tools are properly configured",
+                        "required_actions": [f"Configure {entry.get('tool_name', 'Unknown')}" for entry in self.missing_config_log if "tool_name" in entry]
+                    }
                 }
-            }
-        elif phase == "2_configuration_complete" and user_config:
-            # Update missing configuration status
-            report["missing_configuration"]["configuration_status"] = "complete"
-            report["missing_configuration"]["user_action_required"] = False
-            report["missing_configuration"]["configuration_summary"]["message"] = "All tools are properly configured"
-            report["missing_configuration"]["required_actions"] = []
+            except Exception as e:
+                print(f"⚠️ Error creating missing_configuration section: {e}")
+                report["missing_configuration"] = {
+                    "tools_requiring_config": [],
+                    "total_missing_fields": 0,
+                    "configuration_status": "complete",
+                    "user_action_required": False,
+                    "configuration_summary": {
+                        "message": "All tools are properly configured",
+                        "required_actions": []
+                    }
+                }
+        elif phase == "2_configuration_complete":
+            # Ensure missing_configuration exists before updating
+            if "missing_configuration" not in report:
+                report["missing_configuration"] = {
+                    "tools_requiring_config": [],
+                    "total_missing_fields": 0,
+                    "configuration_status": "incomplete",
+                    "user_action_required": True,
+                    "configuration_summary": {
+                        "message": "Configuration required for tools",
+                        "required_actions": []
+                    }
+                }
             
-            # Add user configuration details
-            report["user_configuration"] = {
-                "provided_config": user_config,
-                "tools_configured": len(user_config),
-                "configuration_complete": True,
-                "timestamp": time.time()
-            }
+            # Safely update missing configuration status
+            try:
+                if "configuration_summary" not in report["missing_configuration"]:
+                    report["missing_configuration"]["configuration_summary"] = {}
+                
+                report["missing_configuration"]["configuration_status"] = "complete"
+                report["missing_configuration"]["user_action_required"] = False
+                report["missing_configuration"]["configuration_summary"]["message"] = "All tools are properly configured"
+                report["missing_configuration"]["required_actions"] = []
+            except Exception as e:
+                print(f"⚠️ Error updating missing_configuration: {e}")
+            
+            # Add user configuration details if provided
+            if user_config:
+                report["user_configuration"] = {
+                    "provided_config": user_config,
+                    "tools_configured": len(user_config),
+                    "configuration_complete": True,
+                    "timestamp": time.time()
+                }
+            else:
+                report["user_configuration"] = {
+                    "provided_config": {},
+                    "tools_configured": 0,
+                    "configuration_complete": False,
+                    "timestamp": time.time()
+                }
         
-        # Save updated report
-        with open(report_filename, 'w') as f:
-            json.dump(report, f, indent=2)
+        # Save updated report with error handling
+        try:
+            with open(report_filename, 'w') as f:
+                json.dump(report, f, indent=2)
+            
+            phase_name = "Phase 1" if phase == "1_detection_complete" else "Phase 2"
+            print(f"\n✅ {phase_name} analysis report saved: {report_filename}")
+        except Exception as e:
+            print(f"❌ Error saving report: {e}")
+            print(f"Report data: {json.dumps(report, indent=2)[:500]}...")
         
-        phase_name = "Phase 1" if phase == "1_detection_complete" else "Phase 2"
-        print(f"\n✅ {phase_name} analysis report saved: {report_filename}")
         return report
     
     def generate_ai_config_prompts(self, phase1_report: Dict) -> str:
@@ -1441,19 +1515,26 @@ Start by greeting the user and explaining that you need some additional informat
                     if current_value:
                         print(f"🔍 Current placeholder: {current_value}")
                     
-                    # Get user input
-                    while True:
-                        user_input = input(f"\n✏️  Please enter {field_name} for {tool_name}: ").strip()
-                        
-                        if user_input:
-                            tool_user_config[field_name] = user_input
-                            print(f"✅ Got it! {field_name} = {user_input}")
-                            break
-                        elif not field_info["required"]:
-                            print("⏭️  Skipping optional field...")
-                            break
-                        else:
-                            print("⚠️  This field is required. Please provide a value.")
+                    # Handle authentication field specially
+                    if field_name == "authentication":
+                        auth_config = self.prompt_for_authentication()
+                        if auth_config:
+                            tool_user_config[field_name] = auth_config
+                            print(f"✅ Got it! {field_name} configured")
+                    else:
+                        # Get user input for regular fields
+                        while True:
+                            user_input = input(f"\n✏️  Please enter {field_name} for {tool_name}: ").strip()
+                            
+                            if user_input:
+                                tool_user_config[field_name] = user_input
+                                print(f"✅ Got it! {field_name} = {user_input}")
+                                break
+                            elif not field_info["required"]:
+                                print("⏭️  Skipping optional field...")
+                                break
+                            else:
+                                print("⚠️  This field is required. Please provide a value.")
                 
                 if tool_user_config:
                     user_config[tool_name] = tool_user_config
@@ -1467,6 +1548,156 @@ Start by greeting the user and explaining that you need some additional informat
             print(f"⚠️  AI assistant error: {e}. Using basic prompts.")
             return self.basic_config_prompt()
     
+    def prompt_for_authentication(self) -> Dict[str, str]:
+        """
+        Intelligently detect authentication type by asking user questions.
+        
+        Returns:
+            Dict: Authentication configuration
+        """
+        print(f"\n🔐 Authentication Configuration")
+        print("="*50)
+        print("Let me help you configure the right authentication for this API.")
+        
+        # Ask intelligent questions to detect auth type
+        print("\n❓ What type of credentials do you have for this API?")
+        
+        has_username = input("Do you have a username and password? (y/n): ").strip().lower() == 'y'
+        if has_username:
+            print("👍 Detected: Username/Password authentication")
+            return self.configure_basic_auth()
+        
+        has_token = input("Do you have an API token or API key? (y/n): ").strip().lower() == 'y'
+        if has_token:
+            token_value = input("Enter your API token/key: ").strip()
+            
+            # Ask about token format
+            print("\n❓ How should this token be sent?")
+            print("1. Authorization header (Bearer token)")
+            print("2. Custom header")
+            print("3. Query parameter")
+            
+            while True:
+                choice = input("Choose (1-3): ").strip()
+                if choice == "1":
+                    return {
+                        "type": "headerAuth",
+                        "name": "Authorization",
+                        "value": f"Bearer {token_value}"
+                    }
+                elif choice == "2":
+                    header_name = input("Header name (e.g., X-API-Key): ").strip()
+                    return {
+                        "type": "headerAuth", 
+                        "name": header_name,
+                        "value": token_value
+                    }
+                elif choice == "3":
+                    param_name = input("Query parameter name (e.g., api_key): ").strip()
+                    return {
+                        "type": "queryAuth",
+                        "key": param_name,
+                        "value": token_value
+                    }
+                else:
+                    print("❌ Invalid choice. Please enter 1, 2, or 3.")
+        
+        has_oauth = input("Do you need OAuth authentication? (y/n): ").strip().lower() == 'y'
+        if has_oauth:
+            oauth_version = input("OAuth version (1 or 2): ").strip()
+            if oauth_version == "1":
+                return self.configure_oauth1()
+            else:
+                return self.configure_oauth2()
+        
+        # No authentication needed
+        print("👍 No authentication will be configured for this API.")
+        return {"type": "None"}
+    
+    def configure_basic_auth(self) -> Dict[str, str]:
+        """Configure Basic Auth credentials."""
+        print(f"\n🔑 Basic Auth Configuration")
+        username = input("Username: ").strip()
+        password = input("Password: ").strip()
+        
+        return {
+            "type": "basicAuth",
+            "user": username,
+            "password": password
+        }
+    
+    def configure_digest_auth(self) -> Dict[str, str]:
+        """Configure Digest Auth credentials."""
+        print(f"\n🔑 Digest Auth Configuration")
+        username = input("Username: ").strip()
+        password = input("Password: ").strip()
+        
+        return {
+            "type": "digestAuth",
+            "user": username,
+            "password": password
+        }
+    
+    def configure_header_auth(self) -> Dict[str, str]:
+        """Configure Header Auth."""
+        print(f"\n🔑 Header Auth Configuration")
+        header_name = input("Header Name (default: Authorization): ").strip() or "Authorization"
+        header_value = input("Header Value: ").strip()
+        
+        return {
+            "type": "headerAuth",
+            "name": header_name,
+            "value": header_value
+        }
+    
+    def configure_oauth1(self) -> Dict[str, str]:
+        """Configure OAuth1 credentials."""
+        print(f"\n🔑 OAuth1 Configuration")
+        consumer_key = input("Consumer Key: ").strip()
+        consumer_secret = input("Consumer Secret: ").strip()
+        access_token = input("Access Token: ").strip()
+        access_token_secret = input("Access Token Secret: ").strip()
+        
+        return {
+            "type": "oAuth1Api",
+            "consumerKey": consumer_key,
+            "consumerSecret": consumer_secret,
+            "accessToken": access_token,
+            "accessTokenSecret": access_token_secret
+        }
+    
+    def configure_oauth2(self) -> Dict[str, str]:
+        """Configure OAuth2 credentials."""
+        print(f"\n🔑 OAuth2 Configuration")
+        client_id = input("Client ID: ").strip()
+        client_secret = input("Client Secret: ").strip()
+        access_token_url = input("Access Token URL: ").strip()
+        scope = input("Scope (optional): ").strip()
+        
+        config = {
+            "type": "oAuth2Api",
+            "clientId": client_id,
+            "clientSecret": client_secret,
+            "accessTokenUrl": access_token_url
+        }
+        
+        if scope:
+            config["scope"] = scope
+            
+        return config
+    
+    def configure_query_auth(self) -> Dict[str, str]:
+        """Configure Query Auth."""
+        print(f"\n🔑 Query Auth Configuration")
+        param_name = input("Query Parameter Name: ").strip()
+        param_value = input("Query Parameter Value: ").strip()
+        
+        return {
+            "type": "queryAuth",
+            "key": param_name,
+            "value": param_value
+        }
+
     def basic_config_prompt(self) -> Dict[str, Dict]:
         """Fallback method for collecting configuration without OpenAI."""
         user_config = {}
@@ -1492,9 +1723,17 @@ Start by greeting the user and explaining that you need some additional informat
                 print(f"\n❓ {explanation}")
                 print(f"💡 Example: {example}")
                 
-                user_input = input(f"✏️  Enter {field_name}: ").strip()
-                if user_input:
-                    tool_user_config[field_name] = user_input
+                # Handle authentication field specially
+                if field_name == "authentication":
+                    auth_config = self.prompt_for_authentication()
+                    if auth_config:
+                        tool_user_config[field_name] = auth_config
+                        print(f"✅ Got it! {field_name} configured")
+                else:
+                    # Get user input for regular fields
+                    user_input = input(f"✏️  Enter {field_name}: ").strip()
+                    if user_input:
+                        tool_user_config[field_name] = user_input
             
             if tool_user_config:
                 user_config[tool_name] = tool_user_config
@@ -1547,15 +1786,10 @@ Start by greeting the user and explaining that you need some additional informat
                         print(f"   ✅ {node_name}.authentication configured")
                     else:
                         # Handle regular configuration fields
-                        if field_name == "url" and "url" in node_params:
+                        if field_name == "url":
                             node_params["url"] = field_value
-                        elif field_name == "endpoint" and "endpoint" in node_params:
+                        elif field_name == "endpoint":
                             node_params["endpoint"] = field_value
-                        elif field_name in ["api_key", "token", "key"]:
-                            # Handle API keys and tokens
-                            if "authentication" not in node_params:
-                                node_params["authentication"] = {}
-                            node_params["authentication"][field_name] = field_value
                         else:
                             # Generic field assignment
                             node_params[field_name] = field_value
@@ -1567,32 +1801,139 @@ Start by greeting the user and explaining that you need some additional informat
         print("🎉 User configuration applied successfully!")
         return workflow
     
-    def apply_authentication_config(self, node_params: Dict, auth_config: Dict):
+    def apply_authentication_config(self, node_params: Dict, auth_config):
         """
-        Apply authentication configuration to a node's parameters.
+        Apply authentication configuration to n8n HTTP Request node parameters.
+        Based on n8n docs: use direct authentication type names instead of genericCredentialType.
         
         Args:
             node_params (Dict): Node parameters to update
-            auth_config (Dict): Authentication configuration from user
+            auth_config (Dict or str): Authentication configuration from user
         """
+        # Handle case where auth_config is a string (fallback from basic prompt)
+        if isinstance(auth_config, str):
+            if auth_config.lower() in ["none", "", "no auth"]:
+                # Set to no authentication
+                node_params["authentication"] = "none"
+                return
+            else:
+                # Treat string as Header Auth with Authorization header
+                auth_config = {
+                    "type": "headerAuth",
+                    "name": "Authorization",
+                    "value": auth_config
+                }
+        
+        # Handle dictionary auth_config - use direct authentication type
         auth_type = auth_config.get("type", "None")
         
         if auth_type == "None":
-            # Remove authentication if set to None
-            if "authentication" in node_params:
-                del node_params["authentication"]
+            # Set to no authentication
+            node_params["authentication"] = "none"
         else:
-            # Set up authentication based on type
-            if "authentication" not in node_params:
-                node_params["authentication"] = {}
+            # Set authentication type directly (not genericCredentialType)
+            node_params["authentication"] = auth_type
             
-            node_params["authentication"]["type"] = auth_type
-            
-            # Copy authentication fields
-            for key, value in auth_config.items():
-                if key != "type":
-                    node_params["authentication"][key] = value
+            # Apply authentication fields based on type
+            if auth_type == "basicAuth":
+                node_params["basicAuth"] = {
+                    "user": auth_config.get("user", ""),
+                    "password": auth_config.get("password", "")
+                }
+            elif auth_type == "headerAuth":
+                node_params["headerAuth"] = {
+                    "name": auth_config.get("name", "Authorization"),
+                    "value": auth_config.get("value", "")
+                }
+            elif auth_type == "queryAuth":
+                node_params["queryAuth"] = {
+                    "key": auth_config.get("key", ""),
+                    "value": auth_config.get("value", "")
+                }
+            elif auth_type == "digestAuth":
+                node_params["digestAuth"] = {
+                    "user": auth_config.get("user", ""),
+                    "password": auth_config.get("password", "")
+                }
+            elif auth_type == "oAuth1Api":
+                node_params["oAuth1Api"] = {
+                    "consumerKey": auth_config.get("consumerKey", ""),
+                    "consumerSecret": auth_config.get("consumerSecret", ""),
+                    "accessToken": auth_config.get("accessToken", ""),
+                    "accessTokenSecret": auth_config.get("accessTokenSecret", "")
+                }
+            elif auth_type == "oAuth2Api":
+                node_params["oAuth2Api"] = {
+                    "clientId": auth_config.get("clientId", ""),
+                    "clientSecret": auth_config.get("clientSecret", ""),
+                    "accessToken": auth_config.get("accessToken", ""),
+                    "refreshToken": auth_config.get("refreshToken", "")
+                }
+                oauth2_config = {
+                    "clientId": auth_config.get("clientId", ""),
+                    "clientSecret": auth_config.get("clientSecret", ""),
+                    "accessToken": auth_config.get("accessToken", ""),
+                    "refreshToken": auth_config.get("refreshToken", "")
+                }
+                oauth2_config["scope"] = auth_config.get("scope")
+                node_params["oAuth2Api"] = oauth2_config
     
+    def update_missing_config_log_with_user_input(self, user_config: Dict[str, Dict]):
+        """
+        Update the missing config log to reflect user-provided values and recalculate missing fields.
+        
+        Args:
+            user_config (Dict): User-provided configuration values
+        """
+        print(f"\n📝 Updating configuration log with user input...")
+        
+        if self.missing_config_log:
+            for tool_config in self.missing_config_log:
+                tool_name = tool_config["tool_name"]
+                if tool_name in user_config:
+                    user_tool_config = user_config[tool_name]
+                    missing_fields = tool_config["missing_fields"]
+                    
+                    # Update each missing field with user-provided value
+                    for field_info in missing_fields:
+                        field_name = field_info["field"]
+                        if field_name in user_tool_config:
+                            # Store the actual user-provided value
+                            user_value = user_tool_config[field_name]
+                            if isinstance(user_value, dict):
+                                # For authentication, show the type and key details
+                                if field_name == "authentication":
+                                    auth_type = user_value.get("type", "unknown")
+                                    field_info["user_provided_value"] = {
+                                        "authentication_type": auth_type,
+                                        "configuration": user_value
+                                    }
+                                else:
+                                    field_info["user_provided_value"] = user_value
+                            else:
+                                field_info["user_provided_value"] = user_value
+                            field_info["configured"] = True
+                    
+                    # Update counts
+                    configured_count = sum(1 for field in missing_fields if field.get("configured", False))
+                    tool_config["configured_fields"] = configured_count
+                    tool_config["remaining_fields"] = len(missing_fields) - configured_count
+            
+            # Update overall status
+            total_remaining = sum(tool["remaining_fields"] for tool in self.missing_config_log)
+            if total_remaining == 0:
+                print("🎉 All missing configuration fields have been completed!")
+            else:
+                print(f"⚠️  {total_remaining} configuration fields still need attention.")
+    
+                # Recalculate missing fields count
+                remaining_fields = [f for f in missing_fields if not f.get("configured", False)]
+                tool_config["missing_fields"] = remaining_fields
+                tool_config["missing_fields_count"] = len(remaining_fields)
+                tool_config["configuration_status"] = "complete" if len(remaining_fields) == 0 else "partial"
+        
+        print(f"📊 Configuration log updated successfully!")
+
     def log_configuration_completion(self):
         """Log the completion of configuration to the log file."""
         completion_log = {
@@ -1892,15 +2233,6 @@ Start by greeting the user and explaining that you need some additional informat
         if not template_data:
             return None
         
-        # Debug: Check actual node structure to find notes field
-        print(f"\n🔍 DEBUG: Examining node structure for notes field...")
-        for i, node in enumerate(template_data.get('nodes', [])[:2]):  # Check first 2 nodes
-            print(f"Node {i+1} fields: {list(node.keys())}")
-            if any(field for field in node.keys() if 'note' in field.lower()):
-                print(f"Found note-related field: {[field for field in node.keys() if 'note' in field.lower()]}")
-            # Show full node structure for first node
-            if i == 0:
-                print(f"Full node structure: {json.dumps(node, indent=2)[:500]}...")
         
         # Step 3: Read business description
         business_description = self.read_business_description(business_description_file)
@@ -1929,45 +2261,68 @@ Start by greeting the user and explaining that you need some additional informat
         success = self.update_workflow(new_workflow_id, customized_workflow)
         
         if success:
-            # Step 8: Save AI analysis report
-            try:
-                report_filename = f"ai_analysis_report_{new_workflow_id}.json"
+            # Step 7.1: PHASE 1 - Generate initial analysis report with missing configuration detection
+            print(f"\n📊 Generating Phase 1 analysis report (missing configuration detection)...")
+            self.create_analysis_report(
+                workflow_id=new_workflow_id,
+                workflow_name=new_name,
+                template_id=template_id,
+                business_description_file="business_description.txt",
+                business_description=business_description,
+                ai_recommendations=ai_recommendations,
+                all_nodes=all_nodes,
+                customized_workflow=customized_workflow,
+                phase="1_detection_complete",
+                user_config=None
+            )
+            # Step 7.5: PHASE 2 - Interactive Configuration for Missing Fields
+            if self.missing_config_log:
+                print(f"\n🔧 PHASE 2: Interactive Configuration Required")
+                print(f"Found {len(self.missing_config_log)} tools with missing configuration")
                 
-                # Ensure we have valid data to save
-                if not ai_recommendations:
-                    ai_recommendations = {"error": "AI analysis failed or returned empty response"}
+                # Prompt user for missing configuration
+                user_config = self.prompt_for_missing_config()
                 
-                report_data = {
-                    "workflow_id": new_workflow_id,
-                    "workflow_name": new_name,
-                    "template_id": template_id,
-                    "business_description_file": business_description_file,
-                    "business_description": business_description,
-                    "ai_recommendations": ai_recommendations,
-                    "missing_configuration": {
-                        "tools_requiring_config": self.missing_config_log,
-                        "total_missing_fields": sum(len(tool.get("missing_fields", [])) for tool in self.missing_config_log),
-                        "configuration_status": "incomplete" if self.missing_config_log else "complete",
-                        "user_action_required": bool(self.missing_config_log),
-                        "configuration_summary": self.create_config_summary_for_report()
-                    },
-                    "original_node_count": len(all_nodes),
-                    "final_node_count": len(customized_workflow.get('nodes', [])),
-                    "timestamp": __import__('time').time(),
-                    "analysis_status": "completed" if ai_recommendations and "error" not in ai_recommendations else "failed"
-                }
-                
-                with open(report_filename, 'w', encoding='utf-8') as f:
-                    json.dump(report_data, f, indent=2)
-                print(f"✅ AI analysis report saved: {report_filename}")
-            except Exception as e:
-                print(f"⚠️ Could not save AI analysis report: {e}")
-                # Create minimal report even if there's an error
-                try:
-                    with open(f"ai_analysis_report_{new_workflow_id}.json", 'w') as f:
-                        json.dump({"error": str(e), "workflow_id": new_workflow_id}, f, indent=2)
-                except:
-                    pass
+                if user_config:
+                    print(f"\n✅ User provided configuration for {len(user_config)} tools")
+                    
+                    # Update missing config log with user-provided values
+                    self.update_missing_config_log_with_user_input(user_config)
+                    
+                    # Apply user configuration to workflow
+                    updated_workflow = self.apply_user_configuration(customized_workflow, user_config)
+                    
+                    # Re-update workflow with user configuration
+                    print(f"\n📤 Updating workflow with user configuration...")
+                    config_success = self.update_workflow(new_workflow_id, updated_workflow)
+                    
+                    if config_success:
+                        print(f"✅ Workflow updated with user configuration")
+                        customized_workflow = updated_workflow  # Use updated version for report
+                        
+                        # Log configuration completion
+                        self.log_configuration_completion()
+                        
+                        # Generate Phase 2 report with user configuration details
+                        print(f"\n📊 Generating Phase 2 analysis report with user configuration...")
+                        self.create_analysis_report(
+                            workflow_id=new_workflow_id,
+                            workflow_name=new_name,
+                            template_id=template_id,
+                            business_description_file="business_description.txt",
+                            business_description=business_description,
+                            ai_recommendations=ai_recommendations,
+                            all_nodes=all_nodes,
+                            customized_workflow=customized_workflow,
+                            phase="2_configuration_complete",
+                            user_config=user_config
+                        )
+                    else:
+                        print(f"⚠️ Failed to apply user configuration to workflow")
+                else:
+                    print(f"⚠️ No user configuration provided - workflow remains incomplete")
+            else:
+                print(f"✅ No missing configuration detected - workflow is complete")
             
             return new_workflow_id
         else:
