@@ -1248,6 +1248,10 @@ Let's get started! 🚀
         # Create detailed notes from AI reasoning
         notes = self.create_tool_notes(name, ai_reasoning, parameters)
         
+        # Generate precise description for AI agent usage based on n8n best practices
+        agent_description = self.generate_tool_description(name, tool_type, ai_reasoning)
+        print(f"     🔍 Generated description for {name}: '{agent_description}'")
+        
         # Convert to LangChain tool types for circular appearance
         # LangChain tool nodes appear as circles, regular n8n nodes appear as squares
         if tool_type == "n8n-nodes-base.httpRequest":
@@ -1274,7 +1278,7 @@ Let's get started! 🚀
             if isinstance(key_settings, dict):
                 tool_node["parameters"] = {
                     "name": name,
-                    "description": f"Tool for {name.lower()} operations",
+                    "toolDescription": agent_description,
                     "method": "GET",
                     "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
                     "authentication": "genericCredentialType",
@@ -1285,25 +1289,50 @@ Let's get started! 🚀
             else:
                 tool_node["parameters"] = {
                     "name": name,
-                    "description": f"Tool for {name.lower()} operations",
+                    "toolDescription": agent_description,
                     "method": "GET",
                     "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
                     "authentication": "genericCredentialType",
                     "genericAuthType": "",
                     "options": {}
                 }
+        elif tool_type == "n8n-nodes-base.httpRequest":
+            # For regular HTTP Request nodes, add description in notes field instead
+            key_settings = parameters.get("key_settings", {})
+            if isinstance(key_settings, dict):
+                tool_node["parameters"] = {
+                    "method": "GET",
+                    "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "",
+                    "options": {},
+                    **key_settings
+                }
+            else:
+                tool_node["parameters"] = {
+                    "method": "GET",
+                    "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "",
+                    "options": {}
+                }
+            # Add description to notes field for regular HTTP Request nodes
+            if not notes or notes.strip() == "":
+                tool_node["notes"] = agent_description
+            else:
+                tool_node["notes"] = f"{agent_description}\n\n{notes}"
         elif "supabase" in tool_type.lower():
             key_settings = parameters.get("key_settings", {})
             if isinstance(key_settings, dict):
                 tool_node["parameters"] = {
                     "name": name,
-                    "description": f"Database tool for {name.lower()}",
+                    "toolDescription": agent_description,
                     **key_settings
                 }
             else:
                 tool_node["parameters"] = {
                     "name": name,
-                    "description": f"Database tool for {name.lower()}"
+                    "toolDescription": agent_description
                 }
         else:
             # Generic tool configuration
@@ -1311,13 +1340,13 @@ Let's get started! 🚀
             if isinstance(key_settings, dict):
                 tool_node["parameters"] = {
                     "name": name,
-                    "description": f"Tool for {name.lower()}",
+                    "toolDescription": agent_description,
                     **key_settings
                 }
             else:
                 tool_node["parameters"] = {
                     "name": name,
-                    "description": f"Tool for {name.lower()}"
+                    "toolDescription": agent_description
                 }
         
         # Detect missing configuration fields
@@ -1344,6 +1373,94 @@ Let's get started! 🚀
             self.logger.warning(f"Missing configuration detected for {name}: {missing_fields}")
         
         return tool_node
+    
+    def generate_tool_description(self, name: str, tool_type: str, ai_reasoning: Dict = None) -> str:
+        """
+        Generate brief and precise tool descriptions based on n8n best practices.
+        
+        Args:
+            name (str): Tool name
+            tool_type (str): Tool type identifier
+            ai_reasoning (Dict): AI analysis data for context
+            
+        Returns:
+            str: Brief, precise description for the tool
+        """
+        # Extract purpose from AI reasoning if available
+        purpose = None
+        if ai_reasoning and isinstance(ai_reasoning, dict):
+            purpose = ai_reasoning.get("purpose", "")
+            if not purpose:
+                # Try to extract from other fields
+                use_cases = ai_reasoning.get("user_scenarios", [])
+                if use_cases and isinstance(use_cases, list):
+                    purpose = f"Handle {use_cases[0].lower()}" if use_cases else ""
+        
+        # Generate description based on tool type and purpose
+        if tool_type == "@n8n/n8n-nodes-langchain.toolHttpRequest":
+            if purpose:
+                return purpose
+            elif "api" in name.lower():
+                if "product" in name.lower():
+                    return "Retrieve product information from API"
+                elif "order" in name.lower():
+                    return "Track order status via API"
+                elif "customer" in name.lower():
+                    return "Access customer data from API"
+                elif "inventory" in name.lower():
+                    return "Check inventory levels via API"
+                else:
+                    return "Query data from external API"
+            elif "webhook" in name.lower():
+                return "Receive webhook notifications"
+            elif "search" in name.lower():
+                return "Search for information"
+            elif "notification" in name.lower():
+                return "Send notifications"
+            else:
+                return "Make HTTP requests to external service"
+        
+        elif "supabase" in tool_type.lower():
+            if "user" in name.lower():
+                return "Manage user data in database"
+            elif "order" in name.lower():
+                return "Handle order records in database"
+            elif "product" in name.lower():
+                return "Access product data from database"
+            else:
+                return "Query database records"
+        
+        elif "slack" in tool_type.lower():
+            return "Send messages to Slack channels"
+        
+        elif "gmail" in tool_type.lower():
+            return "Send emails via Gmail"
+        
+        elif "googleSheets" in tool_type.lower():
+            return "Read/write data to Google Sheets"
+        
+        elif "webhook" in tool_type.lower():
+            return "Handle incoming webhook requests"
+        
+        elif "code" in tool_type.lower():
+            return "Execute custom code logic"
+        
+        else:
+            # Generic fallback based on name patterns
+            if "check" in name.lower():
+                return "Verify data or status"
+            elif "get" in name.lower() or "fetch" in name.lower():
+                return "Retrieve information"
+            elif "send" in name.lower() or "notify" in name.lower():
+                return "Send notifications or messages"
+            elif "update" in name.lower() or "modify" in name.lower():
+                return "Update existing data"
+            elif "create" in name.lower() or "add" in name.lower():
+                return "Create new records"
+            elif "delete" in name.lower() or "remove" in name.lower():
+                return "Remove existing data"
+            else:
+                return f"Handle {name.lower().replace('_', ' ')} operations"
     
     def detect_missing_config(self, tool_node: Dict, tool_name: str, tool_type: str) -> List[Dict]:
         """
@@ -1928,6 +2045,20 @@ Start by greeting the user and explaining that you need some additional informat
         
         for node in workflow.get("nodes", []):
             node_name = node.get("name", "")
+            node_type = node.get("type", "")
+            
+            # Ensure all tool nodes have proper description field for LLM detection
+            if ("@n8n/n8n-nodes-langchain.tool" in node_type or 
+                "tool" in node_type.lower() or 
+                node_type == "@n8n/n8n-nodes-langchain.toolHttpRequest"):
+                
+                node_params = node.get("parameters", {})
+                if not node_params.get("description") or node_params.get("description") == "":
+                    # Generate description for existing tool nodes that lack it
+                    description = self.generate_tool_description(node_name, node_type)
+                    node_params["description"] = description
+                    node["parameters"] = node_params
+                    print(f"   📝 Added description to {node_name}: '{description}'")
             
             if node_name in user_config:
                 tool_config = user_config[node_name]
