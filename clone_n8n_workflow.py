@@ -987,6 +987,36 @@ Let's get started! 🚀
                     auth_config = self.collect_authentication_config()
                     if auth_config:
                         tool_user_config["authentication"] = auth_config
+                elif field_name == "genericAuthType":
+                    # Handle generic auth type selection
+                    print(f"\n   🔧 {field_name}:")
+                    if explanation:
+                        print(f"      {explanation}")
+                    if example:
+                        print(f"      Available options: {example}")
+                    
+                    auth_types = ["headerAuth", "basicAuth", "queryAuth", "digestAuth", "oAuth1Api", "oAuth2Api", "customAuth"]
+                    print(f"      Select authentication type:")
+                    for i, auth_type in enumerate(auth_types, 1):
+                        print(f"        {i}. {auth_type}")
+                    
+                    while True:
+                        try:
+                            choice = input(f"      Enter choice (1-{len(auth_types)}): ").strip()
+                            choice_idx = int(choice) - 1
+                            if 0 <= choice_idx < len(auth_types):
+                                selected_auth_type = auth_types[choice_idx]
+                                tool_user_config["genericAuthType"] = selected_auth_type
+                                break
+                            else:
+                                print(f"      ❌ Please enter a number between 1 and {len(auth_types)}")
+                        except ValueError:
+                            print(f"      ❌ Please enter a valid number")
+                elif field_name in ["headerAuth", "basicAuth", "queryAuth"]:
+                    # Handle specific auth field configuration
+                    auth_config = self.collect_specific_auth_config(field_name)
+                    if auth_config:
+                        tool_user_config[field_name] = auth_config
                 else:
                     # Handle other configuration fields
                     print(f"\n   🔧 {field_name}:")
@@ -1067,6 +1097,62 @@ Let's get started! 🚀
             elif required:
                 print(f"❌ {display_name} is required")
                 return {}
+        
+        return auth_config
+    
+    def collect_specific_auth_config(self, auth_type: str) -> Dict:
+        """
+        Collect specific authentication configuration based on the selected auth type.
+        
+        Args:
+            auth_type (str): The type of authentication (headerAuth, basicAuth, queryAuth, etc.)
+            
+        Returns:
+            Dict: Authentication configuration for the specific type
+        """
+        auth_config = {}
+        
+        if auth_type == "headerAuth":
+            print(f"\n   📋 Header Authentication Configuration:")
+            print(f"      This sends authentication in HTTP headers (like Authorization: Bearer token)")
+            
+            header_name = input(f"      Enter header name (default: Authorization): ").strip()
+            if not header_name:
+                header_name = "Authorization"
+            
+            header_value = input(f"      Enter header value (e.g., Bearer your-token): ").strip()
+            
+            if header_value:
+                auth_config = {
+                    "name": header_name,
+                    "value": header_value
+                }
+        
+        elif auth_type == "basicAuth":
+            print(f"\n   📋 Basic Authentication Configuration:")
+            print(f"      This sends username and password for basic HTTP authentication")
+            
+            username = input(f"      Enter username: ").strip()
+            password = input(f"      Enter password: ").strip()
+            
+            if username and password:
+                auth_config = {
+                    "user": username,
+                    "password": password
+                }
+        
+        elif auth_type == "queryAuth":
+            print(f"\n   📋 Query Parameter Authentication Configuration:")
+            print(f"      This sends authentication as URL query parameters (like ?api_key=value)")
+            
+            param_key = input(f"      Enter parameter name (e.g., api_key): ").strip()
+            param_value = input(f"      Enter parameter value: ").strip()
+            
+            if param_key and param_value:
+                auth_config = {
+                    "key": param_key,
+                    "value": param_value
+                }
         
         return auth_config
     
@@ -1162,6 +1248,11 @@ Let's get started! 🚀
         # Create detailed notes from AI reasoning
         notes = self.create_tool_notes(name, ai_reasoning, parameters)
         
+        # Convert to LangChain tool types for circular appearance
+        # LangChain tool nodes appear as circles, regular n8n nodes appear as squares
+        if tool_type == "n8n-nodes-base.httpRequest":
+            tool_type = "@n8n/n8n-nodes-langchain.toolHttpRequest"
+        
         # Base tool node structure
         tool_node = {
             "id": node_id,
@@ -1186,6 +1277,8 @@ Let's get started! 🚀
                     "description": f"Tool for {name.lower()} operations",
                     "method": "GET",
                     "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "",
                     "options": {},
                     **key_settings
                 }
@@ -1195,6 +1288,8 @@ Let's get started! 🚀
                     "description": f"Tool for {name.lower()} operations",
                     "method": "GET",
                     "url": api_endpoint if api_endpoint else "https://api.example.com/endpoint",
+                    "authentication": "genericCredentialType",
+                    "genericAuthType": "",
                     "options": {}
                 }
         elif "supabase" in tool_type.lower():
@@ -1284,24 +1379,60 @@ Let's get started! 🚀
                     "required": True
                 })
             
-            # Check for authentication
+            # Check for authentication - new LangChain tool format
             auth_type = params.get("authentication", "")
-            headers = params.get("headers", {})
-            auth_header = headers.get("Authorization", "") if isinstance(headers, dict) else ""
+            generic_auth_type = params.get("genericAuthType", "")
             
-            # Check if authentication is missing or placeholder
-            auth_placeholder_indicators = ["your-api-key", "your-token", "placeholder", "configure", "API key", "api key"]
-            has_auth = (auth_type and auth_type != "" and 
-                       not any(indicator in str(auth_type).lower() for indicator in auth_placeholder_indicators))
-            has_auth_header = (auth_header and auth_header != "" and 
-                             not any(indicator in str(auth_header).lower() for indicator in auth_placeholder_indicators))
-            
-            if not has_auth and not has_auth_header:
+            # For LangChain tools, check if authentication is properly configured
+            if auth_type == "genericCredentialType":
+                # Check if genericAuthType is set
+                if not generic_auth_type or generic_auth_type == "":
+                    missing_fields.append({
+                        "field": "genericAuthType",
+                        "current_value": generic_auth_type,
+                        "explanation": f"The {tool_name} tool needs to specify which type of authentication to use (Basic Auth, Header Auth, Bearer Auth, etc.).",
+                        "example": "headerAuth, basicAuth, queryAuth, digestAuth, oAuth1Api, oAuth2Api, customAuth",
+                        "required": True
+                    })
+                else:
+                    # Check if specific auth fields are configured based on genericAuthType
+                    if generic_auth_type == "headerAuth":
+                        header_auth = params.get("headerAuth", {})
+                        if not header_auth or not header_auth.get("name") or not header_auth.get("value"):
+                            missing_fields.append({
+                                "field": "headerAuth",
+                                "current_value": str(header_auth),
+                                "explanation": f"The {tool_name} tool uses Header Authentication and needs both header name and value configured.",
+                                "example": "Name: Authorization, Value: Bearer your-token-here",
+                                "required": True
+                            })
+                    elif generic_auth_type == "basicAuth":
+                        basic_auth = params.get("basicAuth", {})
+                        if not basic_auth or not basic_auth.get("user") or not basic_auth.get("password"):
+                            missing_fields.append({
+                                "field": "basicAuth",
+                                "current_value": str(basic_auth),
+                                "explanation": f"The {tool_name} tool uses Basic Authentication and needs both username and password configured.",
+                                "example": "Username: your-username, Password: your-password",
+                                "required": True
+                            })
+                    elif generic_auth_type == "queryAuth":
+                        query_auth = params.get("queryAuth", {})
+                        if not query_auth or not query_auth.get("key") or not query_auth.get("value"):
+                            missing_fields.append({
+                                "field": "queryAuth",
+                                "current_value": str(query_auth),
+                                "explanation": f"The {tool_name} tool uses Query Parameter Authentication and needs both parameter key and value configured.",
+                                "example": "Key: api_key, Value: your-api-key-here",
+                                "required": True
+                            })
+            else:
+                # If authentication is not set to genericCredentialType, it needs to be configured
                 missing_fields.append({
                     "field": "authentication",
-                    "current_value": auth_type or auth_header,
-                    "explanation": f"The {tool_name} tool needs authentication credentials to securely access your API. This could be an API key, token, or username/password.",
-                    "example": "Bearer token, API key, or Basic auth",
+                    "current_value": auth_type,
+                    "explanation": f"The {tool_name} tool needs authentication configured. Select 'Generic Credential Type' and choose the appropriate authentication method.",
+                    "example": "Set to 'genericCredentialType' then choose headerAuth, basicAuth, etc.",
                     "required": True
                 })
             
@@ -1729,6 +1860,32 @@ Start by greeting the user and explaining that you need some additional informat
                     if auth_config:
                         tool_user_config[field_name] = auth_config
                         print(f"✅ Got it! {field_name} configured")
+                elif field_name == "genericAuthType":
+                    # Handle generic auth type selection
+                    auth_types = ["headerAuth", "basicAuth", "queryAuth", "digestAuth", "oAuth1Api", "oAuth2Api", "customAuth"]
+                    print(f"\n🔐 Select authentication type:")
+                    for i, auth_type in enumerate(auth_types, 1):
+                        print(f"   {i}. {auth_type}")
+                    
+                    while True:
+                        try:
+                            choice = input(f"✏️  Enter choice (1-{len(auth_types)}): ").strip()
+                            choice_idx = int(choice) - 1
+                            if 0 <= choice_idx < len(auth_types):
+                                selected_auth_type = auth_types[choice_idx]
+                                tool_user_config[field_name] = selected_auth_type
+                                print(f"✅ Got it! Selected {selected_auth_type}")
+                                break
+                            else:
+                                print(f"❌ Please enter a number between 1 and {len(auth_types)}")
+                        except ValueError:
+                            print(f"❌ Please enter a valid number")
+                elif field_name in ["headerAuth", "basicAuth", "queryAuth"]:
+                    # Handle specific auth field configuration
+                    auth_config = self.collect_specific_auth_config(field_name)
+                    if auth_config:
+                        tool_user_config[field_name] = auth_config
+                        print(f"✅ Got it! {field_name} configured")
                 else:
                     # Get user input for regular fields
                     user_input = input(f"✏️  Enter {field_name}: ").strip()
@@ -1784,6 +1941,42 @@ Start by greeting the user and explaining that you need some additional informat
                         # Handle authentication configuration specially
                         self.apply_authentication_config(node_params, field_value)
                         print(f"   ✅ {node_name}.authentication configured")
+                    elif field_name in ["headerAuth", "basicAuth", "queryAuth"]:
+                        # Handle specific authentication types - convert to proper auth config
+                        auth_config = {
+                            "type": field_name
+                        }
+                        
+                        if field_name == "headerAuth":
+                            if isinstance(field_value, str):
+                                # Simple string value - assume Authorization header
+                                auth_config.update({
+                                    "name": "Authorization",
+                                    "value": field_value
+                                })
+                            elif isinstance(field_value, dict):
+                                auth_config.update(field_value)
+                        elif field_name == "basicAuth":
+                            if isinstance(field_value, str):
+                                # Simple string value - treat as password with empty username
+                                auth_config.update({
+                                    "user": "",
+                                    "password": field_value
+                                })
+                            elif isinstance(field_value, dict):
+                                auth_config.update(field_value)
+                        elif field_name == "queryAuth":
+                            if isinstance(field_value, str):
+                                # Simple string value - assume api_key parameter
+                                auth_config.update({
+                                    "key": "api_key",
+                                    "value": field_value
+                                })
+                            elif isinstance(field_value, dict):
+                                auth_config.update(field_value)
+                        
+                        self.apply_authentication_config(node_params, auth_config)
+                        print(f"   ✅ {node_name}.{field_name} configured as authentication")
                     else:
                         # Handle regular configuration fields
                         if field_name == "url":
@@ -1810,73 +2003,114 @@ Start by greeting the user and explaining that you need some additional informat
             node_params (Dict): Node parameters to update
             auth_config (Dict or str): Authentication configuration from user
         """
-        # Handle case where auth_config is a string (fallback from basic prompt)
-        if isinstance(auth_config, str):
-            if auth_config.lower() in ["none", "", "no auth"]:
-                # Set to no authentication
+        try:
+            # Validate input
+            if not auth_config:
+                print("⚠️  No authentication configuration provided, setting to 'none'")
                 node_params["authentication"] = "none"
                 return
-            else:
-                # Treat string as Header Auth with Authorization header
-                auth_config = {
-                    "type": "headerAuth",
-                    "name": "Authorization",
-                    "value": auth_config
-                }
-        
-        # Handle dictionary auth_config - use direct authentication type
-        auth_type = auth_config.get("type", "None")
-        
-        if auth_type == "None":
-            # Set to no authentication
-            node_params["authentication"] = "none"
-        else:
-            # Set authentication type directly (not genericCredentialType)
-            node_params["authentication"] = auth_type
             
-            # Apply authentication fields based on type
-            if auth_type == "basicAuth":
-                node_params["basicAuth"] = {
-                    "user": auth_config.get("user", ""),
-                    "password": auth_config.get("password", "")
-                }
-            elif auth_type == "headerAuth":
-                node_params["headerAuth"] = {
-                    "name": auth_config.get("name", "Authorization"),
-                    "value": auth_config.get("value", "")
-                }
-            elif auth_type == "queryAuth":
-                node_params["queryAuth"] = {
-                    "key": auth_config.get("key", ""),
-                    "value": auth_config.get("value", "")
-                }
-            elif auth_type == "digestAuth":
-                node_params["digestAuth"] = {
-                    "user": auth_config.get("user", ""),
-                    "password": auth_config.get("password", "")
-                }
-            elif auth_type == "oAuth1Api":
-                node_params["oAuth1Api"] = {
-                    "consumerKey": auth_config.get("consumerKey", ""),
-                    "consumerSecret": auth_config.get("consumerSecret", ""),
-                    "accessToken": auth_config.get("accessToken", ""),
-                    "accessTokenSecret": auth_config.get("accessTokenSecret", "")
-                }
-            elif auth_type == "oAuth2Api":
-                node_params["oAuth2Api"] = {
-                    "clientId": auth_config.get("clientId", ""),
-                    "clientSecret": auth_config.get("clientSecret", ""),
-                    "accessToken": auth_config.get("accessToken", ""),
-                    "refreshToken": auth_config.get("refreshToken", "")
-                }
-                oauth2_config = {
-                    "clientId": auth_config.get("clientId", ""),
-                    "clientSecret": auth_config.get("clientSecret", ""),
-                    "accessToken": auth_config.get("accessToken", ""),
-                    "refreshToken": auth_config.get("refreshToken", "")
-                }
-                oauth2_config["scope"] = auth_config.get("scope")
-                node_params["oAuth2Api"] = oauth2_config
+            # Handle case where auth_config is a string (fallback from basic prompt)
+            if isinstance(auth_config, str):
+                if auth_config.lower() in ["none", "", "no auth"]:
+                    # Set to no authentication
+                    node_params["authentication"] = "none"
+                    return
+                else:
+                    # Treat string as Header Auth with Authorization header
+                    auth_config = {
+                        "type": "headerAuth",
+                        "name": "Authorization",
+                        "value": auth_config
+                    }
+            
+            # Validate auth_config is a dictionary
+            if not isinstance(auth_config, dict):
+                print(f"⚠️  Invalid authentication config format: {type(auth_config)}, setting to 'none'")
+                node_params["authentication"] = "none"
+                return
+            
+            # Handle dictionary auth_config - use new n8n LangChain tool format
+            auth_type = auth_config.get("type", "None")
+            
+            if auth_type == "None":
+                # Set to no authentication
+                node_params["authentication"] = "none"
+            else:
+                # Use new n8n LangChain tool format: genericCredentialType + specific auth type
+                node_params["authentication"] = "genericCredentialType"
+                node_params["genericAuthType"] = auth_type
+                
+                # Apply authentication fields based on type with validation
+                if auth_type == "basicAuth":
+                    user = auth_config.get("user", "")
+                    password = auth_config.get("password", "")
+                    if not user and not password:
+                        print("⚠️  Basic auth configured but no credentials provided")
+                    node_params["basicAuth"] = {
+                        "user": user,
+                        "password": password
+                    }
+                elif auth_type == "headerAuth":
+                    name = auth_config.get("name", "Authorization")
+                    value = auth_config.get("value", "")
+                    if not value:
+                        print("⚠️  Header auth configured but no header value provided")
+                    node_params["headerAuth"] = {
+                        "name": name,
+                        "value": value
+                    }
+                elif auth_type == "queryAuth":
+                    key = auth_config.get("key", "")
+                    value = auth_config.get("value", "")
+                    if not key or not value:
+                        print("⚠️  Query auth configured but missing key or value")
+                    node_params["queryAuth"] = {
+                        "key": key,
+                        "value": value
+                    }
+                elif auth_type == "digestAuth":
+                    user = auth_config.get("user", "")
+                    password = auth_config.get("password", "")
+                    if not user and not password:
+                        print("⚠️  Digest auth configured but no credentials provided")
+                    node_params["digestAuth"] = {
+                        "user": user,
+                        "password": password
+                    }
+                elif auth_type == "oAuth1Api":
+                    required_fields = ["consumerKey", "consumerSecret", "accessToken", "accessTokenSecret"]
+                    missing_fields = [f for f in required_fields if not auth_config.get(f)]
+                    if missing_fields:
+                        print(f"⚠️  OAuth1 auth missing required fields: {', '.join(missing_fields)}")
+                    node_params["oAuth1Api"] = {
+                        "consumerKey": auth_config.get("consumerKey", ""),
+                        "consumerSecret": auth_config.get("consumerSecret", ""),
+                        "accessToken": auth_config.get("accessToken", ""),
+                        "accessTokenSecret": auth_config.get("accessTokenSecret", "")
+                    }
+                elif auth_type == "oAuth2Api":
+                    required_fields = ["clientId", "clientSecret"]
+                    missing_fields = [f for f in required_fields if not auth_config.get(f)]
+                    if missing_fields:
+                        print(f"⚠️  OAuth2 auth missing required fields: {', '.join(missing_fields)}")
+                    oauth2_config = {
+                        "clientId": auth_config.get("clientId", ""),
+                        "clientSecret": auth_config.get("clientSecret", ""),
+                        "accessToken": auth_config.get("accessToken", ""),
+                        "refreshToken": auth_config.get("refreshToken", "")
+                    }
+                    if auth_config.get("scope"):
+                        oauth2_config["scope"] = auth_config.get("scope")
+                    node_params["oAuth2Api"] = oauth2_config
+                else:
+                    print(f"⚠️  Unsupported authentication type: {auth_type}, setting to 'none'")
+                    node_params["authentication"] = "none"
+                    
+        except Exception as e:
+            print(f"❌ Error applying authentication config: {e}")
+            print("   Setting authentication to 'none' as fallback")
+            node_params["authentication"] = "none"
     
     def update_missing_config_log_with_user_input(self, user_config: Dict[str, Dict]):
         """
