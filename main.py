@@ -5121,6 +5121,238 @@ async def wait_for_location_availability(location_id: str, agency_token: str, ma
     logger.error(f"❌ Location {location_id} never became available after {max_retries} attempts")
     return False
 
+# Pydantic models for website extraction
+class WebsiteExtractionRequest(BaseModel):
+    website_url: str
+    user_id: str
+
+class WebsiteExtractionResponse(BaseModel):
+    success: bool
+    message: str
+    extracted_data: dict = None
+    ghl_response: dict = None
+
+@app.post("/api/ghl/extract-and-create-account", response_model=WebsiteExtractionResponse)
+async def extract_website_info_and_create_account(request: WebsiteExtractionRequest, background_tasks: BackgroundTasks):
+    """Extract business info from website using LLM and create GHL account in background"""
+    try:
+        # Add to background tasks for processing
+        background_tasks.add_task(process_website_extraction, request.website_url, request.user_id)
+        
+        return WebsiteExtractionResponse(
+            success=True,
+            message="Website extraction started in background. GHL account will be created automatically.",
+            extracted_data=None,
+            ghl_response=None
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting website extraction: {e}")
+        return WebsiteExtractionResponse(
+            success=False,
+            message=f"Failed to start website extraction: {str(e)}",
+            extracted_data=None,
+            ghl_response=None
+        )
+
+async def process_website_extraction(website_url: str, user_id: str):
+    """Background task to extract website info and create GHL account"""
+    try:
+        logger.info(f"🔍 Starting website extraction for: {website_url}")
+        
+        # Step 1: Extract website content using LLM
+        extracted_data = await extract_business_info_from_website(website_url)
+        
+        if not extracted_data:
+            logger.error(f"❌ Failed to extract data from website: {website_url}")
+            return
+        
+        logger.info(f"✅ Extracted business data: {extracted_data}")
+        
+        # Step 2: Create GHL sub-account using extracted data
+        ghl_payload = create_ghl_payload_from_extracted_data(extracted_data, user_id)
+        
+        # Step 3: Call the existing GHL creation endpoint
+        ghl_request = GHLSubAccountRequest(**ghl_payload)
+        ghl_response = await create_subaccount_and_user(ghl_request)
+        
+        logger.info(f"✅ GHL account creation completed for {extracted_data.get('business_name', 'Unknown')}")
+        
+    except Exception as e:
+        logger.error(f"❌ Error in background website extraction: {e}")
+
+async def extract_business_info_from_website(website_url: str) -> dict:
+    """Use LLM to extract business information from website"""
+    try:
+        import httpx
+        import json
+        
+        # Fetch website content
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(website_url)
+            website_content = response.text[:5000]  # Limit content size
+        
+        # Prepare prompt for LLM
+        prompt = f"""
+        Analyze the following website content and extract business information. 
+        Return ONLY a valid JSON object with these exact fields:
+        
+        {{
+            "business_name": "extracted business name or 'Not Sure'",
+            "business_email": "contact email or 'Not Sure'", 
+            "phone": "phone number in format +1-xxx-xxx-xxxx or 'Not Sure'",
+            "website": "{website_url}",
+            "address": "street address or 'Not Sure'",
+            "city": "city name or 'Not Sure'",
+            "state": "state/province code or 'Not Sure'",
+            "country": "country code (US/CA/etc) or 'Not Sure'",
+            "postal_code": "zip/postal code or 'Not Sure'",
+            "first_name": "owner/contact first name or 'Not Sure'",
+            "last_name": "owner/contact last name or 'Not Sure'"
+        }}
+        
+        Website content:
+        {website_content}
+        
+        Return only the JSON object, no other text.
+        """
+        
+        # Call Perplexity API (or OpenAI as fallback)
+        llm_response = await call_llm_api(prompt)
+        
+        # Parse JSON response
+        try:
+            extracted_data = json.loads(llm_response)
+            return extracted_data
+        except json.JSONDecodeError:
+            # Try to extract JSON from response if it has extra text
+            import re
+            json_match = re.search(r'\{.*\}', llm_response, re.DOTALL)
+            if json_match:
+                extracted_data = json.loads(json_match.group())
+                return extracted_data
+            else:
+                logger.error(f"Invalid JSON response from LLM: {llm_response}")
+                return None
+                
+    except Exception as e:
+        logger.error(f"Error extracting website info: {e}")
+        return None
+
+async def call_llm_api(prompt: str) -> str:
+    """Call LLM API (Perplexity preferred, OpenAI fallback)"""
+    try:
+        import httpx
+        import os
+        
+        # Try Perplexity first
+        perplexity_key = os.getenv('PERPLEXITY_API_KEY')
+        if perplexity_key:
+            headers = {
+                'Authorization': f'Bearer {perplexity_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            payload = {
+                'model': 'llama-3.1-sonar-small-128k-online',
+                'messages': [
+                    {'role': 'user', 'content': prompt}
+                ],
+                'max_tokens': 1000,
+                'temperature': 0.1
+            }
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    'https://api.perplexity.ai/chat/completions',
+                    headers=headers,
+                    json=payload
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result['choices'][0]['message']['content']
+        
+        # Fallback to OpenAI
+        openai_key = os.getenv('OPENAI_API_KEY')
+        if openai_key:
+            headers = {
+                'Authorization': f'Bearer {openai_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            payload = {
+                'model': 'gpt-3.5-turbo',
+                'messages': [
+                    {'role': 'user', 'content': prompt}
+                ],
+                'max_tokens': 1000,
+                'temperature': 0.1
+            }
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    'https://api.openai.com/v1/chat/completions',
+                    headers=headers,
+                    json=payload
+                )
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    return result['choices'][0]['message']['content']
+        
+        # If no API keys available, return default
+        logger.warning("No LLM API keys available, using default extraction")
+        return '{"business_name": "Not Sure", "business_email": "Not Sure", "phone": "Not Sure", "website": "Not Sure", "address": "Not Sure", "city": "Not Sure", "state": "Not Sure", "country": "Not Sure", "postal_code": "Not Sure", "first_name": "Not Sure", "last_name": "Not Sure"}'
+        
+    except Exception as e:
+        logger.error(f"Error calling LLM API: {e}")
+        return '{"business_name": "Not Sure", "business_email": "Not Sure", "phone": "Not Sure", "website": "Not Sure", "address": "Not Sure", "city": "Not Sure", "state": "Not Sure", "country": "Not Sure", "postal_code": "Not Sure", "first_name": "Not Sure", "last_name": "Not Sure"}'
+
+def create_ghl_payload_from_extracted_data(extracted_data: dict, user_id: str) -> dict:
+    """Convert extracted data to GHL payload format"""
+    import random
+    
+    random_num = random.randint(1000, 9999)
+    business_name = extracted_data.get('business_name', 'Not Sure')
+    
+    # If business_name is "Not Sure", use demo name
+    if business_name == "Not Sure":
+        business_name = f"ExtractedBusiness_{random_num}"
+    
+    # Format phone number
+    phone = extracted_data.get('phone', '+1-555-0000')
+    if phone == "Not Sure":
+        phone = f"+1-555-{random_num}"
+    
+    # Format email
+    email = extracted_data.get('business_email', f'extracted+{random_num}@example.com')
+    if email == "Not Sure":
+        email = f'extracted+{random_num}@example.com'
+    
+    return {
+        "company_id": "lp2p1q27DrdGta1qGDJd",
+        "snapshot_id": "bInwX5BtZM6oEepAsUwo", 
+        "agency_token": "pit-e3d8d384-00cb-4744-8213-b1ab06ae71fe",
+        "user_id": user_id,
+        "subaccount_name": business_name,
+        "prospect_email": email,
+        "prospect_first_name": extracted_data.get('first_name', business_name.split(' ')[0] if business_name != "Not Sure" else 'Extracted'),
+        "prospect_last_name": extracted_data.get('last_name', ' '.join(business_name.split(' ')[1:]) if business_name != "Not Sure" and len(business_name.split(' ')) > 1 else 'Business'),
+        "phone": phone,
+        "website": extracted_data.get('website', 'https://extracted-business.com'),
+        "address": extracted_data.get('address', 'Not Sure') if extracted_data.get('address') != "Not Sure" else "123 Extracted Business Ave",
+        "city": extracted_data.get('city', 'Not Sure') if extracted_data.get('city') != "Not Sure" else "Business City",
+        "state": extracted_data.get('state', 'Not Sure') if extracted_data.get('state') != "Not Sure" else "CA",
+        "country": extracted_data.get('country', 'Not Sure') if extracted_data.get('country') != "Not Sure" else "US",
+        "postal_code": extracted_data.get('postal_code', 'Not Sure') if extracted_data.get('postal_code') != "Not Sure" else "90210",
+        "timezone": 'America/Los_Angeles',
+        "allow_duplicate_contact": False,
+        "allow_duplicate_opportunity": False,
+        "allow_facebook_name_merge": True,
+        "disable_contact_timezone": False
+    }
+
 @app.post("/api/ghl/create-subaccount-and-user")
 async def create_subaccount_and_user(request: GHLSubAccountRequest):
     """Create both sub-account and user in one call - triggered after Solar setup completion"""
